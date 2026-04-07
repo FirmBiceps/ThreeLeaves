@@ -1,0 +1,540 @@
+import { useMemo, useState } from 'react';
+import {
+  Activity,
+  AlertTriangle,
+  ArrowRight,
+  Clock,
+  MapPin,
+  Phone,
+  Plus,
+  TrendingDown,
+  TrendingUp,
+  User,
+} from 'lucide-react';
+import { EntityModal } from '../../components/shared/EntityModal';
+import { formatMoneyWhole } from '../../utils/format';
+
+const STATUS_STYLES = {
+  active: { bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'Active' },
+  cooling: { bg: 'bg-amber-100', text: 'text-amber-700', label: 'Cooling' },
+  'at-risk': { bg: 'bg-orange-100', text: 'text-orange-700', label: 'At Risk' },
+  churned: { bg: 'bg-red-100', text: 'text-red-700', label: 'Churned' },
+  inactive: { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Inactive' },
+};
+
+const EMPTY_CUSTOMER = {
+  name: '',
+  contactPerson: '',
+  contactNumber: '',
+  address: '',
+  region: 'North',
+};
+
+function CustomerFormModal({ initialValue, onClose, onSave }) {
+  const [form, setForm] = useState(initialValue);
+
+  return (
+    <EntityModal onClose={onClose} onSave={() => onSave(form)} title="Customer Modification">
+      <div className="space-y-4">
+        <input
+          className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3 font-bold outline-none focus:bg-white focus:ring-2 focus:ring-blue-500"
+          onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+          placeholder="Company Name"
+          value={form.name}
+        />
+        <div className="grid grid-cols-2 gap-4">
+          <input
+            className="w-full rounded-xl border border-gray-200 p-3 text-sm"
+            onChange={(event) =>
+              setForm((current) => ({ ...current, contactPerson: event.target.value }))
+            }
+            placeholder="Contact Person"
+            value={form.contactPerson}
+          />
+          <input
+            className="w-full rounded-xl border border-gray-200 p-3 text-sm"
+            onChange={(event) =>
+              setForm((current) => ({ ...current, contactNumber: event.target.value }))
+            }
+            placeholder="Phone Number"
+            value={form.contactNumber}
+          />
+        </div>
+        <select
+          className="w-full rounded-xl border border-gray-200 p-3 text-sm"
+          onChange={(event) => setForm((current) => ({ ...current, region: event.target.value }))}
+          value={form.region}
+        >
+          <option value="North">North Sector</option>
+          <option value="West">West Sector</option>
+          <option value="East">East Sector</option>
+          <option value="Central">Central Sector</option>
+        </select>
+        <textarea
+          className="w-full rounded-xl border border-gray-200 p-3 text-sm"
+          onChange={(event) => setForm((current) => ({ ...current, address: event.target.value }))}
+          placeholder="Full Address"
+          rows={3}
+          value={form.address}
+        />
+      </div>
+    </EntityModal>
+  );
+}
+
+export function CustomerModule({ sys }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState(EMPTY_CUSTOMER);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [filter, setFilter] = useState('All');
+
+  const analytics = useMemo(() => {
+    const now = new Date();
+
+    return sys.customers
+      .map((customer) => {
+        const customerInvoices = sys.invoices
+          .filter((invoice) => invoice.customerId === customer.id)
+          .sort((left, right) => new Date(left.date) - new Date(right.date));
+
+        if (customerInvoices.length === 0) {
+          return {
+            customer,
+            totalRevenue: 0,
+            orderCount: 0,
+            avgValue: 0,
+            daysSinceLast: 999,
+            status: 'inactive',
+            trend: 'flat',
+            topItems: [],
+          };
+        }
+
+        const totalRevenue = customerInvoices.reduce((sum, invoice) => sum + (invoice.total || 0), 0);
+        const avgValue = totalRevenue / customerInvoices.length;
+        const lastDate = new Date(customerInvoices[customerInvoices.length - 1].date);
+        const daysSinceLast = Math.floor((now - lastDate) / (1000 * 60 * 60 * 24));
+
+        let avgFrequency = null;
+        if (customerInvoices.length > 1) {
+          const gaps = [];
+          for (let index = 1; index < customerInvoices.length; index += 1) {
+            gaps.push(
+              (new Date(customerInvoices[index].date) - new Date(customerInvoices[index - 1].date)) /
+                (1000 * 60 * 60 * 24),
+            );
+          }
+          avgFrequency = Math.round(gaps.reduce((sum, gap) => sum + gap, 0) / gaps.length);
+        }
+
+        const itemCounts = {};
+        customerInvoices.forEach((invoice) => {
+          invoice.items?.forEach((item) => {
+            const product = sys.inventory.find((entry) => entry.id === item.itemId);
+            const name = product?.name || item.itemId || 'Unknown';
+            itemCounts[name] = (itemCounts[name] || 0) + Number(item.qty || 0);
+          });
+        });
+
+        const topItems = Object.entries(itemCounts)
+          .sort((left, right) => right[1] - left[1])
+          .slice(0, 3)
+          .map(([name, qty]) => ({ name, qty }));
+
+        let status = 'active';
+        if (daysSinceLast > 90) {
+          status = 'churned';
+        } else if (daysSinceLast > 45) {
+          status = 'at-risk';
+        } else if (daysSinceLast > 21 && avgFrequency && daysSinceLast > avgFrequency * 1.5) {
+          status = 'cooling';
+        }
+
+        let trend = 'flat';
+        if (customerInvoices.length >= 4) {
+          const recent = customerInvoices.slice(-2).reduce((sum, invoice) => sum + (invoice.total || 0), 0);
+          const prior = customerInvoices.slice(-4, -2).reduce((sum, invoice) => sum + (invoice.total || 0), 0);
+          if (recent > prior * 1.2) {
+            trend = 'growing';
+          } else if (recent < prior * 0.8) {
+            trend = 'declining';
+          }
+        }
+
+        return {
+          customer,
+          totalRevenue,
+          orderCount: customerInvoices.length,
+          avgValue,
+          daysSinceLast,
+          avgFrequency,
+          status,
+          trend,
+          topItems,
+          lastOrderDate: customerInvoices[customerInvoices.length - 1].date,
+        };
+      })
+      .sort((left, right) => right.totalRevenue - left.totalRevenue);
+  }, [sys.customers, sys.invoices, sys.inventory]);
+
+  const stagnantCount = analytics.filter((entry) =>
+    ['at-risk', 'churned', 'cooling'].includes(entry.status),
+  ).length;
+  const displayList = analytics.filter((entry) =>
+    filter === 'All' ? true : ['at-risk', 'churned', 'cooling'].includes(entry.status),
+  );
+
+  const handleSave = (form) => {
+    if (form.id) {
+      sys.setCustomers(sys.customers.map((customer) => (customer.id === form.id ? form : customer)));
+    } else {
+      sys.setCustomers([...sys.customers, { ...form, id: `c${Date.now()}` }]);
+    }
+    setIsOpen(false);
+  };
+
+  if (selectedCustomer) {
+    const statusStyle = STATUS_STYLES[selectedCustomer.status] || STATUS_STYLES.inactive;
+
+    return (
+      <div className="space-y-6">
+        <button
+          className="flex items-center text-sm font-bold text-gray-500 hover:text-gray-800"
+          onClick={() => setSelectedCustomer(null)}
+          type="button"
+        >
+          <ArrowRight className="mr-2 rotate-180" size={16} /> Back to Customer Rankings
+        </button>
+
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="space-y-6 lg:col-span-2">
+            <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
+              <div className="mb-6 flex items-start justify-between">
+                <div>
+                  <h2 className="text-2xl font-black text-slate-900">{selectedCustomer.customer.name}</h2>
+                  <p className="mt-1 text-sm font-medium text-gray-500">
+                    {selectedCustomer.customer.address} ({selectedCustomer.customer.region})
+                  </p>
+                  <div className="mt-4 flex space-x-3">
+                    <span
+                      className={`${statusStyle.bg} ${statusStyle.text} rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest`}
+                    >
+                      {statusStyle.label}
+                    </span>
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-slate-600">
+                      {selectedCustomer.trend === 'growing'
+                        ? 'Growing'
+                        : selectedCustomer.trend === 'declining'
+                          ? 'Declining'
+                          : 'Stable'}
+                    </span>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-gray-400">
+                    Lifetime Revenue
+                  </p>
+                  <p className="font-mono text-4xl font-black tracking-tighter text-blue-600">
+                    ${formatMoneyWhole(selectedCustomer.totalRevenue)}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4 border-t border-gray-100 pt-6">
+                <div>
+                  <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-gray-400">
+                    Orders
+                  </p>
+                  <p className="text-xl font-bold">{selectedCustomer.orderCount}</p>
+                </div>
+                <div>
+                  <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-gray-400">
+                    Avg Value
+                  </p>
+                  <p className="font-mono text-xl font-bold">${formatMoneyWhole(selectedCustomer.avgValue)}</p>
+                </div>
+                <div>
+                  <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-gray-400">
+                    Last Order
+                  </p>
+                  <p
+                    className={`text-xl font-bold ${
+                      selectedCustomer.daysSinceLast > 60 ? 'text-red-500' : 'text-slate-800'
+                    }`}
+                  >
+                    {selectedCustomer.daysSinceLast === 999
+                      ? 'Never'
+                      : `${selectedCustomer.daysSinceLast} days ago`}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
+              <h3 className="mb-4 text-sm font-black uppercase tracking-widest text-slate-700">
+                Behavioral Analysis & Actions
+              </h3>
+              <div className="space-y-4">
+                {selectedCustomer.status === 'churned' && (
+                  <div className="flex rounded-xl border border-red-100 bg-red-50 p-4">
+                    <AlertTriangle className="mr-4 shrink-0 text-red-500" />
+                    <div>
+                      <h4 className="text-sm font-bold text-red-800">Customer Churned</h4>
+                      <p className="mt-1 text-xs text-red-600">
+                        No orders in over 90 days. Recommended action: executive reach-out and a strong
+                        win-back offer.
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {selectedCustomer.status === 'at-risk' && (
+                  <div className="flex rounded-xl border border-orange-100 bg-orange-50 p-4">
+                    <Activity className="mr-4 shrink-0 text-orange-500" />
+                    <div>
+                      <h4 className="text-sm font-bold text-orange-800">High Risk of Churn</h4>
+                      <p className="mt-1 text-xs text-orange-600">
+                        Ordering has slowed significantly. Recommended action: check in immediately and
+                        offer service support.
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {selectedCustomer.status === 'cooling' && (
+                  <div className="flex rounded-xl border border-amber-100 bg-amber-50 p-4">
+                    <TrendingDown className="mr-4 shrink-0 text-amber-500" />
+                    <div>
+                      <h4 className="text-sm font-bold text-amber-800">Cooling Engagement</h4>
+                      <p className="mt-1 text-xs text-amber-600">
+                        Typical order cycle is {selectedCustomer.avgFrequency} days, but it has been{' '}
+                        {selectedCustomer.daysSinceLast} days. A follow-up call is recommended.
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {selectedCustomer.trend === 'growing' && selectedCustomer.status === 'active' && (
+                  <div className="flex rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+                    <TrendingUp className="mr-4 shrink-0 text-emerald-500" />
+                    <div>
+                      <h4 className="text-sm font-bold text-emerald-800">Growth Account</h4>
+                      <p className="mt-1 text-xs text-emerald-600">
+                        Order volume is rising. This account is a good candidate for tiered pricing or
+                        contract locking.
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {selectedCustomer.avgFrequency && (
+                  <div className="flex rounded-xl border border-blue-100 bg-blue-50 p-4">
+                    <Clock className="mr-4 shrink-0 text-blue-500" />
+                    <div>
+                      <h4 className="text-sm font-bold text-blue-800">Ordering Cadence</h4>
+                      <p className="mt-1 text-xs text-blue-600">
+                        Typically orders every <b>{selectedCustomer.avgFrequency} days</b>. Next expected
+                        order is roughly{' '}
+                        {Math.max(0, selectedCustomer.avgFrequency - selectedCustomer.daysSinceLast)} days
+                        from now.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+              <h3 className="mb-4 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                Typically Orders
+              </h3>
+              {selectedCustomer.topItems.length > 0 ? (
+                <ul className="space-y-3">
+                  {selectedCustomer.topItems.map((item) => (
+                    <li
+                      className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 p-3"
+                      key={item.name}
+                    >
+                      <span className="mr-2 truncate text-sm font-bold text-slate-700">{item.name}</span>
+                      <span className="shrink-0 rounded border border-slate-200 bg-white px-2 py-1 text-xs font-black text-blue-600 shadow-sm">
+                        {item.qty} units
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm font-medium text-gray-400">No item data found.</p>
+              )}
+            </div>
+
+            <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+              <h3 className="mb-4 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                Contact File
+              </h3>
+              <div className="space-y-3 text-sm">
+                <div className="flex">
+                  <User className="mr-3 shrink-0 text-gray-400" size={18} />
+                  <span className="font-bold">
+                    {selectedCustomer.customer.contactPerson || 'Not Provided'}
+                  </span>
+                </div>
+                <div className="flex">
+                  <Phone className="mr-3 shrink-0 text-gray-400" size={18} />
+                  <span className="font-bold">
+                    {selectedCustomer.customer.contactNumber || 'Not Provided'}
+                  </span>
+                </div>
+                <div className="flex">
+                  <MapPin className="mr-3 shrink-0 text-gray-400" size={18} />
+                  <span className="font-medium text-gray-600">{selectedCustomer.customer.address}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full flex-col rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="flex shrink-0 items-center justify-between rounded-t-xl border-b border-gray-100 bg-gray-50 p-5">
+        <div>
+          <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">
+            Customer Intelligence
+          </h3>
+          <p className="mt-1 text-xs font-medium text-slate-500">
+            Revenue rankings and behavioral analytics
+          </p>
+        </div>
+        <div className="flex items-center space-x-3">
+          <div className="mr-4 flex rounded-lg border border-gray-200 bg-white p-1 shadow-sm">
+            <button
+              className={`rounded-md px-4 py-1.5 text-[10px] font-black uppercase tracking-widest transition-all ${
+                filter === 'All' ? 'bg-blue-600 text-white shadow' : 'text-gray-500 hover:bg-gray-50'
+              }`}
+              onClick={() => setFilter('All')}
+              type="button"
+            >
+              All Accounts
+            </button>
+            <button
+              className={`flex items-center rounded-md px-4 py-1.5 text-[10px] font-black uppercase tracking-widest transition-all ${
+                filter === 'Stagnant'
+                  ? 'bg-orange-500 text-white shadow'
+                  : 'text-orange-600 hover:bg-orange-50'
+              }`}
+              onClick={() => setFilter('Stagnant')}
+              type="button"
+            >
+              <AlertTriangle className="mr-1" size={12} /> Stagnant ({stagnantCount})
+            </button>
+          </div>
+          {sys.hasPerm('manage_customers') && (
+            <button
+              className="flex items-center rounded-lg bg-slate-900 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-slate-800"
+              onClick={() => {
+                setEditingCustomer(EMPTY_CUSTOMER);
+                setIsOpen(true);
+              }}
+              type="button"
+            >
+              <Plus className="mr-2" size={16} /> New Account
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-auto">
+        <table className="w-full text-left font-medium">
+          <thead className="sticky top-0 z-10 border-b bg-white text-[10px] font-black uppercase text-gray-400 shadow-sm">
+            <tr>
+              <th className="w-16 p-4 pl-6 text-center">Rank</th>
+              <th className="p-4">Entity</th>
+              <th className="p-4 text-center">Status</th>
+              <th className="p-4 text-center">Trend</th>
+              <th className="p-4 text-right">Lifetime Rev.</th>
+              <th className="p-4 text-center">Last Order</th>
+              <th className="p-4 pr-6 text-right">Details</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100 text-sm">
+            {displayList.map((entry, index) => {
+              const statusStyle = STATUS_STYLES[entry.status] || STATUS_STYLES.inactive;
+              const TrendIcon =
+                entry.trend === 'growing'
+                  ? TrendingUp
+                  : entry.trend === 'declining'
+                    ? TrendingDown
+                    : ArrowRight;
+              const trendColor =
+                entry.trend === 'growing'
+                  ? 'text-emerald-500'
+                  : entry.trend === 'declining'
+                    ? 'text-red-500'
+                    : 'text-gray-400';
+
+              return (
+                <tr
+                  className="cursor-pointer transition-colors hover:bg-blue-50/30"
+                  key={entry.customer.id}
+                  onClick={() => setSelectedCustomer(entry)}
+                >
+                  <td className="p-4 pl-6 text-center">
+                    <span
+                      className={`inline-flex h-8 w-8 items-center justify-center rounded-full text-xs font-black ${
+                        index < 3 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'
+                      }`}
+                    >
+                      #{index + 1}
+                    </span>
+                  </td>
+                  <td className="p-4">
+                    <div className="font-bold text-slate-900">{entry.customer.name || 'Unknown'}</div>
+                    <div className="mt-0.5 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                      {entry.customer.region || '-'} Sector
+                    </div>
+                  </td>
+                  <td className="p-4 text-center">
+                    <span
+                      className={`${statusStyle.bg} ${statusStyle.text} rounded-full px-3 py-1 text-[9px] font-black uppercase tracking-widest`}
+                    >
+                      {statusStyle.label}
+                    </span>
+                  </td>
+                  <td className="p-4 text-center">
+                    <TrendIcon className={`inline-block ${trendColor}`} size={18} />
+                  </td>
+                  <td className="p-4 text-right font-mono text-lg font-black tracking-tighter text-slate-900">
+                    ${formatMoneyWhole(entry.totalRevenue)}
+                  </td>
+                  <td className="p-4 text-center text-xs font-bold text-slate-500">
+                    {entry.daysSinceLast === 999 ? '-' : `${entry.daysSinceLast}d ago`}
+                  </td>
+                  <td className="p-4 pr-6 text-right">
+                    <span className="inline-flex items-center rounded-lg bg-blue-50 p-2 text-[10px] font-black uppercase tracking-widest text-blue-600 transition-colors hover:bg-blue-100">
+                      View <ArrowRight className="ml-1" size={12} />
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+            {displayList.length === 0 && (
+              <tr>
+                <td className="p-12 text-center text-sm font-bold text-gray-400" colSpan="7">
+                  No customers found for this filter.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {isOpen && (
+        <CustomerFormModal
+          initialValue={editingCustomer}
+          onClose={() => setIsOpen(false)}
+          onSave={handleSave}
+        />
+      )}
+    </div>
+  );
+}
