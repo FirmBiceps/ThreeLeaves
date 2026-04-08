@@ -31,6 +31,22 @@ export default function App() {
     ...(sys.currentUser?.role === 'admin' ? [{ value: 'team', label: 'Team Access' }] : []),
   ];
 
+  if (sys.isHydrating) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-950 p-6 text-white">
+        <div className="rounded-3xl border border-slate-800 bg-slate-900 px-8 py-6 text-center shadow-2xl">
+          <p className="text-sm font-black uppercase tracking-[0.3em] text-slate-500">
+            Loading
+          </p>
+          <h1 className="mt-3 text-2xl font-black tracking-tighter">Syncing ERP Data</h1>
+          <p className="mt-2 text-sm text-slate-400">
+            Pulling your latest records from {sys.storageMode === 'supabase' ? 'Supabase' : 'local demo data'}.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (!sys.currentUser) {
     return <LoginView loginError={loginError} setLoginError={setLoginError} sys={sys} />;
   }
@@ -56,8 +72,18 @@ export default function App() {
               ))}
             </select>
           </div>
-          <div className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-bold uppercase tracking-tighter text-blue-600 md:text-sm">
-            Three Leaves ERP
+          <div className="flex items-center gap-3">
+            {sys.lastSyncError && (
+              <div className="hidden rounded-full border border-red-100 bg-red-50 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-red-600 lg:block">
+                Sync issue
+              </div>
+            )}
+            <div className="hidden rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-emerald-600 md:block">
+              {sys.storageMode === 'supabase' ? 'Supabase Connected' : 'Demo Mode'}
+            </div>
+            <div className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-bold uppercase tracking-tighter text-blue-600 md:text-sm">
+              Three Leaves ERP
+            </div>
           </div>
         </header>
         <div className="flex-1 overflow-y-auto p-8 print:overflow-visible print:p-0">

@@ -15,6 +15,25 @@ npm run dev
 npm run build
 ```
 
+## Supabase setup
+
+1. Create a Supabase project.
+2. In Supabase SQL Editor, run the schema in [supabase/schema.sql](/Users/junming/Documents/New%20project/supabase/schema.sql).
+3. Copy [.env.example](/Users/junming/Documents/New%20project/.env.example) to `.env.local`.
+4. Fill in:
+
+```bash
+VITE_SUPABASE_URL=your-project-url
+VITE_SUPABASE_ANON_KEY=your-anon-key
+```
+
+5. Restart `npm run dev`.
+
+How this app stores data:
+- The ERP saves one full app snapshot into the `app_state` table.
+- If Supabase is not configured, the app falls back to demo in-memory data.
+- Once Supabase is configured, edits automatically sync to Supabase.
+
 ## Push to GitHub
 
 1. Create a new empty GitHub repository.
