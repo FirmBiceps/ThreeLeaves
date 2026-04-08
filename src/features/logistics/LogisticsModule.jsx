@@ -7,6 +7,7 @@ import { getDistanceKm } from '../../utils/logistics';
 
 export function LogisticsModule({ sys }) {
   const [selectedRegion, setSelectedRegion] = useState(null);
+  const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
   const markersLayerRef = useRef(null);
   const polylineRef = useRef(null);
@@ -61,12 +62,13 @@ export function LogisticsModule({ sys }) {
   }, [regionalGroups, selectedRegion]);
 
   useEffect(() => {
-    if (!document.getElementById('delivery-map')) {
+    const mapContainer = mapContainerRef.current;
+    if (!mapContainer) {
       return undefined;
     }
 
     if (!mapRef.current) {
-      mapRef.current = L.map('delivery-map').setView([1.3521, 103.8198], 11);
+      mapRef.current = L.map(mapContainer).setView([1.3521, 103.8198], 11);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap contributors',
       }).addTo(mapRef.current);
@@ -137,10 +139,21 @@ export function LogisticsModule({ sys }) {
 
     layerGroup.addTo(mapRef.current);
     markersLayerRef.current = layerGroup;
-    setTimeout(() => mapRef.current?.invalidateSize(), 50);
+    const resizeTimer = setTimeout(() => mapRef.current?.invalidateSize(), 50);
 
-    return undefined;
+    return () => clearTimeout(resizeTimer);
   }, [routeMetrics, sys.customers, todayInvoices]);
+
+  useEffect(() => {
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+      markersLayerRef.current = null;
+      polylineRef.current = null;
+    };
+  }, []);
 
   return (
     <div className="flex h-full flex-col space-y-6">
@@ -219,7 +232,7 @@ export function LogisticsModule({ sys }) {
         </div>
 
         <div className="relative min-h-[600px] overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm lg:col-span-3">
-          <div className="absolute inset-0 z-0" id="delivery-map" />
+          <div className="absolute inset-0 z-0" ref={mapContainerRef} />
           <div className="absolute right-4 top-4 z-[1000]">
             <div className="space-y-2 rounded-2xl border border-gray-100 bg-white/90 p-4 text-[10px] font-black uppercase tracking-widest shadow-xl backdrop-blur-md">
               <div className="flex items-center">
