@@ -14,6 +14,10 @@ import { CompanyHeader } from '../../components/shared/CompanyHeader';
 import { UNIT_OPTIONS } from '../../data/company';
 import { formatMoney } from '../../utils/format';
 
+// 1. IMPORT YOUR LOGO DIRECTLY HERE
+// (Make sure three_leaves_logo.png is sitting in the exact same folder as this file!)
+import logo from './three_leaves_logo.png';
+
 function InvoicePreview({
   customer,
   gst,
@@ -59,14 +63,14 @@ function InvoicePreview({
             </div>
           </div>
 
-          {/* --- NEW EXCEL-STYLE PRINTABLE TEMPLATE --- */}
+          {/* --- PRINTABLE TEMPLATE --- */}
           <div id="printable-invoice" className="bg-white text-black font-sans w-full h-full flex flex-col pt-0">
             
             {/* HEADER ROW */}
             <div className="flex justify-between items-start mb-6">
               {/* Left: Logo */}
               <div className="w-1/4">
-                <img src="/three_leaves_logo.png" alt="Three Leaves Logo" className="w-32 h-auto" />
+                <img src={logo} alt="Three Leaves Logo" className="w-32 h-auto" />
               </div>
 
               {/* Center: Company Details */}
@@ -110,59 +114,59 @@ function InvoicePreview({
               </div>
             </div>
 
-            {/* EXCEL-STYLE ITEM TABLE */}
-            <table className="w-full text-sm border-collapse border-2 border-black text-center mb-0">
-              <thead>
+            {/* ITEM TABLE (REMOVED INNER GRID LINES) */}
+            <table className="w-full text-sm border-2 border-black text-center mb-0">
+              <thead className="border-b-2 border-black">
                 <tr className="font-bold bg-white">
-                  <th className="border border-black p-1.5 w-12">NO.</th>
-                  <th className="border border-black p-1.5 text-left">DESCRIPTION</th>
-                  <th className="border border-black p-1.5 w-24">QUANTITY</th>
-                  <th className="border border-black p-1.5 w-32">UNIT PRICE</th>
-                  <th className="border border-black p-1.5 w-32">AMOUNT</th>
+                  <th className="p-2 w-12">NO.</th>
+                  <th className="p-2 text-left">DESCRIPTION</th>
+                  <th className="p-2 w-24">QUANTITY</th>
+                  <th className="p-2 w-32">UNIT PRICE</th>
+                  <th className="p-2 w-32">AMOUNT</th>
                 </tr>
               </thead>
               <tbody>
                 {items.map((item, idx) => (
                   <tr key={idx} className="h-7">
-                    <td className="border border-black p-1">{idx + 1}</td>
-                    <td className="border border-black p-1 text-left">
+                    <td className="p-1">{idx + 1}</td>
+                    <td className="p-1 text-left">
                       {sys.inventory.find((entry) => entry.id === item.itemId)?.name || '-'}
                     </td>
-                    <td className="border border-black p-1">{item.qty} {item.unit}</td>
-                    <td className="border border-black p-1 text-right">${formatMoney(item.unitPrice)}</td>
-                    <td className="border border-black p-1 text-right">
+                    <td className="p-1">{item.qty} {item.unit}</td>
+                    <td className="p-1 text-right">${formatMoney(item.unitPrice)}</td>
+                    <td className="p-1 text-right pr-2">
                       ${formatMoney((Number(item.qty) || 0) * (Number(item.unitPrice) || 0))}
                     </td>
                   </tr>
                 ))}
-                {/* Dynamically add blank rows to pad out the excel look (minimum 15 rows) */}
+                {/* Dynamically add blank rows to pad out the space (minimum 15 rows) */}
                 {items.length < 15 && Array.from({ length: 15 - items.length }).map((_, i) => (
                   <tr key={`blank-${i}`} className="h-7">
-                    <td className="border border-black p-1"></td>
-                    <td className="border border-black p-1"></td>
-                    <td className="border border-black p-1"></td>
-                    <td className="border border-black p-1"></td>
-                    <td className="border border-black p-1"></td>
+                    <td className="p-1"></td>
+                    <td className="p-1"></td>
+                    <td className="p-1"></td>
+                    <td className="p-1"></td>
+                    <td className="p-1"></td>
                   </tr>
                 ))}
               </tbody>
             </table>
 
-            {/* TOTALS BOX (Aligned right) */}
+            {/* TOTALS BOX */}
             <div className="flex justify-end mt-0">
-              <table className="w-64 text-sm border-collapse border-2 border-t-0 border-black text-right bg-white">
+              <table className="w-64 text-sm border-2 border-t-0 border-black text-right bg-white">
                 <tbody>
                   <tr>
-                    <td className="border border-black p-1.5 font-bold text-center">SUBTOTAL</td>
-                    <td className="border border-black p-1.5 w-32">${formatMoney(subtotal)}</td>
+                    <td className="p-2 font-bold text-center">SUBTOTAL</td>
+                    <td className="p-2 w-32 pr-2">${formatMoney(subtotal)}</td>
                   </tr>
                   <tr>
-                    <td className="border border-black p-1.5 font-bold text-center">9% GST</td>
-                    <td className="border border-black p-1.5">${formatMoney(gst)}</td>
+                    <td className="p-2 font-bold text-center">9% GST</td>
+                    <td className="p-2 pr-2">${formatMoney(gst)}</td>
                   </tr>
-                  <tr>
-                    <td className="border border-black p-1.5 font-bold text-center">TOTAL</td>
-                    <td className="border border-black p-1.5 font-bold">${formatMoney(total)}</td>
+                  <tr className="border-t-2 border-black">
+                    <td className="p-2 font-bold text-center">TOTAL</td>
+                    <td className="p-2 font-bold pr-2">${formatMoney(total)}</td>
                   </tr>
                 </tbody>
               </table>
@@ -177,7 +181,7 @@ function InvoicePreview({
             </div>
 
           </div>
-          {/* --- END NEW EXCEL-STYLE TEMPLATE --- */}
+          {/* --- END PRINTABLE TEMPLATE --- */}
 
         </div>
       </div>
