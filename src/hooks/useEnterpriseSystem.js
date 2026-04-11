@@ -1,140 +1,85 @@
-import { useEffect, useMemo, useState } from 'react';
-import { createDefaultSystemData, normalizeSystemData } from '../data/defaultState';
-import { loadAppState, saveAppState } from '../lib/appStateRepository';
+import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { isSupabaseConfigured } from '../lib/supabaseClient';
 
-export function useEnterpriseSystem() {
+// Initialize Supabase using your Netlify Environment Variables
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+export default function useEnterpriseSystem() {
   const [currentUser, setCurrentUser] = useState(null);
-  const [systemData, setSystemData] = useState(createDefaultSystemData);
-  const [isHydrating, setIsHydrating] = useState(isSupabaseConfigured);
-  const [storageMode, setStorageMode] = useState(isSupabaseConfigured ? 'supabase' : 'demo');
-  const [lastSyncError, setLastSyncError] = useState('');
+  const [loading, setLoading] = useState(true);
+  
+  const [users, setUsers] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
+  const [inventory, setInventory] = useState([]);
+  const [invoices, setInvoices] = useState([]);
+  const [gstRecords, setGstRecords] = useState([]);
 
+  // 1. Fetch all data from your new individual tables on load
   useEffect(() => {
-    let isCancelled = false;
+    const fetchAllData = async () => {
+      try {
+        const [resUsers, resCust, resSupp, resInv, resInvoices, resGst] = await Promise.all([
+          supabase.from('users').select('*'),
+          supabase.from('customers').select('*'),
+          supabase.from('suppliers').select('*'),
+          supabase.from('inventory').select('*'),
+          supabase.from('invoices').select('*'),
+          supabase.from('gst_records').select('*')
+        ]);
 
-    async function hydrate() {
-      if (!isSupabaseConfigured) {
-        setIsHydrating(false);
-        return;
+        if (resUsers.data) setUsers(resUsers.data);
+        if (resCust.data) setCustomers(resCust.data);
+        if (resSupp.data) setSuppliers(resSupp.data);
+        if (resInv.data) setInventory(resInv.data);
+        if (resInvoices.data) setInvoices(resInvoices.data);
+        if (resGst.data) setGstRecords(resGst.data);
+      } catch (error) {
+        console.error("Error fetching data from Supabase:", error);
+      } finally {
+        setLoading(false);
       }
-
-      const { data, error } = await loadAppState();
-      if (isCancelled) {
-        return;
-      }
-
-      if (error) {
-        setLastSyncError(error.message);
-        setStorageMode('demo');
-      } else if (data) {
-        setSystemData(normalizeSystemData(data));
-        setStorageMode('supabase');
-      } else {
-        setStorageMode('supabase');
-      }
-
-      setIsHydrating(false);
-    }
-
-    hydrate();
-
-    return () => {
-      isCancelled = true;
     };
+    fetchAllData();
   }, []);
 
-  useEffect(() => {
-    if (!isSupabaseConfigured || isHydrating) {
-      return undefined;
+  // 2. Cloud Sync Function (Inserts or Updates data in the correct table)
+  const syncToSupabase = async (table, newData) => {
+    try {
+      const { error } = await supabase.from(table).upsert(newData);
+      if (error) console.error(`Error saving to ${table}:`, error);
+    } catch (err) {
+      console.error("Supabase sync error:", err);
     }
+  };
 
-    const timer = setTimeout(async () => {
-      const { error } = await saveAppState(systemData);
-      if (error) {
-        setLastSyncError(error.message);
-      } else {
-        setLastSyncError('');
-      }
-    }, 400);
+  // 3. Handlers to update the UI instantly AND save to the correct cloud table
+  const handleSetUsers = (v) => { setUsers(v); syncToSupabase('users', v); };
+  const handleSetCustomers = (v) => { setCustomers(v); syncToSupabase('customers', v); };
+  const handleSetSuppliers = (v) => { setSuppliers(v); syncToSupabase('suppliers', v); };
+  const handleSetInventory = (v) => { setInventory(v); syncToSupabase('inventory', v); };
+  const handleSetInvoices = (v) => { setInvoices(v); syncToSupabase('invoices', v); };
+  const handleSetGstRecords = (v) => { setGstRecords(v); syncToSupabase('gst_records', v); };
 
-    return () => clearTimeout(timer);
-  }, [isHydrating, systemData]);
-
-  const users = useMemo(() => systemData.users, [systemData.users]);
-  const customers = useMemo(() => systemData.customers, [systemData.customers]);
-  const suppliers = useMemo(() => systemData.suppliers, [systemData.suppliers]);
-  const inventory = useMemo(() => systemData.inventory, [systemData.inventory]);
-  const invoices = useMemo(() => systemData.invoices, [systemData.invoices]);
-  const gstRecords = useMemo(() => systemData.gstRecords, [systemData.gstRecords]);
-
-  const setUsers = (value) =>
-    setSystemData((current) => ({
-      ...current,
-      users: typeof value === 'function' ? value(current.users) : value,
-    }));
-  const setCustomers = (value) =>
-    setSystemData((current) => ({
-      ...current,
-      customers: typeof value === 'function' ? value(current.customers) : value,
-    }));
-  const setSuppliers = (value) =>
-    setSystemData((current) => ({
-      ...current,
-      suppliers: typeof value === 'function' ? value(current.suppliers) : value,
-    }));
-  const setInventory = (value) =>
-    setSystemData((current) => ({
-      ...current,
-      inventory: typeof value === 'function' ? value(current.inventory) : value,
-    }));
-  const setInvoices = (value) =>
-    setSystemData((current) => ({
-      ...current,
-      invoices: typeof value === 'function' ? value(current.invoices) : value,
-    }));
-  const setGstRecords = (value) =>
-    setSystemData((current) => ({
-      ...current,
-      gstRecords: typeof value === 'function' ? value(current.gstRecords) : value,
-    }));
-
-  const hasPerm = (permissionId) =>
-    currentUser?.role === 'admin' || currentUser?.permissions.includes(permissionId);
-
+  const hasPerm = (permId) => currentUser?.role === 'admin' || currentUser?.permissions?.includes(permId);
+  
   const getApplicablePrice = (productId, customerId) => {
-    const product = inventory.find((item) => item.id === productId);
-    if (!product) {
-      return 0;
-    }
-
-    if (customerId && product.customerPrices?.[customerId] !== undefined) {
-      return product.customerPrices[customerId];
-    }
-
-    return product.price;
+    const product = inventory.find(i => i.id === productId);
+    if (!product) return 0;
+    return (customerId && product.customerPrices?.[customerId] !== undefined) 
+      ? product.customerPrices[customerId] : product.price;
   };
 
   return {
-    currentUser,
-    setCurrentUser,
-    users,
-    setUsers,
-    customers,
-    setCustomers,
-    suppliers,
-    setSuppliers,
-    inventory,
-    setInventory,
-    invoices,
-    setInvoices,
-    gstRecords,
-    setGstRecords,
-    isHydrating,
-    storageMode,
-    lastSyncError,
-    hasPerm,
-    getApplicablePrice,
+    loading, currentUser, setCurrentUser, 
+    users, setUsers: handleSetUsers,
+    customers, setCustomers: handleSetCustomers, 
+    suppliers, setSuppliers: handleSetSuppliers,
+    inventory, setInventory: handleSetInventory, 
+    invoices, setInvoices: handleSetInvoices,
+    gstRecords, setGstRecords: handleSetGstRecords,
+    hasPerm, getApplicablePrice
   };
 }
