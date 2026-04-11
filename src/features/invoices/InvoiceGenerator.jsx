@@ -31,6 +31,8 @@ function InvoicePreview({
     <div className="fixed inset-0 z-[3000] overflow-y-auto bg-slate-950/90 print:bg-white print:p-0">
       <div className="flex min-h-full justify-center py-24 print:py-0">
         <div className="relative flex min-h-[297mm] w-full max-w-[210mm] flex-col bg-white p-12 shadow-2xl print:w-full print:p-0 print:shadow-none">
+          
+          {/* Action Bar (Hidden when printing) */}
           <div className="absolute -top-16 left-0 right-0 flex items-center justify-between px-4 print:hidden">
             <button
               className="flex items-center rounded-xl bg-slate-800 px-6 py-2.5 font-bold text-white transition-all hover:bg-slate-700"
@@ -57,99 +59,126 @@ function InvoicePreview({
             </div>
           </div>
 
-          <CompanyHeader />
+          {/* --- NEW EXCEL-STYLE PRINTABLE TEMPLATE --- */}
+          <div id="printable-invoice" className="bg-white text-black font-sans w-full h-full flex flex-col pt-0">
+            
+            {/* HEADER ROW */}
+            <div className="flex justify-between items-start mb-6">
+              {/* Left: Logo */}
+              <div className="w-1/4">
+                <img src="/three_leaves_logo.png" alt="Three Leaves Logo" className="w-32 h-auto" />
+              </div>
 
-          <div className="mb-12 flex justify-between">
-            <div className="w-1/2">
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                To Customer:
-              </span>
-              <p className="mt-1 text-xl font-black text-slate-900">{customer?.name || 'N/A'}</p>
-              <p className="mt-2 text-xs font-bold uppercase leading-relaxed text-slate-500">
-                {customer?.address || ''}
-              </p>
-            </div>
-            <div className="text-right">
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                Invoice No.
-              </span>
-              <p className="mt-1 text-3xl font-black tracking-tighter text-red-600">#{lastNumber + 1}</p>
-              <div className="mt-4 flex flex-col items-end gap-1.5 border-t border-slate-100 pt-4 text-[10px] font-black uppercase tracking-widest text-slate-400">
-                <span>Date: {new Date().toLocaleDateString()}</span>
-                <span className="rounded bg-blue-50 px-2 py-0.5 text-blue-600">
-                  Terms: {paymentTerms === 'cod' ? 'Cash on Delivery (COD)' : '30 Days Term'}
-                </span>
+              {/* Center: Company Details */}
+              <div className="w-2/4 text-center text-[11px] leading-tight pt-2">
+                <h1 className="font-bold text-lg mb-1">THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
+                <h2 className="font-bold text-base mb-1">三叶（新加坡） 贸易公司</h2>
+                <p className="font-bold">CO.REG NO.53033969B &nbsp;&nbsp;&nbsp; GST REG NO. M90355440L</p>
+                <p>280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
+                <p className="font-bold">HP: 97578869 (Mr Ye) &nbsp; HP: 91113505 (Min) &nbsp; Email: 3leaves.sg@gmail.com</p>
+              </div>
+
+              {/* Right: Invoice Number & Date */}
+              <div className="w-1/4 flex flex-col items-end pt-2">
+                <div className="w-full text-right">
+                  <h2 className="text-xl font-bold tracking-widest uppercase">INVOICE</h2>
+                  <div className="border-t-2 border-b-2 border-black py-1 my-1 flex justify-end gap-2">
+                    <span className="font-bold text-sm">No.</span>
+                    <span className="font-bold text-sm text-red-600">{lastNumber + 1}</span>
+                  </div>
+                  <div className="flex justify-end gap-2 font-bold text-xs">
+                    <span>DATE:</span>
+                    <span>{new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}</span>
+                  </div>
+                  <div className="flex justify-end gap-2 font-bold text-xs mt-1">
+                    <span>Term:</span>
+                    <span>{paymentTerms === 'cod' ? 'COD' : '30 Days'}</span>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="flex-1">
-            <table className="mb-10 w-full text-left">
-              <thead className="border-y-2 border-slate-900">
-                <tr className="text-[9px] font-black uppercase tracking-widest text-slate-500">
-                  <th className="w-12 p-4 text-center">No.</th>
-                  <th className="p-4">Description</th>
-                  <th className="w-24 p-4 text-center">Unit</th>
-                  <th className="w-20 p-4 text-center">Qty</th>
-                  <th className="w-28 p-4 text-right">Cost</th>
-                  <th className="w-28 p-4 text-right">Amount</th>
+            {/* CUSTOMER INFO ROW */}
+            <div className="mb-4 text-sm font-bold flex flex-col gap-1">
+              <div className="flex">
+                <span className="w-20">TO:</span>
+                <span className="border-b border-black flex-1 uppercase pb-1">{customer?.name || ''}</span>
+              </div>
+              <div className="flex">
+                <span className="w-20">ADDRESS:</span>
+                <span className="border-b border-black flex-1 uppercase pb-1">{customer?.address || ''}</span>
+              </div>
+            </div>
+
+            {/* EXCEL-STYLE ITEM TABLE */}
+            <table className="w-full text-sm border-collapse border-2 border-black text-center mb-0">
+              <thead>
+                <tr className="font-bold bg-white">
+                  <th className="border border-black p-1.5 w-12">NO.</th>
+                  <th className="border border-black p-1.5 text-left">DESCRIPTION</th>
+                  <th className="border border-black p-1.5 w-24">QUANTITY</th>
+                  <th className="border border-black p-1.5 w-32">UNIT PRICE</th>
+                  <th className="border border-black p-1.5 w-32">AMOUNT</th>
                 </tr>
               </thead>
               <tbody>
-                {items.map((item, index) => (
-                  <tr className="border-b border-gray-50 font-bold text-slate-800 last:border-0" key={`${item.itemId}-${index}`}>
-                    <td className="p-4 text-center font-mono text-xs text-slate-300">{index + 1}</td>
-                    <td className="p-4">
-                      <div className="flex items-center space-x-3">
-                        <input
-                          checked={item.picked || false}
-                          className="h-4 w-4 cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                          onChange={(event) => {
-                            const nextItems = [...items];
-                            nextItems[index].picked = event.target.checked;
-                            setItems(nextItems);
-                          }}
-                          type="checkbox"
-                        />
-                        <span>{sys.inventory.find((entry) => entry.id === item.itemId)?.name || '-'}</span>
-                      </div>
+                {items.map((item, idx) => (
+                  <tr key={idx} className="h-7">
+                    <td className="border border-black p-1">{idx + 1}</td>
+                    <td className="border border-black p-1 text-left">
+                      {sys.inventory.find((entry) => entry.id === item.itemId)?.name || '-'}
                     </td>
-                    <td className="p-4 text-center text-xs font-black uppercase text-slate-500">
-                      {item.unit}
-                    </td>
-                    <td className="p-4 text-center">{item.qty}</td>
-                    <td className="p-4 text-right">${formatMoney(item.unitPrice)}</td>
-                    <td className="p-4 text-right font-mono text-lg font-black tracking-tighter">
+                    <td className="border border-black p-1">{item.qty} {item.unit}</td>
+                    <td className="border border-black p-1 text-right">${formatMoney(item.unitPrice)}</td>
+                    <td className="border border-black p-1 text-right">
                       ${formatMoney((Number(item.qty) || 0) * (Number(item.unitPrice) || 0))}
                     </td>
                   </tr>
                 ))}
+                {/* Dynamically add blank rows to pad out the excel look (minimum 15 rows) */}
+                {items.length < 15 && Array.from({ length: 15 - items.length }).map((_, i) => (
+                  <tr key={`blank-${i}`} className="h-7">
+                    <td className="border border-black p-1"></td>
+                    <td className="border border-black p-1"></td>
+                    <td className="border border-black p-1"></td>
+                    <td className="border border-black p-1"></td>
+                    <td className="border border-black p-1"></td>
+                  </tr>
+                ))}
               </tbody>
             </table>
-          </div>
 
-          <div className="mt-8 flex justify-end border-t-2 border-slate-900 pt-8">
-            <div className="w-72 space-y-3">
-              <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-gray-400">
-                <span>Sub-Total</span>
-                <span className="font-bold text-slate-900">${formatMoney(subtotal)}</span>
-              </div>
-              <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-gray-400">
-                <span>GST 9% Included</span>
-                <span className="font-bold text-slate-900">${formatMoney(gst)}</span>
-              </div>
-              <div className="flex items-center justify-between border-t border-gray-100 pt-6">
-                <span className="text-xs font-black uppercase tracking-[0.2em]">Total Due</span>
-                <span className="border-b-4 border-double border-slate-900 px-1 font-mono text-4xl font-black tracking-tighter text-slate-900">
-                  ${formatMoney(total)}
-                </span>
-              </div>
+            {/* TOTALS BOX (Aligned right) */}
+            <div className="flex justify-end mt-0">
+              <table className="w-64 text-sm border-collapse border-2 border-t-0 border-black text-right bg-white">
+                <tbody>
+                  <tr>
+                    <td className="border border-black p-1.5 font-bold text-center">SUBTOTAL</td>
+                    <td className="border border-black p-1.5 w-32">${formatMoney(subtotal)}</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-black p-1.5 font-bold text-center">9% GST</td>
+                    <td className="border border-black p-1.5">${formatMoney(gst)}</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-black p-1.5 font-bold text-center">TOTAL</td>
+                    <td className="border border-black p-1.5 font-bold">${formatMoney(total)}</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
-          </div>
 
-          <div className="mb-4 mt-12 text-center text-[9px] font-black uppercase tracking-[0.3em] text-slate-400">
-            请提前一天提交订单 • Please submit order one day in advance
+            {/* FOOTER NOTES */}
+            <div className="mt-8 text-[11px] font-bold flex flex-col gap-1 mt-auto pb-4">
+              <p>请提前一天提交订单，同日送达的截止时间为下午12点前。每周日休息</p>
+              <p>Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays</p>
+              <p className="mt-2">UEN: 53033969B</p>
+              <p>A/C Name: Three Leaves (Singapore) Trading Enterprise</p>
+            </div>
+
           </div>
+          {/* --- END NEW EXCEL-STYLE TEMPLATE --- */}
+
         </div>
       </div>
     </div>
