@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createDefaultSystemData, normalizeSystemData } from '../data/defaultState';
 import { loadAppState, saveAppState } from '../lib/appStateRepository';
+import { createClient } from '@supabase/supabase-js';
 import { isSupabaseConfigured } from '../lib/supabaseClient';
 
 export function useEnterpriseSystem() {
