@@ -3,12 +3,12 @@ import { Search, Plus, Edit, Package, X, Trash2, Save } from 'lucide-react';
 import { formatMoney } from '../../utils/format';
 
 // ==========================================
-// NEW COMPONENT: INVENTORY ADD/EDIT MODAL
+// COMPONENT 1: INVENTORY ADD/EDIT MODAL
 // ==========================================
 function InventoryFormModal({ item, onClose, onSave, onDelete }) {
   // Normalize data whether it comes from the old React state or the raw Supabase CSV headers
   const [formData, setFormData] = useState({
-    id: item?.id || '',
+    id: item?.id || `prod-${Date.now()}`, // Ensure there's always an ID
     name: item?.name || item?.Items || '',
     description: item?.description || item?.Description || item?.Packaging || '',
     company: item?.company || item?.Company || '',
@@ -32,18 +32,16 @@ function InventoryFormModal({ item, onClose, onSave, onDelete }) {
     <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden">
         
-        {/* Header */}
         <div className="bg-slate-900 px-6 py-4 flex justify-between items-center text-white">
           <h2 className="text-base font-semibold flex items-center">
             <Package size={18} className="mr-2 text-blue-400" />
             {item ? 'Edit Product' : 'Add New Product'}
           </h2>
-          <button onClick={onClose} className="hover:bg-slate-800 p-1.5 rounded-full transition-colors">
+          <button type="button" onClick={onClose} className="hover:bg-slate-800 p-1.5 rounded-full transition-colors">
             <X size={20} />
           </button>
         </div>
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
             <label className="block text-sm text-slate-500 mb-1">Product Name</label>
@@ -128,15 +126,14 @@ function InventoryFormModal({ item, onClose, onSave, onDelete }) {
             />
           </div>
 
-          {/* Footer Actions */}
           <div className="flex justify-between items-center pt-4 mt-2 border-t border-slate-100">
             {item ? (
               <button 
                 type="button"
-                onClick={() => onDelete(item.id)}
+                onClick={() => onDelete(item)}
                 className="text-red-500 hover:bg-red-50 px-4 py-2 rounded-lg text-sm flex items-center transition-colors"
               >
-                <Trash2 size={16} className="mr-2" /> Delete Item
+                <Trash2 size={16} className="mr-2" /> Delete
               </button>
             ) : <div></div>}
 
@@ -184,64 +181,55 @@ export function InventoryModule({ sys }) {
     );
   });
 
-  // Handle Add or Edit Save
+  // Handle Save
   const handleSaveProduct = async (formData) => {
-    const isEditing = !!editingItem;
-    
-    // 1. Check if the prices actually changed!
-    const costChanged = isEditing && Number(editingItem.costPrice) !== Number(formData.costPrice);
-    const priceChanged = isEditing && Number(editingItem.unitPrice) !== Number(formData.unitPrice);
+    try {
+      const isEditing = !!editingItem;
+      let updatedInventory;
 
-    // 2. Update the local React screen instantly
-    let updatedInventory;
-    if (isEditing) {
-      updatedInventory = sys.inventory.map(item => 
-        item.id === formData.id ? { ...item, ...formData } : item
-      );
-    } else {
-      const newItem = { ...formData, id: `prod-${Date.now()}` };
-      updatedInventory = [newItem, ...sys.inventory];
+      if (isEditing) {
+        // We map over the array. We try to match by ID. If no ID exists, we match by Name as a fallback.
+        updatedInventory = sys.inventory.map(item => {
+          const matchById = item.id && item.id === formData.id;
+          const matchByName = !item.id && (item.name === formData.name || item.Items === formData.name);
+          
+          if (matchById || matchByName) {
+            return { ...item, ...formData, id: item.id || formData.id };
+          }
+          return item;
+        });
+      } else {
+        // Add new item
+        updatedInventory = [{ ...formData }, ...sys.inventory];
+      }
+
+      sys.setInventory(updatedInventory);
+
+      // NOTE FOR CLOUD SYNC: If you want these saves to go to Supabase, 
+      // you will drop the supabase.from().upsert() code right here!
+
+      // Always close the modal after saving
+      setIsModalOpen(false);
+      setEditingItem(null);
+
+    } catch (error) {
+      console.error("Save error: ", error);
+      alert("Something went wrong trying to save the product.");
     }
-    sys.setInventory(updatedInventory);
-    
-    // 3. --- SUPABASE CLOUD SYNC ---
-    
-    // A. Save the main product update
-    await supabase.from('product_list').upsert({
-      id: formData.id,
-      Items: formData.name,
-      Description: formData.description,
-      Company: formData.company,
-      Unit: formData.unit,
-      'Unit Price (RMB)': formData.costPrice,
-      'Unit Price (SG)': formData.unitPrice,
-      stock: formData.stock
-    });
-
-    // B. If a price changed, silently drop a record into our new ledger!
-    if (costChanged || priceChanged) {
-      await supabase.from('price_history').insert({
-        product_id: formData.id,
-        product_name: formData.name,
-        old_cost_rmb: editingItem.costPrice,
-        new_cost_rmb: formData.costPrice,
-        old_price_sg: editingItem.unitPrice,
-        new_price_sg: formData.unitPrice
-      });
-    }
-
-    setIsModalOpen(false);
-    setEditingItem(null);
-  }; 
+  };
 
   // Handle Delete
-  const handleDeleteProduct = (idToRemove) => {
-    if (window.confirm("Are you sure you want to delete this product?")) {
-      const updatedInventory = sys.inventory.filter(item => item.id !== idToRemove);
+  const handleDeleteProduct = (itemToRemove) => {
+    if (window.confirm(`Are you sure you want to delete ${itemToRemove.name || itemToRemove.Items}?`)) {
+      
+      const updatedInventory = sys.inventory.filter(item => {
+        if (itemToRemove.id && item.id) return item.id !== itemToRemove.id;
+        return (item.name || item.Items) !== (itemToRemove.name || itemToRemove.Items);
+      });
+      
       sys.setInventory(updatedInventory);
       
-      // NOTE: Add supabase.from('product_list').delete().eq('id', idToRemove) here for permanent deletion
-      
+      // Always close the modal
       setIsModalOpen(false);
       setEditingItem(null);
     }
@@ -318,9 +306,8 @@ export function InventoryModule({ sys }) {
               const stock = item.stock ?? 999;
 
               return (
-                <tr key={item.id || idx} className="hover:bg-slate-50 transition-colors">
+                <tr key={item.id || `fallback-${idx}`} className="hover:bg-slate-50 transition-colors">
                   
-                  {/* Product Name & Description */}
                   <td className="p-5 pl-8">
                     <p className="text-base text-slate-800">{name}</p>
                     {description && (
@@ -330,31 +317,26 @@ export function InventoryModule({ sys }) {
                     )}
                   </td>
                   
-                  {/* Supplier/Company */}
                   <td className="p-5">
                     <span className="text-sm text-slate-600 bg-slate-100 px-3 py-1.5 rounded-lg">
                       {company}
                     </span>
                   </td>
                   
-                  {/* Unit */}
                   <td className="p-5 text-center">
                     <span className="text-sm text-slate-600 border border-slate-200 px-3 py-1 rounded-md">
                       {unit}
                     </span>
                   </td>
                   
-                  {/* Cost Price RMB */}
                   <td className="p-5 text-right text-sm text-slate-500">
                     {priceRMB ? `¥${Number(priceRMB).toFixed(2)}` : '-'}
                   </td>
                   
-                  {/* Selling Price SG */}
                   <td className="p-5 text-right text-base text-blue-700">
                     ${formatMoney(priceSG)}
                   </td>
                   
-                  {/* Stock Status Badge */}
                   <td className="p-5 text-center">
                     <span
                       className={`text-xs px-3 py-1.5 rounded-md ${
@@ -367,7 +349,6 @@ export function InventoryModule({ sys }) {
                     </span>
                   </td>
                   
-                  {/* Edit Action */}
                   <td className="p-5 pr-8 text-right">
                     <button 
                       onClick={() => openEditModal(item)}
@@ -392,15 +373,15 @@ export function InventoryModule({ sys }) {
         </table>
       </div>
 
-      {/* Render the Modal if it is open */}
       {isModalOpen && (
         <InventoryFormModal 
           item={editingItem} 
-          onClose={() => setIsModalOpen(false)} 
+          onClose={() => {
+            setIsModalOpen(false);
+            setEditingItem(null);
+          }} 
           onSave={handleSaveProduct}
           onDelete={handleDeleteProduct}
         />
       )}
     </div>
-  );
-}
