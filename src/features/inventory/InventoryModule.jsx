@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Search, Plus, Edit, Package, X, Trash2, Save, CheckCircle } from 'lucide-react';
 import { formatMoney } from '../../utils/format';
 import { supabase } from '../../utils/supabase';
@@ -167,15 +167,13 @@ export function InventoryModule({ sys }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   
-  // NEW: Notification State
   const [notification, setNotification] = useState(null);
 
-  // Helper function to show notifications
   const showNotification = (message, type = 'success') => {
     setNotification({ message, type });
     setTimeout(() => {
       setNotification(null);
-    }, 3000); // Hides after 3 seconds
+    }, 3000);
   };
 
   const filteredInventory = sys.inventory.filter((item) => {
@@ -191,19 +189,16 @@ export function InventoryModule({ sys }) {
     );
   });
 
-  // Handle Save (Active Cloud Sync)
   const handleSaveProduct = async (formData) => {
     try {
       const isEditing = !!editingItem;
       
-      // 1. Check if the prices actually changed for our Ledger!
       const oldCostRMB = isEditing ? (editingItem.costPrice || editingItem['Unit Price (RMB)']) : 0;
       const oldPriceSG = isEditing ? (editingItem.unitPrice || editingItem['Unit Price (SG)']) : 0;
       
       const costChanged = isEditing && Number(oldCostRMB) !== Number(formData.costPrice);
       const priceChanged = isEditing && Number(oldPriceSG) !== Number(formData.unitPrice);
 
-      // 2. Update local UI instantly
       let updatedInventory;
       let finalId = formData.id;
 
@@ -222,24 +217,33 @@ export function InventoryModule({ sys }) {
       }
       sys.setInventory(updatedInventory);
 
-      // 3. --- PERMANENT SUPABASE SYNC ---
+      // --- PERMANENT SUPABASE SYNC ---
+      // We check if finalId is a real UUID. If not (like "prod-123"), we let Supabase generate one.
+      const isUUID = finalId && finalId.length === 36 && finalId.includes('-');
+      
+      const payload = {
+        Items: formData.name,
+        Description: formData.description,
+        Company: formData.company,
+        Unit: formData.unit,
+        'Unit Price (RMB)': formData.costPrice,
+        'Unit Price (SG)': formData.unitPrice,
+        stock: formData.stock
+      };
+
+      if (isEditing && isUUID) {
+        payload.id = finalId;
+      }
+
       const { data: savedProduct, error: saveError } = await supabase
         .from('product_list')
-        .upsert({
-          id: isEditing ? finalId : undefined, // If new, Supabase generates the UUID
-          Items: formData.name,
-          Description: formData.description,
-          Company: formData.company,
-          Unit: formData.unit,
-          'Unit Price (RMB)': formData.costPrice,
-          'Unit Price (SG)': formData.unitPrice,
-        })
+        .upsert(payload)
         .select()
         .single();
 
       if (saveError) throw saveError;
 
-      // 4. Log the Price History Ledger if margins changed
+      // Log the Price History Ledger if margins changed
       if (costChanged || priceChanged) {
         await supabase.from('price_history').insert({
           product_id: savedProduct.id,
@@ -261,19 +265,17 @@ export function InventoryModule({ sys }) {
     }
   };
 
-  // Handle Delete (Active Cloud Sync)
   const handleDeleteProduct = async (itemToRemove) => {
     if (window.confirm(`Are you sure you want to delete ${itemToRemove.name || itemToRemove.Items}?`)) {
       try {
-        // 1. Update local UI instantly
         const updatedInventory = sys.inventory.filter(item => {
           if (itemToRemove.id && item.id) return item.id !== itemToRemove.id;
           return (item.name || item.Items) !== (itemToRemove.name || itemToRemove.Items);
         });
         sys.setInventory(updatedInventory);
         
-        // 2. Delete permanently from Cloud
-        if (itemToRemove.id) {
+        const isUUID = itemToRemove.id && itemToRemove.id.length === 36;
+        if (isUUID) {
           const { error } = await supabase
             .from('product_list')
             .delete()
@@ -306,7 +308,6 @@ export function InventoryModule({ sys }) {
   return (
     <div className="p-8 h-full overflow-y-auto relative">
       
-      {/* HEADER & ADD BUTTON */}
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900 flex items-center">
@@ -325,7 +326,6 @@ export function InventoryModule({ sys }) {
         </button>
       </div>
 
-      {/* SEARCH & TABLE SECTION */}
       <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="p-5 border-b border-slate-100 flex items-center bg-slate-50">
           <Search className="text-slate-400 mr-3" size={22} />
@@ -420,7 +420,6 @@ export function InventoryModule({ sys }) {
         </table>
       </div>
 
-      {/* Render the Modal */}
       {isModalOpen && (
         <InventoryFormModal 
           item={editingItem} 
@@ -433,7 +432,6 @@ export function InventoryModule({ sys }) {
         />
       )}
 
-      {/* THE TOAST NOTIFICATION */}
       {notification && (
         <div 
           className={`fixed bottom-8 left-1/2 -translate-x-1/2 px-6 py-3 rounded-xl shadow-2xl flex items-center z-[6000] text-white font-medium transition-all duration-300 ${
