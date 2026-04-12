@@ -25,7 +25,7 @@ export function useEnterpriseSystem() {
           supabase.from('users').select('*'),
           supabase.from('customers').select('*'),
           supabase.from('suppliers').select('*'),
-          supabase.from('inventory').select('*'),
+          supabase.from('product_list').select('*'),
           supabase.from('invoices').select('*'),
           supabase.from('gst_records').select('*')
         ]);
