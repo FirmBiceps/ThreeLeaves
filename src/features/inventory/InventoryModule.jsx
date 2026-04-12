@@ -185,28 +185,55 @@ export function InventoryModule({ sys }) {
   });
 
   // Handle Add or Edit Save
-  const handleSaveProduct = (formData) => {
-    let updatedInventory;
+  const handleSaveProduct = async (formData) => {
+    const isEditing = !!editingItem;
     
-    if (editingItem) {
-      // Update existing item in the local array
+    // 1. Check if the prices actually changed!
+    const costChanged = isEditing && Number(editingItem.costPrice) !== Number(formData.costPrice);
+    const priceChanged = isEditing && Number(editingItem.unitPrice) !== Number(formData.unitPrice);
+
+    // 2. Update the local React screen instantly
+    let updatedInventory;
+    if (isEditing) {
       updatedInventory = sys.inventory.map(item => 
         item.id === formData.id ? { ...item, ...formData } : item
       );
     } else {
-      // Add new item to the local array (Give it a temporary ID)
       const newItem = { ...formData, id: `prod-${Date.now()}` };
       updatedInventory = [newItem, ...sys.inventory];
     }
-    
     sys.setInventory(updatedInventory);
     
-    // NOTE: To save these changes permanently to Cloudflare/Supabase, 
-    // you will need to add a supabase.from('product_list').upsert() call here!
+    // 3. --- SUPABASE CLOUD SYNC ---
     
+    // A. Save the main product update
+    await supabase.from('product_list').upsert({
+      id: formData.id,
+      Items: formData.name,
+      Description: formData.description,
+      Company: formData.company,
+      Unit: formData.unit,
+      'Unit Price (RMB)': formData.costPrice,
+      'Unit Price (SG)': formData.unitPrice,
+      stock: formData.stock
+    });
+
+    // B. If a price changed, silently drop a record into our new ledger!
+    if (costChanged || priceChanged) {
+      await supabase.from('price_history').insert({
+        product_id: formData.id,
+        product_name: formData.name,
+        old_cost_rmb: editingItem.costPrice,
+        new_cost_rmb: formData.costPrice,
+        old_price_sg: editingItem.unitPrice,
+        new_price_sg: formData.unitPrice
+      });
+    }
+    */
+
     setIsModalOpen(false);
     setEditingItem(null);
-  };
+  }; 
 
   // Handle Delete
   const handleDeleteProduct = (idToRemove) => {
