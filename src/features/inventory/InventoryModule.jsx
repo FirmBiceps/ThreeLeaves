@@ -1,14 +1,13 @@
-import { useState } from 'react';
-import { Search, Plus, Edit, Package, X, Trash2, Save } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Search, Plus, Edit, Package, X, Trash2, Save, CheckCircle } from 'lucide-react';
 import { formatMoney } from '../../utils/format';
 
 // ==========================================
 // COMPONENT 1: INVENTORY ADD/EDIT MODAL
 // ==========================================
 function InventoryFormModal({ item, onClose, onSave, onDelete }) {
-  // Normalize data whether it comes from the old React state or the raw Supabase CSV headers
   const [formData, setFormData] = useState({
-    id: item?.id || `prod-${Date.now()}`, // Ensure there's always an ID
+    id: item?.id || `prod-${Date.now()}`,
     name: item?.name || item?.Items || '',
     description: item?.description || item?.Description || item?.Packaging || '',
     company: item?.company || item?.Company || '',
@@ -166,8 +165,18 @@ export function InventoryModule({ sys }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
+  
+  // NEW: Notification State
+  const [notification, setNotification] = useState(null);
 
-  // Search logic
+  // Helper function to show notifications
+  const showNotification = (message, type = 'success') => {
+    setNotification({ message, type });
+    setTimeout(() => {
+      setNotification(null);
+    }, 3000); // Hides after 3 seconds
+  };
+
   const filteredInventory = sys.inventory.filter((item) => {
     const itemName = item.name || item.Items || '';
     const itemDesc = item.description || item.Description || item.Packaging || '';
@@ -181,14 +190,12 @@ export function InventoryModule({ sys }) {
     );
   });
 
-  // Handle Save
   const handleSaveProduct = async (formData) => {
     try {
       const isEditing = !!editingItem;
       let updatedInventory;
 
       if (isEditing) {
-        // We map over the array. We try to match by ID. If no ID exists, we match by Name as a fallback.
         updatedInventory = sys.inventory.map(item => {
           const matchById = item.id && item.id === formData.id;
           const matchByName = !item.id && (item.name === formData.name || item.Items === formData.name);
@@ -199,26 +206,23 @@ export function InventoryModule({ sys }) {
           return item;
         });
       } else {
-        // Add new item
         updatedInventory = [{ ...formData }, ...sys.inventory];
       }
 
       sys.setInventory(updatedInventory);
 
-      // NOTE FOR CLOUD SYNC: If you want these saves to go to Supabase, 
-      // you will drop the supabase.from().upsert() code right here!
+      // Trigger the success notification!
+      showNotification(isEditing ? 'Product successfully updated!' : 'New product added to catalog!');
 
-      // Always close the modal after saving
       setIsModalOpen(false);
       setEditingItem(null);
 
     } catch (error) {
       console.error("Save error: ", error);
-      alert("Something went wrong trying to save the product.");
+      showNotification('Error saving product.', 'error');
     }
   };
 
-  // Handle Delete
   const handleDeleteProduct = (itemToRemove) => {
     if (window.confirm(`Are you sure you want to delete ${itemToRemove.name || itemToRemove.Items}?`)) {
       
@@ -229,7 +233,9 @@ export function InventoryModule({ sys }) {
       
       sys.setInventory(updatedInventory);
       
-      // Always close the modal
+      // Trigger the delete notification!
+      showNotification('Product removed from catalog.', 'error');
+      
       setIsModalOpen(false);
       setEditingItem(null);
     }
@@ -246,7 +252,7 @@ export function InventoryModule({ sys }) {
   };
 
   return (
-    <div className="p-8 h-full overflow-y-auto">
+    <div className="p-8 h-full overflow-y-auto relative">
       
       {/* HEADER & ADD BUTTON */}
       <div className="flex justify-between items-center mb-8">
@@ -269,8 +275,6 @@ export function InventoryModule({ sys }) {
 
       {/* SEARCH & TABLE SECTION */}
       <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-        
-        {/* Search Bar */}
         <div className="p-5 border-b border-slate-100 flex items-center bg-slate-50">
           <Search className="text-slate-400 mr-3" size={22} />
           <input
@@ -282,7 +286,6 @@ export function InventoryModule({ sys }) {
           />
         </div>
 
-        {/* Data Table */}
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-white border-b border-slate-200 text-xs uppercase tracking-widest text-slate-500 font-semibold">
@@ -307,7 +310,6 @@ export function InventoryModule({ sys }) {
 
               return (
                 <tr key={item.id || `fallback-${idx}`} className="hover:bg-slate-50 transition-colors">
-                  
                   <td className="p-5 pl-8">
                     <p className="text-base text-slate-800">{name}</p>
                     {description && (
@@ -316,27 +318,22 @@ export function InventoryModule({ sys }) {
                       </p>
                     )}
                   </td>
-                  
                   <td className="p-5">
                     <span className="text-sm text-slate-600 bg-slate-100 px-3 py-1.5 rounded-lg">
                       {company}
                     </span>
                   </td>
-                  
                   <td className="p-5 text-center">
                     <span className="text-sm text-slate-600 border border-slate-200 px-3 py-1 rounded-md">
                       {unit}
                     </span>
                   </td>
-                  
                   <td className="p-5 text-right text-sm text-slate-500">
                     {priceRMB ? `¥${Number(priceRMB).toFixed(2)}` : '-'}
                   </td>
-                  
                   <td className="p-5 text-right text-base text-blue-700">
                     ${formatMoney(priceSG)}
                   </td>
-                  
                   <td className="p-5 text-center">
                     <span
                       className={`text-xs px-3 py-1.5 rounded-md ${
@@ -348,7 +345,6 @@ export function InventoryModule({ sys }) {
                       {stock} {unit}
                     </span>
                   </td>
-                  
                   <td className="p-5 pr-8 text-right">
                     <button 
                       onClick={() => openEditModal(item)}
@@ -357,7 +353,6 @@ export function InventoryModule({ sys }) {
                       <Edit size={18} />
                     </button>
                   </td>
-                  
                 </tr>
               );
             })}
@@ -373,6 +368,7 @@ export function InventoryModule({ sys }) {
         </table>
       </div>
 
+      {/* Render the Modal */}
       {isModalOpen && (
         <InventoryFormModal 
           item={editingItem} 
@@ -384,4 +380,23 @@ export function InventoryModule({ sys }) {
           onDelete={handleDeleteProduct}
         />
       )}
+
+      {/* THE TOAST NOTIFICATION */}
+      {notification && (
+        <div 
+          className={`fixed bottom-8 left-1/2 -translate-x-1/2 px-6 py-3 rounded-xl shadow-2xl flex items-center z-[6000] text-white font-medium transition-all duration-300 ${
+            notification.type === 'error' ? 'bg-slate-800' : 'bg-emerald-600'
+          }`}
+        >
+          {notification.type === 'error' ? (
+            <Trash2 size={18} className="mr-3" />
+          ) : (
+            <CheckCircle size={18} className="mr-3" />
+          )}
+          {notification.message}
+        </div>
+      )}
+
     </div>
+  );
+}
