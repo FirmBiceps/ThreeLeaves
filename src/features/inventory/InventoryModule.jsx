@@ -1,202 +1,153 @@
 import { useState } from 'react';
-import { DollarSign, Edit } from 'lucide-react';
-import { EntityModal } from '../../components/shared/EntityModal';
+import { Search, Plus, Edit, Package } from 'lucide-react';
 import { formatMoney } from '../../utils/format';
 
-function InventoryEditModal({ item, onClose, onSave }) {
-  const [form, setForm] = useState({ ...item });
-
-  return (
-    <EntityModal onClose={onClose} onSave={() => onSave(form)} title="Edit Product Detail">
-      <div className="space-y-4">
-        <div>
-          <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Name</label>
-          <input
-            className="mt-1 w-full rounded border p-2 font-bold"
-            onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
-            value={form.name}
-          />
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">
-              Cost ($)
-            </label>
-            <input
-              className="w-full rounded border p-2"
-              onChange={(event) =>
-                setForm((current) => ({ ...current, price: Number(event.target.value) }))
-              }
-              step="0.01"
-              type="number"
-              value={form.price}
-            />
-          </div>
-          <div>
-            <label className="text-[10px] font-black uppercase tracking-widest text-amber-600">
-              Stock Count
-            </label>
-            <input
-              className="w-full rounded border bg-amber-50 p-2"
-              onChange={(event) =>
-                setForm((current) => ({ ...current, stock: Number(event.target.value) }))
-              }
-              type="number"
-              value={form.stock}
-            />
-          </div>
-        </div>
-      </div>
-    </EntityModal>
-  );
-}
-
-function PricingModal({ item, onClose, onSave, customers }) {
-  const [customerPrices, setCustomerPrices] = useState({ ...item.customerPrices });
-  const [newCustomerId, setNewCustomerId] = useState('');
-  const [newValue, setNewValue] = useState('');
-
-  return (
-    <EntityModal
-      onClose={onClose}
-      onSave={() => onSave(customerPrices)}
-      title={`Negotiated Prices: ${item.name}`}
-    >
-      <div className="space-y-4">
-        <div className="max-h-48 space-y-1 overflow-y-auto">
-          {Object.entries(customerPrices).map(([customerId, value]) => (
-            <div
-              className="flex items-center justify-between rounded border bg-slate-50 p-2 text-[10px] font-bold"
-              key={customerId}
-            >
-              <span className="uppercase">
-                {customers.find((customer) => customer.id === customerId)?.name || 'Unknown'}
-              </span>
-              <span className="text-blue-600">${formatMoney(value)}</span>
-            </div>
-          ))}
-        </div>
-        <div className="flex space-x-1 border-t pt-4">
-          <select
-            className="flex-1 rounded border p-1 text-[10px]"
-            onChange={(event) => setNewCustomerId(event.target.value)}
-            value={newCustomerId}
-          >
-            <option value="">Customer...</option>
-            {customers.map((customer) => (
-              <option key={customer.id} value={customer.id}>
-                {customer.name}
-              </option>
-            ))}
-          </select>
-          <input
-            className="w-16 rounded border p-1 text-[10px]"
-            onChange={(event) => setNewValue(event.target.value)}
-            step="0.01"
-            type="number"
-            value={newValue}
-          />
-          <button
-            className="rounded bg-blue-600 px-2 text-white"
-            onClick={() => {
-              if (newCustomerId && newValue) {
-                setCustomerPrices({ ...customerPrices, [newCustomerId]: Number(newValue) });
-                setNewCustomerId('');
-                setNewValue('');
-              }
-            }}
-            type="button"
-          >
-            +
-          </button>
-        </div>
-      </div>
-    </EntityModal>
-  );
-}
-
 export function InventoryModule({ sys }) {
-  const [editItem, setEditItem] = useState(null);
-  const [priceItem, setPriceItem] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Bulletproof search that checks both raw database headers and mapped react names
+  const filteredInventory = sys.inventory.filter((item) => {
+    const itemName = item.name || item.Items || '';
+    const itemDesc = item.description || item.Description || '';
+    const itemCompany = item.company || item.Company || '';
+    
+    const searchLower = searchTerm.toLowerCase();
+    return (
+      itemName.toLowerCase().includes(searchLower) ||
+      itemDesc.toLowerCase().includes(searchLower) ||
+      itemCompany.toLowerCase().includes(searchLower)
+    );
+  });
 
   return (
-    <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-      <table className="w-full text-left font-medium text-gray-800">
-        <thead className="border-b bg-gray-50 text-[10px] font-black uppercase text-gray-400">
-          <tr>
-            <th className="p-4">Item</th>
-            <th className="p-4">Base Cost</th>
-            <th className="p-4 text-center">Stock</th>
-            {sys.hasPerm('manage_inventory') && <th className="p-4 text-right">Actions</th>}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-100 text-sm">
-          {sys.inventory.map((item) => (
-            <tr className="hover:bg-gray-50" key={item.id}>
-              <td className="p-4 font-bold">
-                {item.name}
-                <br />
-                <small className="text-[9px] uppercase tracking-widest text-gray-400">{item.unit}</small>
-              </td>
-              <td className="p-4 font-mono text-lg font-black tracking-tighter text-gray-700">
-                ${formatMoney(item.price)}
-              </td>
-              <td
-                className={`p-4 text-center text-xl font-black tracking-tighter ${
-                  item.stock < 20 ? 'text-red-500' : 'text-emerald-500'
-                }`}
-              >
-                {item.stock}
-              </td>
-              {sys.hasPerm('manage_inventory') && (
-                <td className="p-4 text-right">
-                  <button
-                    className="mr-3 rounded-xl p-2 text-blue-500 hover:bg-blue-100"
-                    onClick={() => setPriceItem(item)}
-                    type="button"
-                  >
-                    <DollarSign size={18} />
-                  </button>
-                  <button
-                    className="rounded-xl p-2 text-gray-400 hover:bg-gray-100"
-                    onClick={() => setEditItem(item)}
-                    type="button"
-                  >
-                    <Edit size={18} />
-                  </button>
-                </td>
-              )}
+    <div className="p-8 h-full overflow-y-auto">
+      
+      {/* HEADER & ADD BUTTON */}
+      <div className="flex justify-between items-center mb-8">
+        <div>
+          <h1 className="text-2xl font-black text-slate-900 flex items-center">
+            <Package className="mr-3 text-blue-600" size={28} />
+            Inventory Catalog
+          </h1>
+          <p className="text-sm font-bold text-slate-400 mt-1">
+            Manage your products, suppliers, and pricing tiers.
+          </p>
+        </div>
+        <button className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold flex items-center shadow-lg hover:bg-blue-700 transition-all active:scale-95">
+          <Plus size={18} className="mr-2" /> Add Product
+        </button>
+      </div>
+
+      {/* SEARCH & TABLE SECTION */}
+      <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+        
+        {/* Search Bar */}
+        <div className="p-4 border-b border-slate-100 flex items-center bg-slate-50">
+          <Search className="text-slate-400 mr-3" size={20} />
+          <input
+            type="text"
+            placeholder="Search by product name, description, or supplier..."
+            className="w-full bg-transparent border-none focus:ring-0 text-sm font-bold placeholder:text-slate-300"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+
+        {/* Data Table */}
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="bg-white border-b border-slate-200 text-[10px] uppercase tracking-widest text-slate-400 font-black">
+              <th className="p-4 pl-6">Product / Packaging</th>
+              <th className="p-4">Supplier / Brand</th>
+              <th className="p-4 text-center">Unit</th>
+              <th className="p-4 text-right">Cost (RMB)</th>
+              <th className="p-4 text-right">Price (SG)</th>
+              <th className="p-4 text-center">Stock</th>
+              <th className="p-4 pr-6 text-right">Edit</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {filteredInventory.map((item, idx) => {
+              // Extract the right values whether they use the old or new keys
+              const name = item.name || item.Items || 'Unknown Product';
+              const description = item.description || item.Description || item.Packaging || '';
+              const company = item.company || item.Company || '-';
+              const unit = item.unit || item.Unit || '-';
+              const priceRMB = item.costPrice || item['Unit Price (RMB)'];
+              const priceSG = item.unitPrice || item['Unit Price (SG)'] || 0;
+              const stock = item.stock ?? 999; // Default to 999 if not tracked yet
 
-      {editItem && (
-        <InventoryEditModal
-          item={editItem}
-          onClose={() => setEditItem(null)}
-          onSave={(form) => {
-            sys.setInventory(sys.inventory.map((entry) => (entry.id === form.id ? form : entry)));
-            setEditItem(null);
-          }}
-        />
-      )}
-
-      {priceItem && (
-        <PricingModal
-          customers={sys.customers}
-          item={priceItem}
-          onClose={() => setPriceItem(null)}
-          onSave={(customerPrices) => {
-            sys.setInventory(
-              sys.inventory.map((entry) =>
-                entry.id === priceItem.id ? { ...priceItem, customerPrices } : entry,
-              ),
-            );
-            setPriceItem(null);
-          }}
-        />
-      )}
+              return (
+                <tr key={item.id || idx} className="hover:bg-slate-50 transition-colors">
+                  
+                  {/* Product Name & Description */}
+                  <td className="p-4 pl-6">
+                    <p className="font-black text-slate-900 text-sm">{name}</p>
+                    {description && (
+                      <p className="text-xs font-bold text-slate-400 mt-0.5 max-w-[250px] truncate">
+                        {description}
+                      </p>
+                    )}
+                  </td>
+                  
+                  {/* Supplier/Company */}
+                  <td className="p-4">
+                    <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-lg">
+                      {company}
+                    </span>
+                  </td>
+                  
+                  {/* Unit */}
+                  <td className="p-4 text-center">
+                    <span className="text-xs font-bold text-slate-500 border border-slate-200 px-2 py-1 rounded-md">
+                      {unit}
+                    </span>
+                  </td>
+                  
+                  {/* Cost Price RMB */}
+                  <td className="p-4 text-right font-mono font-bold text-slate-500 text-xs">
+                    {priceRMB ? `¥${Number(priceRMB).toFixed(2)}` : '-'}
+                  </td>
+                  
+                  {/* Selling Price SG */}
+                  <td className="p-4 text-right font-mono font-black text-blue-600 text-sm">
+                    ${formatMoney(priceSG)}
+                  </td>
+                  
+                  {/* Stock Status Badge */}
+                  <td className="p-4 text-center">
+                    <span
+                      className={`text-[10px] font-black px-2.5 py-1 rounded-md ${
+                        stock > 10
+                          ? 'bg-emerald-50 text-emerald-600'
+                          : 'bg-red-50 text-red-600'
+                      }`}
+                    >
+                      {stock} {unit}
+                    </span>
+                  </td>
+                  
+                  {/* Actions */}
+                  <td className="p-4 pr-6 text-right">
+                    <button className="text-slate-400 hover:text-blue-600 p-1.5 transition-colors inline-block">
+                      <Edit size={16} />
+                    </button>
+                  </td>
+                  
+                </tr>
+              );
+            })}
+            
+            {filteredInventory.length === 0 && (
+              <tr>
+                <td colSpan="7" className="p-12 text-center text-slate-400 font-bold">
+                  No products match your search.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
