@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import {
   Eye,
   FileText,
@@ -9,15 +9,105 @@ import {
   Trash2,
   Wand2,
   X,
+  Search, // <-- Added Search icon for our new dropdown
 } from 'lucide-react';
 import { CompanyHeader } from '../../components/shared/CompanyHeader';
 import { UNIT_OPTIONS } from '../../data/company';
 import { formatMoney } from '../../utils/format';
 
 // 1. IMPORT YOUR LOGO DIRECTLY HERE
-// (Make sure three_leaves_logo.png is sitting in the exact same folder as this file!)
 import logo from './three_leaves_logo.png';
 
+// ==========================================
+// NEW COMPONENT: SEARCHABLE PRODUCT DROPDOWN
+// ==========================================
+function ProductSearchSelect({ value, inventory, onChange }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const dropdownRef = useRef(null);
+
+  // Close the dropdown if the user clicks anywhere outside of it
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Find the currently selected product to display its name
+  const selectedProduct = inventory.find((entry) => entry.id === value);
+  const displayName = selectedProduct ? (selectedProduct.name || selectedProduct.Items) : '';
+
+  // Filter the inventory based on what the user types
+  const filteredInventory = inventory.filter((item) => {
+    const itemName = (item.name || item.Items || '').toLowerCase();
+    return itemName.includes(searchTerm.toLowerCase());
+  });
+
+  return (
+    <div className="relative w-full text-left" ref={dropdownRef}>
+      {!isOpen ? (
+        <button
+          type="button"
+          onClick={() => {
+            setIsOpen(true);
+            setSearchTerm(''); // Reset search when opened
+          }}
+          className={`w-full text-left text-xs font-bold p-1 border border-transparent rounded hover:bg-slate-200 transition-colors focus:outline-none ${
+            displayName ? 'text-slate-900' : 'text-slate-400'
+          }`}
+        >
+          {displayName || '- Search Product -'}
+        </button>
+      ) : (
+        <div className="absolute z-[5000] top-0 left-0 w-72 bg-white border border-blue-200 rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+          <div className="flex items-center p-2 border-b border-slate-100 bg-slate-50">
+            <Search size={14} className="text-slate-400 ml-1 mr-2 shrink-0" />
+            <input
+              autoFocus
+              type="text"
+              className="w-full bg-transparent border-none text-xs font-bold text-slate-800 p-1 focus:ring-0 placeholder:text-slate-400 outline-none"
+              placeholder="Type to search..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <div className="max-h-52 overflow-y-auto">
+            {filteredInventory.length > 0 ? (
+              filteredInventory.map((item) => {
+                const itemName = item.name || item.Items || 'Unnamed Product';
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 border-b border-slate-50 last:border-0 transition-colors"
+                    onClick={() => {
+                      onChange(item.id);
+                      setIsOpen(false);
+                    }}
+                  >
+                    {itemName}
+                  </button>
+                );
+              })
+            ) : (
+              <div className="p-3 text-center text-xs text-slate-400 font-medium">
+                No products found.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ==========================================
+// INVOICE PREVIEW COMPONENT
+// ==========================================
 function InvoicePreview({
   customer,
   gst,
@@ -36,7 +126,6 @@ function InvoicePreview({
       <div className="flex min-h-full justify-center py-24 print:py-0">
         <div className="relative flex min-h-[297mm] w-full max-w-[210mm] flex-col bg-white p-12 shadow-2xl print:w-full print:p-0 print:shadow-none">
           
-          {/* Action Bar (Hidden when printing) */}
           <div className="absolute -top-16 left-0 right-0 flex items-center justify-between px-4 print:hidden">
             <button
               className="flex items-center rounded-xl bg-slate-800 px-6 py-2.5 font-bold text-white transition-all hover:bg-slate-700"
@@ -66,14 +155,11 @@ function InvoicePreview({
           {/* --- PRINTABLE TEMPLATE --- */}
           <div id="printable-invoice" className="bg-white text-black font-sans w-full h-full flex flex-col pt-0">
             
-            {/* HEADER ROW */}
             <div className="flex justify-between items-start mb-6">
-              {/* Left: Logo */}
               <div className="w-1/4">
                 <img src={logo} alt="Three Leaves Logo" className="w-32 h-auto" />
               </div>
 
-              {/* Center: Company Details */}
               <div className="w-2/4 text-center text-[11px] leading-tight pt-2">
                 <h1 className="font-bold text-lg mb-1">THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
                 <h2 className="font-bold text-base mb-1">三叶（新加坡） 贸易公司</h2>
@@ -82,7 +168,6 @@ function InvoicePreview({
                 <p className="font-bold">HP: 97578869 (Mr Ye) &nbsp; HP: 91113505 (Min) &nbsp; Email: 3leaves.sg@gmail.com</p>
               </div>
 
-              {/* Right: Invoice Number & Date */}
               <div className="w-1/4 flex flex-col items-end pt-2">
                 <div className="w-full text-right">
                   <h2 className="text-xl font-bold tracking-widest uppercase">INVOICE</h2>
@@ -102,7 +187,6 @@ function InvoicePreview({
               </div>
             </div>
 
-            {/* CUSTOMER INFO ROW */}
             <div className="mb-4 text-sm font-bold flex flex-col gap-1">
               <div className="flex">
                 <span className="w-20">TO:</span>
@@ -114,7 +198,6 @@ function InvoicePreview({
               </div>
             </div>
 
-            {/* ITEM TABLE */}
             <table className="w-full text-sm border-2 border-black text-center mb-0">
               <thead className="border-b-2 border-black">
                 <tr className="font-bold bg-white">
@@ -127,7 +210,6 @@ function InvoicePreview({
               </thead>
               <tbody>
                 {items.map((item, idx) => {
-                  // Find the true product name whether it is stored as 'name' or 'Items'
                   const foundProduct = sys.inventory.find((entry) => entry.id === item.itemId);
                   const productName = foundProduct ? (foundProduct.name || foundProduct.Items) : '-';
 
@@ -143,7 +225,6 @@ function InvoicePreview({
                     </tr>
                   );
                 })}
-                {/* Dynamically add blank rows */}
                 {items.length < 15 && Array.from({ length: 15 - items.length }).map((_, i) => (
                   <tr key={`blank-${i}`} className="h-7">
                     <td className="p-1"></td>
@@ -156,7 +237,6 @@ function InvoicePreview({
               </tbody>
             </table>
 
-            {/* TOTALS BOX */}
             <div className="flex justify-end mt-0">
               <table className="w-64 text-sm border-2 border-t-0 border-black text-right bg-white">
                 <tbody>
@@ -176,7 +256,6 @@ function InvoicePreview({
               </table>
             </div>
 
-            {/* FOOTER NOTES */}
             <div className="mt-8 text-[11px] font-bold flex flex-col gap-1 mt-auto pb-4">
               <p>请提前一天提交订单，同日送达的截止时间为下午12点前。每周日休息</p>
               <p>Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays</p>
@@ -185,14 +264,15 @@ function InvoicePreview({
             </div>
 
           </div>
-          {/* --- END PRINTABLE TEMPLATE --- */}
-
         </div>
       </div>
     </div>
   );
 }
 
+// ==========================================
+// MAIN INVOICE GENERATOR COMPONENT
+// ==========================================
 export function InvoiceGenerator({ sys, onClose }) {
   const lastNumber = sys.invoices.length > 0 ? Number(sys.invoices[sys.invoices.length - 1].number) : 2604300;
   const [customerId, setCustomerId] = useState('');
@@ -211,7 +291,6 @@ export function InvoiceGenerator({ sys, onClose }) {
   const gst = subtotal * 0.09;
   const total = subtotal + gst;
 
-  // Safely get a price from the system, or fallback to the new DB keys
   const getSafePrice = (product) => {
     let price = sys.getApplicablePrice ? sys.getApplicablePrice(product.id, customerId) : null;
     if (price === null || price === undefined || isNaN(price)) {
@@ -505,26 +584,29 @@ export function InvoiceGenerator({ sys, onClose }) {
               </div>
             )}
 
-            <table className="w-full text-left">
+            <table className="w-full text-left relative z-10">
               <thead className="border-y-2 border-slate-900 bg-slate-50">
                 <tr className="text-[10px] font-black uppercase tracking-widest text-gray-500">
                   <th className="w-12 p-4 text-center">No.</th>
-                  <th className="p-4">Description</th>
+                  <th className="p-4 w-72">Description</th>
                   <th className="w-24 p-4 text-center">Unit</th>
                   <th className="w-20 p-4 text-center">Qty</th>
                   <th className="w-28 p-4 text-right">Cost</th>
                   <th className="w-28 p-4 text-right">Total</th>
+                  <th className="w-8 p-4"></th>
                 </tr>
               </thead>
               <tbody>
                 {items.map((item, index) => (
                   <tr className="border-b border-gray-50 font-bold" key={`${item.itemId}-${index}`}>
                     <td className="p-4 text-center font-mono text-xs text-slate-300">{index + 1}</td>
-                    <td className="p-2">
+                    
+                    {/* THE NEW SEARCHABLE DROPDOWN */}
+                    <td className="p-2 relative">
                       <div className="flex items-center space-x-2">
                         <input
                           checked={item.picked || false}
-                          className="h-4 w-4 cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          className="h-4 w-4 cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500 shrink-0"
                           onChange={(event) => {
                             const nextItems = [...items];
                             nextItems[index].picked = event.target.checked;
@@ -532,39 +614,30 @@ export function InvoiceGenerator({ sys, onClose }) {
                           }}
                           type="checkbox"
                         />
-                        <select
-                          className="w-full border-none text-xs font-bold"
-                          onChange={(event) => {
-                            const product = sys.inventory.find((entry) => entry.id === event.target.value);
+                        <ProductSearchSelect
+                          value={item.itemId}
+                          inventory={sys.inventory}
+                          onChange={(selectedId) => {
+                            const product = sys.inventory.find((entry) => entry.id === selectedId);
                             if (!product) return;
                             
                             const nextItems = [...items];
                             nextItems[index] = {
                               ...nextItems[index],
-                              itemId: event.target.value,
+                              itemId: selectedId,
                               name: product.name || product.Items,
                               unit: product.unit || product.Unit || '箱',
                               unitPrice: getSafePrice(product),
                             };
                             setItems(nextItems);
                           }}
-                          value={item.itemId}
-                        >
-                          <option value="">- Product -</option>
-                          {sys.inventory.map((entry) => {
-                            const displayName = entry.name || entry.Items || 'Unnamed Product';
-                            return (
-                              <option key={entry.id} value={entry.id}>
-                                {displayName}
-                              </option>
-                            );
-                          })}
-                        </select>
+                        />
                       </div>
                     </td>
+
                     <td className="p-2">
                       <select
-                        className="w-full border-none text-center text-xs font-bold"
+                        className="w-full border-none text-center text-xs font-bold focus:ring-0"
                         onChange={(event) => {
                           const nextItems = [...items];
                           nextItems[index].unit = event.target.value;
@@ -607,7 +680,7 @@ export function InvoiceGenerator({ sys, onClose }) {
                     <td className="p-4 text-right font-mono text-lg font-black tracking-tighter text-slate-900">
                       ${formatMoney((Number(item.qty) || 0) * (Number(item.unitPrice) || 0))}
                     </td>
-                    <td className="w-0 p-0">
+                    <td className="w-8 p-0">
                       <button
                         className="ml-2 text-red-200 hover:text-red-500"
                         onClick={() => setItems(items.filter((_, itemIndex) => itemIndex !== index))}
