@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Search, Plus, Edit, Package, X, Trash2, Save, CheckCircle } from 'lucide-react';
 import { formatMoney } from '../../utils/format';
+import { supabase } from '../../utils/supabase';
 
 // ==========================================
 // COMPONENT 1: INVENTORY ADD/EDIT MODAL
@@ -190,54 +191,105 @@ export function InventoryModule({ sys }) {
     );
   });
 
+  // Handle Save (Active Cloud Sync)
   const handleSaveProduct = async (formData) => {
     try {
       const isEditing = !!editingItem;
+      
+      // 1. Check if the prices actually changed for our Ledger!
+      const oldCostRMB = isEditing ? (editingItem.costPrice || editingItem['Unit Price (RMB)']) : 0;
+      const oldPriceSG = isEditing ? (editingItem.unitPrice || editingItem['Unit Price (SG)']) : 0;
+      
+      const costChanged = isEditing && Number(oldCostRMB) !== Number(formData.costPrice);
+      const priceChanged = isEditing && Number(oldPriceSG) !== Number(formData.unitPrice);
+
+      // 2. Update local UI instantly
       let updatedInventory;
+      let finalId = formData.id;
 
       if (isEditing) {
         updatedInventory = sys.inventory.map(item => {
           const matchById = item.id && item.id === formData.id;
           const matchByName = !item.id && (item.name === formData.name || item.Items === formData.name);
-          
           if (matchById || matchByName) {
-            return { ...item, ...formData, id: item.id || formData.id };
+            finalId = item.id || formData.id; 
+            return { ...item, ...formData, id: finalId };
           }
           return item;
         });
       } else {
         updatedInventory = [{ ...formData }, ...sys.inventory];
       }
-
       sys.setInventory(updatedInventory);
 
-      // Trigger the success notification!
-      showNotification(isEditing ? 'Product successfully updated!' : 'New product added to catalog!');
+      // 3. --- PERMANENT SUPABASE SYNC ---
+      const { data: savedProduct, error: saveError } = await supabase
+        .from('product_list')
+        .upsert({
+          id: isEditing ? finalId : undefined, // If new, Supabase generates the UUID
+          Items: formData.name,
+          Description: formData.description,
+          Company: formData.company,
+          Unit: formData.unit,
+          'Unit Price (RMB)': formData.costPrice,
+          'Unit Price (SG)': formData.unitPrice,
+        })
+        .select()
+        .single();
 
+      if (saveError) throw saveError;
+
+      // 4. Log the Price History Ledger if margins changed
+      if (costChanged || priceChanged) {
+        await supabase.from('price_history').insert({
+          product_id: savedProduct.id,
+          product_name: formData.name,
+          old_cost_rmb: oldCostRMB,
+          new_cost_rmb: formData.costPrice,
+          old_price_sg: oldPriceSG,
+          new_price_sg: formData.unitPrice
+        });
+      }
+
+      showNotification(isEditing ? 'Product successfully updated!' : 'New product added to catalog!');
       setIsModalOpen(false);
       setEditingItem(null);
 
     } catch (error) {
       console.error("Save error: ", error);
-      showNotification('Error saving product.', 'error');
+      showNotification('Error saving product to database.', 'error');
     }
   };
 
-  const handleDeleteProduct = (itemToRemove) => {
+  // Handle Delete (Active Cloud Sync)
+  const handleDeleteProduct = async (itemToRemove) => {
     if (window.confirm(`Are you sure you want to delete ${itemToRemove.name || itemToRemove.Items}?`)) {
-      
-      const updatedInventory = sys.inventory.filter(item => {
-        if (itemToRemove.id && item.id) return item.id !== itemToRemove.id;
-        return (item.name || item.Items) !== (itemToRemove.name || itemToRemove.Items);
-      });
-      
-      sys.setInventory(updatedInventory);
-      
-      // Trigger the delete notification!
-      showNotification('Product removed from catalog.', 'error');
-      
-      setIsModalOpen(false);
-      setEditingItem(null);
+      try {
+        // 1. Update local UI instantly
+        const updatedInventory = sys.inventory.filter(item => {
+          if (itemToRemove.id && item.id) return item.id !== itemToRemove.id;
+          return (item.name || item.Items) !== (itemToRemove.name || itemToRemove.Items);
+        });
+        sys.setInventory(updatedInventory);
+        
+        // 2. Delete permanently from Cloud
+        if (itemToRemove.id) {
+          const { error } = await supabase
+            .from('product_list')
+            .delete()
+            .eq('id', itemToRemove.id);
+            
+          if (error) throw error;
+        }
+        
+        showNotification('Product removed from catalog.', 'error');
+        setIsModalOpen(false);
+        setEditingItem(null);
+        
+      } catch (error) {
+        console.error("Delete error: ", error);
+        showNotification('Error deleting product.', 'error');
+      }
     }
   };
 
