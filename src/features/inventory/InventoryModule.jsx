@@ -229,7 +229,6 @@ export function InventoryModule({ sys }) {
         new_price_sg: formData.unitPrice
       });
     }
-    */
 
     setIsModalOpen(false);
     setEditingItem(null);
