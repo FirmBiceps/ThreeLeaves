@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Search, Plus, Edit, Package, X, Trash2, Save, CheckCircle } from 'lucide-react';
 import { formatMoney } from '../../utils/format';
-import { supabase } from '../../utils/supabase';
+import { supabase } from '../../lib/supabaseClient';
 
 // ==========================================
 // COMPONENT 1: INVENTORY ADD/EDIT MODAL
