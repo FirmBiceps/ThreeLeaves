@@ -18,7 +18,6 @@ import { formatMoney } from '../../utils/format';
 // (Make sure three_leaves_logo.png is sitting in the exact same folder as this file!)
 import logo from './three_leaves_logo.png';
 
-
 function InvoicePreview({
   customer,
   gst,
@@ -115,7 +114,7 @@ function InvoicePreview({
               </div>
             </div>
 
-            {/* ITEM TABLE (REMOVED INNER GRID LINES) */}
+            {/* ITEM TABLE */}
             <table className="w-full text-sm border-2 border-black text-center mb-0">
               <thead className="border-b-2 border-black">
                 <tr className="font-bold bg-white">
@@ -127,20 +126,24 @@ function InvoicePreview({
                 </tr>
               </thead>
               <tbody>
-                {items.map((item, idx) => (
-                  <tr key={idx} className="h-7">
-                    <td className="p-1">{idx + 1}</td>
-                    <td className="p-1 text-left">
-                      {sys.inventory.find((entry) => entry.id === item.itemId)?.name || '-'}
-                    </td>
-                    <td className="p-1">{item.qty} {item.unit}</td>
-                    <td className="p-1 text-right">${formatMoney(item.unitPrice)}</td>
-                    <td className="p-1 text-right pr-2">
-                      ${formatMoney((Number(item.qty) || 0) * (Number(item.unitPrice) || 0))}
-                    </td>
-                  </tr>
-                ))}
-                {/* Dynamically add blank rows to pad out the space (minimum 15 rows) */}
+                {items.map((item, idx) => {
+                  // Find the true product name whether it is stored as 'name' or 'Items'
+                  const foundProduct = sys.inventory.find((entry) => entry.id === item.itemId);
+                  const productName = foundProduct ? (foundProduct.name || foundProduct.Items) : '-';
+
+                  return (
+                    <tr key={idx} className="h-7">
+                      <td className="p-1">{idx + 1}</td>
+                      <td className="p-1 text-left">{productName}</td>
+                      <td className="p-1">{item.qty} {item.unit}</td>
+                      <td className="p-1 text-right">${formatMoney(item.unitPrice)}</td>
+                      <td className="p-1 text-right pr-2">
+                        ${formatMoney((Number(item.qty) || 0) * (Number(item.unitPrice) || 0))}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {/* Dynamically add blank rows */}
                 {items.length < 15 && Array.from({ length: 15 - items.length }).map((_, i) => (
                   <tr key={`blank-${i}`} className="h-7">
                     <td className="p-1"></td>
@@ -208,6 +211,15 @@ export function InvoiceGenerator({ sys, onClose }) {
   const gst = subtotal * 0.09;
   const total = subtotal + gst;
 
+  // Safely get a price from the system, or fallback to the new DB keys
+  const getSafePrice = (product) => {
+    let price = sys.getApplicablePrice ? sys.getApplicablePrice(product.id, customerId) : null;
+    if (price === null || price === undefined || isNaN(price)) {
+      price = product.unitPrice || product['Unit Price (SG)'] || 0;
+    }
+    return price;
+  };
+
   useEffect(() => {
     if (!customerId) {
       setItems([]);
@@ -240,10 +252,10 @@ export function InvoiceGenerator({ sys, onClose }) {
         if (product) {
           autoFilled.push({
             itemId,
-            name: product.name,
-            unit: stats.unit || product.unit,
+            name: product.name || product.Items,
+            unit: stats.unit || product.unit || product.Unit || '箱',
             qty: Math.max(1, Math.round(stats.totalQty / stats.count)),
-            unitPrice: sys.getApplicablePrice(itemId, customerId),
+            unitPrice: getSafePrice(product),
             picked: false,
           });
         }
@@ -261,13 +273,9 @@ export function InvoiceGenerator({ sys, onClose }) {
   }, [customerId, sys.invoices, sys.inventory]);
 
   const suggestions = useMemo(() => {
-    if (!customerId) {
-      return [];
-    }
+    if (!customerId) return [];
     const history = sys.invoices.filter((invoice) => invoice.customerId === customerId);
-    if (history.length === 0) {
-      return [];
-    }
+    if (history.length === 0) return [];
 
     const counts = {};
     history.forEach((invoice) => {
@@ -292,17 +300,19 @@ export function InvoiceGenerator({ sys, onClose }) {
     lines.forEach((line) => {
       const quantityMatch = line.match(/(\d+)/);
       const qty = quantityMatch ? parseInt(quantityMatch[0], 10) : 1;
-      const foundItem = sys.inventory.find((inventoryItem) =>
-        line.toLowerCase().includes(inventoryItem.name.toLowerCase()),
-      );
+      
+      const foundItem = sys.inventory.find((inventoryItem) => {
+        const itemName = inventoryItem.name || inventoryItem.Items || '';
+        return line.toLowerCase().includes(itemName.toLowerCase());
+      });
 
       if (foundItem) {
         nextDraftItems.push({
           itemId: foundItem.id,
-          name: foundItem.name,
-          unit: foundItem.unit,
+          name: foundItem.name || foundItem.Items,
+          unit: foundItem.unit || foundItem.Unit || '箱',
           qty,
-          unitPrice: sys.getApplicablePrice(foundItem.id, customerId),
+          unitPrice: getSafePrice(foundItem),
           picked: false,
         });
       }
@@ -478,17 +488,17 @@ export function InvoiceGenerator({ sys, onClose }) {
                           ...items,
                           {
                             itemId: item.id,
-                            name: item.name,
-                            unit: item.unit,
+                            name: item.name || item.Items,
+                            unit: item.unit || item.Unit || '箱',
                             qty: 1,
-                            unitPrice: sys.getApplicablePrice(item.id, customerId),
+                            unitPrice: getSafePrice(item),
                             picked: false,
                           },
                         ])
                       }
                       type="button"
                     >
-                      + {item.name}
+                      + {item.name || item.Items}
                     </button>
                   ))}
                 </div>
@@ -526,27 +536,29 @@ export function InvoiceGenerator({ sys, onClose }) {
                           className="w-full border-none text-xs font-bold"
                           onChange={(event) => {
                             const product = sys.inventory.find((entry) => entry.id === event.target.value);
-                            if (!product) {
-                              return;
-                            }
+                            if (!product) return;
+                            
                             const nextItems = [...items];
                             nextItems[index] = {
                               ...nextItems[index],
                               itemId: event.target.value,
-                              name: product.name,
-                              unit: product.unit,
-                              unitPrice: sys.getApplicablePrice(event.target.value, customerId),
+                              name: product.name || product.Items,
+                              unit: product.unit || product.Unit || '箱',
+                              unitPrice: getSafePrice(product),
                             };
                             setItems(nextItems);
                           }}
                           value={item.itemId}
                         >
                           <option value="">- Product -</option>
-                          {sys.inventory.map((entry) => (
-                            <option key={entry.id} value={entry.id}>
-                              {entry.name}
-                            </option>
-                          ))}
+                          {sys.inventory.map((entry) => {
+                            const displayName = entry.name || entry.Items || 'Unnamed Product';
+                            return (
+                              <option key={entry.id} value={entry.id}>
+                                {displayName}
+                              </option>
+                            );
+                          })}
                         </select>
                       </div>
                     </td>
