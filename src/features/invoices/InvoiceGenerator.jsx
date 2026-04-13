@@ -149,7 +149,6 @@ function InvoicePreview({
             </div>
           </div>
 
-          {/* ADDED FONT-FAMILY STYLING HERE TO PREVENT CHINESE CHARACTERS FROM DISAPPEARING IN PRINT */}
           <div 
             id="printable-invoice" 
             className="bg-white text-black font-sans w-full h-full flex flex-col pt-0"
@@ -174,20 +173,21 @@ function InvoicePreview({
                   <h2 className="text-[18px] font-bold tracking-[0.2em] leading-none mb-0.5">發票</h2>
                   <h3 className="text-[14px] font-bold tracking-widest uppercase">TAX INVOICE</h3>
                 </div>
-                <div className="w-full text-[13px] text-left mt-2 px-2">
-                  <div className="flex justify-between mb-1">
-                    <span className="font-bold">No.</span>
+                
+                {/* REDUCED WHITE SPACING: Tight Flex Box, 16px Fonts */}
+                <div className="w-full text-[16px] text-left mt-1 pl-4 flex flex-col leading-tight gap-1">
+                  <div className="flex items-center">
+                    <span className="font-bold w-14 shrink-0">No.</span>
                     <span className="text-red-600 font-bold tracking-wider">{invoiceNumber}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="font-bold">Term:</span>
+                  <div className="flex items-center">
+                    <span className="font-bold w-14 shrink-0">Term:</span>
                     <span className="font-bold">{paymentTerms === 'cod' ? 'COD' : '30 Days'}</span>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* INCREASED FONT SIZES TO 15px (+30%) */}
             <div className="mb-4 text-[15px] font-bold flex flex-col w-full">
               <div className="flex justify-between w-full mb-2">
                 <div className="flex items-end w-[65%] pr-4">
@@ -213,7 +213,7 @@ function InvoicePreview({
               </div>
             </div>
 
-            {/* INCREASED FONT SIZES FOR TABLE TO 15px AND CENTRALIZED PRICE/AMOUNT */}
+            {/* TABLE */}
             <table className="w-full text-[15px] border-2 border-black text-center mb-0 leading-tight flex-grow">
               <thead className="border-b-2 border-black">
                 <tr className="font-bold bg-white text-[14px]">
@@ -241,7 +241,6 @@ function InvoicePreview({
                     </tr>
                   );
                 })}
-                {/* Reduced blank rows to 15 to compensate for larger font heights fitting on one A4 page */}
                 {items.length < 15 && Array.from({ length: 15 - items.length }).map((_, i) => (
                   <tr key={`blank-${i}`} className="h-[32px]">
                     <td className="border-r border-black"></td>
@@ -254,8 +253,10 @@ function InvoicePreview({
               </tbody>
             </table>
 
-            <div className="flex w-full mt-4">
-              <div className="w-[70%] pr-4 text-[12px] font-bold leading-snug flex flex-col justify-between">
+            {/* FLUSHED ALIGNED TOTALS & UNBOXED FOOTER */}
+            <div className="flex w-full mt-2">
+              {/* Left Side: Notes */}
+              <div className="flex-1 pr-4 text-[12px] font-bold leading-snug flex flex-col justify-between">
                 <div>
                   <p>请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
                   <p>Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
@@ -267,23 +268,24 @@ function InvoicePreview({
                   </div>
                   <p className="mt-4 font-normal">All payments mode have to be made payable to Three Leaves (Singapore) Trading Enterprise.</p>
                 </div>
-                <div className="mt-8 mb-2">
+                <div className="mt-6 mb-1">
                   <div className="w-48 border-t border-black text-center pt-1 text-[12px]">Received By</div>
                 </div>
               </div>
 
-              <div className="w-[30%] flex flex-col font-bold text-[14px] pt-2">
-                <div className="flex justify-between p-1">
-                  <span className="pl-1">SUBTOTAL</span>
-                  <span className="pr-1">${formatMoney(subtotal)}</span>
+              {/* Right Side: Totals aligned perfectly with Unit Price (w-32) & Amount (w-32) */}
+              <div className="flex flex-col font-bold text-[15px] shrink-0 w-[16rem]">
+                <div className="flex">
+                  <div className="w-32 p-1 text-center">SUBTOTAL</div>
+                  <div className="w-32 p-1 text-center">${formatMoney(subtotal)}</div>
                 </div>
-                <div className="flex justify-between p-1">
-                  <span className="pl-1">9% GST</span>
-                  <span className="pr-1">${formatMoney(gst)}</span>
+                <div className="flex">
+                  <div className="w-32 p-1 text-center">9% GST</div>
+                  <div className="w-32 p-1 text-center">${formatMoney(gst)}</div>
                 </div>
-                <div className="flex justify-between p-1 mt-4 text-[16px]">
-                  <span className="pl-1">TOTAL</span>
-                  <span className="pr-1">${formatMoney(total)}</span>
+                <div className="flex mt-2 pt-2 border-t-2 border-black text-[17px]">
+                  <div className="w-32 p-1 text-center">TOTAL</div>
+                  <div className="w-32 p-1 text-center">${formatMoney(total)}</div>
                 </div>
               </div>
             </div>
