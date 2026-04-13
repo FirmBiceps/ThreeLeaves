@@ -10,11 +10,13 @@ import {
   Wand2,
   X,
   Search,
+  BrainCircuit,
 } from 'lucide-react';
 import { CompanyHeader } from '../../components/shared/CompanyHeader';
 import { UNIT_OPTIONS } from '../../data/company';
 import { formatMoney } from '../../utils/format';
 
+// 1. IMPORT YOUR LOGO DIRECTLY HERE
 import logo from './three_leaves_logo.png';
 
 // ==========================================
@@ -119,6 +121,18 @@ function InvoicePreview({
 }) {
   return (
     <div className="fixed inset-0 z-[3000] overflow-y-auto bg-slate-950/90 print:bg-white print:p-0">
+      
+      {/* HARD-INJECTED PRINT STYLES TO FORCE BROWSER TO RENDER CHINESE CHARACTERS */}
+      <style type="text/css">
+        {`
+          @media print {
+            * {
+              font-family: Arial, "Helvetica Neue", Helvetica, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "SimHei", sans-serif !important;
+            }
+          }
+        `}
+      </style>
+
       <div className="flex min-h-full justify-center py-12 print:py-0">
         <div className="relative flex min-h-[297mm] w-full max-w-[210mm] flex-col bg-white p-8 shadow-2xl print:w-full print:p-0 print:shadow-none">
           
@@ -172,6 +186,7 @@ function InvoicePreview({
                   <h2 className="text-[18px] font-bold tracking-[0.2em] leading-none mb-0.5">發票</h2>
                   <h3 className="text-[14px] font-bold tracking-widest uppercase">TAX INVOICE</h3>
                 </div>
+                
                 <div className="w-full text-[16px] text-left mt-1 pl-4 flex flex-col leading-tight gap-1">
                   <div className="flex items-center">
                     <span className="font-bold w-14 shrink-0">No.</span>
@@ -330,7 +345,6 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
   
   const customer = sys.customers.find((entry) => entry.id === customerId);
 
-  // --- DUPLICATE INVOICE NUMBER CHECK ---
   const isDuplicateNumber = useMemo(() => {
     return sys.invoices.some(inv => 
       String(inv.number) === String(invoiceNumber) && 
@@ -438,28 +452,64 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
       .filter((item) => item && !items.find((draftItem) => draftItem.itemId === item.id));
   }, [customerId, items, sys.invoices, sys.inventory]);
 
+  // =====================================================================
+  // MACHINE LEARNING ENGINE (PREDICTION)
+  // =====================================================================
   const handleSmartExtract = () => {
-    const lines = parseText.split('\n');
+    const lines = parseText.split('\n').filter(l => l.trim() !== '');
     const nextDraftItems = [...items];
 
     lines.forEach((line) => {
       const quantityMatch = line.match(/(\d+)/);
       const qty = quantityMatch ? parseInt(quantityMatch[0], 10) : 1;
       
-      const foundItem = sys.inventory.find((inventoryItem) => {
-        const itemName = inventoryItem.name || inventoryItem.Items || '';
-        return line.toLowerCase().includes(itemName.toLowerCase());
+      const searchString = line.replace(/(\d+)/g, '').trim().toLowerCase();
+      if (!searchString) return;
+
+      let bestMatch = null;
+      let highestScore = 0;
+
+      sys.inventory.forEach((inventoryItem) => {
+        const itemName = (inventoryItem.name || inventoryItem.Items || '').toLowerCase();
+        let score = 0;
+
+        if (itemName.includes(searchString) || searchString.includes(itemName)) {
+          score += 10;
+        }
+
+        // ML Scoring System
+        if (inventoryItem.learned_phrases && inventoryItem.learned_phrases[searchString]) {
+          score += (inventoryItem.learned_phrases[searchString] * 20); 
+        }
+
+        if (score > highestScore) {
+          highestScore = score;
+          bestMatch = inventoryItem;
+        }
       });
 
-      if (foundItem) {
-        const determinedUnit = foundItem.unit || foundItem.Unit || '箱';
+      if (bestMatch) {
+        const determinedUnit = bestMatch.unit || bestMatch.Unit || '箱';
         nextDraftItems.push({
-          itemId: foundItem.id,
-          name: foundItem.name || foundItem.Items,
+          itemId: bestMatch.id,
+          name: bestMatch.name || bestMatch.Items,
           unit: determinedUnit,
           qty,
-          unitPrice: getSafePrice(foundItem, determinedUnit), 
+          unitPrice: getSafePrice(bestMatch, determinedUnit),
           picked: false,
+          rawSearchString: searchString, 
+          originalPredictedId: bestMatch.id, // <-- We track what the AI guessed!
+        });
+      } else {
+        nextDraftItems.push({
+          itemId: '',
+          name: '',
+          unit: '箱',
+          qty,
+          unitPrice: 0,
+          picked: false,
+          rawSearchString: searchString,
+          originalPredictedId: null, // <-- AI didn't know what it was
         });
       }
     });
@@ -469,6 +519,9 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
     setParseText('');
   };
 
+  // =====================================================================
+  // SAVE & MACHINE LEARNING TRAINING LOOP
+  // =====================================================================
   const handleRegister = (printAfter = false) => {
     const invoice = {
       id: existingInvoice ? existingInvoice.id : `INV-${invoiceNumber}`,
@@ -484,16 +537,48 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
       paymentTerms,
     };
 
-    if (!existingInvoice) {
-      const nextInventory = [...sys.inventory];
-      items.forEach((item) => {
-        const index = nextInventory.findIndex((entry) => entry.id === item.itemId);
-        if (index > -1) {
-          nextInventory[index].stock -= Number(item.qty) || 0;
+    const nextInventory = [...sys.inventory];
+
+    items.forEach((item) => {
+      // 1. Deduct Stock for new invoices
+      if (!existingInvoice && item.itemId) {
+        const stockIndex = nextInventory.findIndex((entry) => entry.id === item.itemId);
+        if (stockIndex > -1) {
+          nextInventory[stockIndex].stock -= Number(item.qty) || 0;
         }
-      });
-      sys.setInventory(nextInventory);
-    }
+      }
+
+      // 2. MACHINE LEARNING REINFORCEMENT: Reward and Penalize
+      if (item.rawSearchString) {
+        
+        // A. REWARD the item you actually chose/finalized
+        if (item.itemId) {
+          const correctIndex = nextInventory.findIndex((entry) => entry.id === item.itemId);
+          if (correctIndex > -1) {
+            if (!nextInventory[correctIndex].learned_phrases) {
+              nextInventory[correctIndex].learned_phrases = {};
+            }
+            const currentScore = nextInventory[correctIndex].learned_phrases[item.rawSearchString] || 0;
+            nextInventory[correctIndex].learned_phrases[item.rawSearchString] = currentScore + 1;
+          }
+        }
+
+        // B. PENALIZE the AI's original bad guess (if you had to correct it!)
+        if (item.originalPredictedId && item.originalPredictedId !== item.itemId) {
+          const wrongIndex = nextInventory.findIndex((entry) => entry.id === item.originalPredictedId);
+          if (wrongIndex > -1) {
+            if (!nextInventory[wrongIndex].learned_phrases) {
+              nextInventory[wrongIndex].learned_phrases = {};
+            }
+            const currentScore = nextInventory[wrongIndex].learned_phrases[item.rawSearchString] || 0;
+            // Apply Negative Reinforcement (-1)
+            nextInventory[wrongIndex].learned_phrases[item.rawSearchString] = currentScore - 1;
+          }
+        }
+      }
+    });
+
+    sys.setInventory(nextInventory);
 
     if (existingInvoice) {
       sys.setInvoices(sys.invoices.map(inv => inv.id === existingInvoice.id ? invoice : inv));
@@ -562,8 +647,11 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
           {isParsing && (
             <div className="mb-8 rounded-2xl bg-blue-600 p-8 text-white shadow-2xl">
               <h3 className="mb-2 flex items-center text-lg font-black">
-                <Wand2 className="mr-3" size={24} /> Smart Order Extractor
+                <BrainCircuit className="mr-3" size={24} /> AI Order Extractor
               </h3>
+              <p className="mb-4 text-xs font-medium text-blue-200">
+                Paste your messy text below. The system will auto-predict the items and will automatically unlearn any mistakes when you correct them.
+              </p>
               <textarea
                 className="mb-4 h-32 w-full rounded border border-blue-400 bg-blue-700/50 p-4 text-sm font-medium outline-none placeholder:text-blue-300"
                 onChange={(event) => setParseText(event.target.value)}
@@ -726,6 +814,11 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                             }}
                           />
                         </div>
+                        {item.rawSearchString && (
+                          <p className="text-[9px] text-blue-400 font-medium ml-6 mt-1 flex items-center">
+                            <BrainCircuit size={10} className="mr-1" /> Predicted from: "{item.rawSearchString}"
+                          </p>
+                        )}
                       </td>
 
                       <td className="p-2 align-top pt-3">
