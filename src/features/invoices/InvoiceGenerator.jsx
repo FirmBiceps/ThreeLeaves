@@ -120,154 +120,174 @@ function InvoicePreview({
   return (
     <div className="fixed inset-0 z-[3000] overflow-y-auto bg-slate-950/90 print:bg-white print:p-0">
       <div className="flex min-h-full justify-center py-12 print:py-0">
-        <div className="relative w-full max-w-[210mm] bg-white px-6 py-6 shadow-2xl print:shadow-none print:p-4 font-sans text-black">
-
-          {/* ACTION BAR */}
-          <div className="absolute -top-16 left-0 right-0 flex justify-between print:hidden">
+        <div className="relative flex min-h-[297mm] w-full max-w-[210mm] flex-col bg-white p-8 shadow-2xl print:w-full print:p-0 print:shadow-none">
+          
+          <div className="absolute -top-16 left-0 right-0 flex items-center justify-between px-4 print:hidden">
             <button
+              className="flex items-center rounded bg-slate-800 px-6 py-2.5 font-bold text-white transition-all hover:bg-slate-700"
               onClick={onBack}
-              className="bg-slate-800 text-white px-5 py-2 rounded-xl font-bold"
+              type="button"
             >
-              Edit
+              Edit Draft
             </button>
-            <div className="flex gap-2">
+            <div className="flex space-x-3">
               <button
+                className="flex items-center rounded border border-slate-300 bg-white px-6 py-2.5 font-bold text-slate-900 shadow-lg transition-all hover:bg-slate-50"
                 onClick={() => onRegister(false)}
-                className="bg-white border px-5 py-2 rounded-xl font-bold"
+                type="button"
               >
-                Save
+                <Save className="mr-2" size={18} /> Save to History
               </button>
               <button
+                className="flex items-center rounded bg-blue-600 px-8 py-2.5 font-bold text-white shadow-xl transition-all hover:bg-blue-700"
                 onClick={() => onRegister(true)}
-                className="bg-blue-600 text-white px-6 py-2 rounded-xl font-bold"
+                type="button"
               >
-                Print
+                <Printer className="mr-2" size={18} /> Print
               </button>
             </div>
           </div>
 
-          {/* PRINT AREA */}
-          <div className="text-[11px] leading-[1.05] tracking-tight">
+          {/* --- PRINTABLE TEMPLATE --- */}
+          <div id="printable-invoice" className="bg-white text-black font-sans w-full h-full flex flex-col pt-0">
+            
+            {/* EXACT MATCH HEADER */}
+            <div className="flex justify-between items-start mb-6">
+              {/* Logo */}
+              <div className="w-[25%]">
+                <img src={logo} alt="Three Leaves Logo" className="w-[110px] h-auto object-contain" />
+              </div>
 
-            {/* HEADER */}
-            <div className="text-center mb-2">
-              <h1 className="font-bold text-[11px]">
-                THREE LEAVES (SINGAPORE) TRADING ENTERPRISE
-              </h1>
-              <p className="text-[9px] font-bold">
-                CO.REG NO.53033969B &nbsp;&nbsp; GST REG NO. M90355440L
-              </p>
-              <p className="text-[9px]">
-                280 Woodlands Industrial Park E5 #06-35 Harvest @ Singapore 757322
-              </p>
-              <p className="text-[9px] font-bold">
-                HP: 97578869 &nbsp; HP: 91113505 &nbsp; Email: 3leaves.sg@gmail.com
-              </p>
+              {/* Centered Company Info */}
+              <div className="w-[50%] text-center leading-tight pt-2">
+                <h1 className="font-bold text-[14px]">THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
+                <h2 className="font-bold text-[13px] mb-1">三叶（新加坡） 贸易公司</h2>
+                <p className="font-bold text-[10px] mb-0.5">CO.REG NO.53033969B &nbsp;&nbsp;&nbsp; GST REG NO. M90355440L</p>
+                <p className="text-[10px] mb-0.5">280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
+                <p className="text-[10px]">HP: 97578869 (Mr Ye) &nbsp; HP: 91113505 (Min) &nbsp; Email: 3leaves.sg@gmail.com</p>
+              </div>
+
+              {/* Right Side Invoice Details (No Gridlines) */}
+              <div className="w-[25%] flex flex-col items-end pt-1">
+                <div className="text-center w-full mb-2">
+                  <h2 className="text-[18px] font-bold tracking-[0.2em] leading-none mb-0.5">發票</h2>
+                  <h3 className="text-[14px] font-bold tracking-widest uppercase">TAX INVOICE</h3>
+                </div>
+                <div className="w-full text-[12px] text-left mt-2 px-2">
+                  <div className="flex justify-between mb-1">
+                    <span className="font-bold">No.</span>
+                    <span className="text-red-600 font-bold tracking-wider">{invoiceNumber}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-bold">Term:</span>
+                    <span className="font-bold">{paymentTerms === 'cod' ? 'COD' : '30 Days'}</span>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            {/* TO / DATE / TERM */}
-            <div className="flex justify-between font-bold text-[10px] mb-1">
-              <div>TO: {customer?.name || ''}</div>
-              <div>DATE: {new Date().toLocaleDateString('en-GB')}</div>
-              <div>TERM: {paymentTerms === '30_days' ? '30 Days' : 'COD'}</div>
+            {/* CUSTOMER INFO ROW (With Underlines and moved Date) */}
+            <div className="mb-4 text-[12px] font-bold flex flex-col w-full">
+              <div className="flex justify-between w-full mb-2">
+                <div className="flex items-end w-[65%] pr-4">
+                  <span className="w-10 shrink-0">TO:</span>
+                  <span className="flex-1 uppercase border-b border-black pb-0.5">{customer?.name || ''}</span>
+                </div>
+                <div className="flex items-end w-[35%] pl-4">
+                  <span className="w-12 shrink-0">DATE:</span>
+                  <span className="flex-1 text-center border-b border-black pb-0.5">
+                    {new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-end w-full">
+                <span className="w-20 shrink-0">ADDRESS:</span>
+                <span className="flex-1 uppercase leading-tight border-b border-black pb-0.5">{customer?.address || ''}</span>
+              </div>
             </div>
 
-            <div className="font-bold text-[10px] mb-2">
-              ADDRESS: {customer?.address || ''}
-            </div>
-
-            {/* TABLE */}
-            <table className="w-full text-[11px] border-t border-b border-black">
-              <thead>
-                <tr className="border-b border-black text-left">
-                  <th className="w-8">NO</th>
-                  <th>DESCRIPTION</th>
-                  <th className="w-20 text-center">QTY</th>
-                  <th className="w-6"></th>
-                  <th className="w-24 text-right">UNIT PRICE</th>
-                  <th className="w-24 text-right">AMOUNT</th>
+            {/* EXACT MATCH TABLE (No inner horizontal lines) */}
+            <table className="w-full text-[12px] border-2 border-black text-center mb-0 leading-tight flex-grow">
+              <thead className="border-b-2 border-black">
+                <tr className="font-bold bg-white">
+                  <th className="py-2 px-1 border-r border-black w-12">NO.</th>
+                  <th className="py-2 px-2 border-r border-black text-left">DESCRIPTION</th>
+                  <th className="py-2 px-1 border-r border-black w-32">QUANTITY</th>
+                  <th className="py-2 px-1 border-r border-black w-28">UNIT PRICE</th>
+                  <th className="py-2 px-1 w-28">AMOUNT</th>
                 </tr>
               </thead>
-
               <tbody>
                 {items.map((item, idx) => {
-                  const found = sys.inventory.find(p => p.id === item.itemId);
-                  const name = found ? (found.name || found.Items) : '-';
-
-                  const amount =
-                    (Number(item.qty) || 0) *
-                    (Number(item.unitPrice) || 0);
+                  const foundProduct = sys.inventory.find((entry) => entry.id === item.itemId);
+                  const productName = foundProduct ? (foundProduct.name || foundProduct.Items) : '-';
 
                   return (
-                    <tr key={idx} className="h-[18px]">
-                      <td>{idx + 1}</td>
-                      <td className="font-bold">{name}</td>
-                      <td className="text-center">
-                        {item.qty} {item.unit}
-                      </td>
-                      <td className="text-center">☐</td>
-                      <td className="text-right">
-                        ${formatMoney(item.unitPrice)}
-                      </td>
-                      <td className="text-right">
-                        ${formatMoney(amount)}
+                    <tr key={idx} className="h-[28px] align-top">
+                      <td className="p-1 border-r border-black font-medium">{idx + 1}</td>
+                      <td className="p-1 border-r border-black text-left pl-2 font-bold">{productName}</td>
+                      <td className="p-1 border-r border-black font-medium">{item.qty} {item.unit}</td>
+                      <td className="p-1 border-r border-black text-right pr-2">${formatMoney(item.unitPrice)}</td>
+                      <td className="p-1 text-right pr-2 font-bold">
+                        ${formatMoney((Number(item.qty) || 0) * (Number(item.unitPrice) || 0))}
                       </td>
                     </tr>
                   );
                 })}
+                {/* Dynamically pad out rows to push the footer down (No horizontal borders) */}
+                {items.length < 20 && Array.from({ length: 20 - items.length }).map((_, i) => (
+                  <tr key={`blank-${i}`} className="h-[28px]">
+                    <td className="border-r border-black"></td>
+                    <td className="border-r border-black"></td>
+                    <td className="border-r border-black"></td>
+                    <td className="border-r border-black"></td>
+                    <td></td>
+                  </tr>
+                ))}
               </tbody>
             </table>
 
-            {/* TOTALS */}
-            <div className="flex justify-end mt-2">
-              <div className="w-48 text-[11px] font-bold">
-                <div className="flex justify-between">
-                  <span>SUBTOTAL</span>
-                  <span>${formatMoney(subtotal)}</span>
+            {/* FOOTER & TOTALS (No surrounding box) */}
+            <div className="flex w-full mt-4">
+              {/* Left Side: Terms and Bank Info */}
+              <div className="w-[70%] pr-4 text-[11px] font-bold leading-snug flex flex-col justify-between">
+                <div>
+                  <p>请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
+                  <p>Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
+                  <div className="mt-4">
+                    <p>UEN: 53033969B</p>
+                    <p>A/C Name: Three Leaves (Singapore) Trading Enterprise</p>
+                    <p>A/C Number: 535-846562-001</p>
+                    <p>Bank Name: OCBC</p>
+                  </div>
+                  <p className="mt-4 font-normal">All payments mode have to be made payable to Three Leaves (Singapore) Trading Enterprise.</p>
                 </div>
-                <div className="flex justify-between">
-                  <span>9% GST</span>
-                  <span>${formatMoney(gst)}</span>
-                </div>
-                <div className="flex justify-between text-[13px]">
-                  <span>TOTAL</span>
-                  <span>${formatMoney(total)}</span>
+                {/* Signature Line */}
+                <div className="mt-8 mb-2">
+                  <div className="w-48 border-t border-black text-center pt-1">Received By</div>
                 </div>
               </div>
-            </div>
 
-            {/* NOTES */}
-            <div className="mt-3 text-[9px] leading-tight font-bold">
-              <p>
-                请提前一天提交订单，同日送达的截止时间为下午12点前。每周日休息
-              </p>
-              <p>
-                Please submit orders one day in advance. The cut-off time for
-                same-day delivery is before 12 PM. Closed on Sundays.
-              </p>
-            </div>
-
-            {/* BANK DETAILS */}
-            <div className="mt-2 text-[9px] leading-tight">
-              <p>UEN: 53033969B</p>
-              <p>A/C Name: Three Leaves (Singapore) Trading Enterprise</p>
-              <p>A/C Number: 535-846562-001</p>
-              <p>Bank Name: OCBC</p>
-            </div>
-
-            {/* FOOTER */}
-            <div className="flex justify-between items-end mt-4">
-              <p className="text-[9px] font-bold">
-                All payments must be made payable to Three Leaves (Singapore)
-                Trading Enterprise.
-              </p>
-
-              <div className="w-40 border-t border-black text-center text-[10px] font-bold pt-1">
-                Received By
+              {/* Right Side: Flushed Totals */}
+              <div className="w-[30%] flex flex-col font-bold text-[12px] pt-2">
+                <div className="flex justify-between p-1">
+                  <span className="pl-1">SUBTOTAL</span>
+                  <span className="pr-1">${formatMoney(subtotal)}</span>
+                </div>
+                <div className="flex justify-between p-1">
+                  <span className="pl-1">9% GST</span>
+                  <span className="pr-1">${formatMoney(gst)}</span>
+                </div>
+                <div className="flex justify-between p-1 mt-4 text-[14px]">
+                  <span className="pl-1">TOTAL</span>
+                  <span className="pr-1">${formatMoney(total)}</span>
+                </div>
               </div>
             </div>
 
           </div>
+          {/* --- END PRINTABLE TEMPLATE --- */}
+
         </div>
       </div>
     </div>
