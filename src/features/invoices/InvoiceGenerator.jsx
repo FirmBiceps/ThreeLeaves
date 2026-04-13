@@ -149,7 +149,12 @@ function InvoicePreview({
             </div>
           </div>
 
-          <div id="printable-invoice" className="bg-white text-black font-sans w-full h-full flex flex-col pt-0">
+          {/* ADDED FONT-FAMILY STYLING HERE TO PREVENT CHINESE CHARACTERS FROM DISAPPEARING IN PRINT */}
+          <div 
+            id="printable-invoice" 
+            className="bg-white text-black font-sans w-full h-full flex flex-col pt-0"
+            style={{ fontFamily: 'Arial, "Helvetica Neue", Helvetica, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "SimHei", sans-serif' }}
+          >
             
             <div className="flex justify-between items-start mb-6">
               <div className="w-[25%]">
@@ -169,7 +174,7 @@ function InvoicePreview({
                   <h2 className="text-[18px] font-bold tracking-[0.2em] leading-none mb-0.5">發票</h2>
                   <h3 className="text-[14px] font-bold tracking-widest uppercase">TAX INVOICE</h3>
                 </div>
-                <div className="w-full text-[12px] text-left mt-2 px-2">
+                <div className="w-full text-[13px] text-left mt-2 px-2">
                   <div className="flex justify-between mb-1">
                     <span className="font-bold">No.</span>
                     <span className="text-red-600 font-bold tracking-wider">{invoiceNumber}</span>
@@ -182,16 +187,17 @@ function InvoicePreview({
               </div>
             </div>
 
-            <div className="mb-4 text-[12px] font-bold flex flex-col w-full">
+            {/* INCREASED FONT SIZES TO 15px (+30%) */}
+            <div className="mb-4 text-[15px] font-bold flex flex-col w-full">
               <div className="flex justify-between w-full mb-2">
                 <div className="flex items-end w-[65%] pr-4">
-                  <span className="w-10 shrink-0">TO:</span>
+                  <span className="w-12 shrink-0">TO:</span>
                   <span className="flex-1 uppercase border-b border-black pb-0.5">
                     {customer?.name || existingInvoice?.customer || ''}
                   </span>
                 </div>
                 <div className="flex items-end w-[35%] pl-4">
-                  <span className="w-12 shrink-0">DATE:</span>
+                  <span className="w-14 shrink-0">DATE:</span>
                   <span className="flex-1 text-center border-b border-black pb-0.5">
                     {existingInvoice?.date 
                       ? new Date(existingInvoice.date).toLocaleDateString('en-GB').replace(/\//g, '-') 
@@ -199,22 +205,23 @@ function InvoicePreview({
                   </span>
                 </div>
               </div>
-              <div className="flex items-end w-full">
-                <span className="w-20 shrink-0">ADDRESS:</span>
+              <div className="flex items-end w-full mt-1">
+                <span className="w-24 shrink-0">ADDRESS:</span>
                 <span className="flex-1 uppercase leading-tight border-b border-black pb-0.5">
                   {customer?.address || ''}
                 </span>
               </div>
             </div>
 
-            <table className="w-full text-[12px] border-2 border-black text-center mb-0 leading-tight flex-grow">
+            {/* INCREASED FONT SIZES FOR TABLE TO 15px AND CENTRALIZED PRICE/AMOUNT */}
+            <table className="w-full text-[15px] border-2 border-black text-center mb-0 leading-tight flex-grow">
               <thead className="border-b-2 border-black">
-                <tr className="font-bold bg-white">
-                  <th className="py-2 px-1 border-r border-black w-12">NO.</th>
+                <tr className="font-bold bg-white text-[14px]">
+                  <th className="py-2 px-1 border-r border-black w-10">NO.</th>
                   <th className="py-2 px-2 border-r border-black text-left">DESCRIPTION</th>
-                  <th className="py-2 px-1 border-r border-black w-32">QUANTITY</th>
-                  <th className="py-2 px-1 border-r border-black w-28">UNIT PRICE</th>
-                  <th className="py-2 px-1 w-28">AMOUNT</th>
+                  <th className="py-2 px-1 border-r border-black w-24">QUANTITY</th>
+                  <th className="py-2 px-1 border-r border-black w-32 text-center">UNIT PRICE</th>
+                  <th className="py-2 px-1 w-32 text-center">AMOUNT</th>
                 </tr>
               </thead>
               <tbody>
@@ -223,19 +230,20 @@ function InvoicePreview({
                   const productName = foundProduct ? (foundProduct.name || foundProduct.Items) : (item.name || '-');
 
                   return (
-                    <tr key={idx} className="h-[28px] align-top">
-                      <td className="p-1 border-r border-black font-medium">{idx + 1}</td>
+                    <tr key={idx} className="h-[32px] align-top">
+                      <td className="p-1 border-r border-black font-medium text-center">{idx + 1}</td>
                       <td className="p-1 border-r border-black text-left pl-2 font-bold">{productName}</td>
-                      <td className="p-1 border-r border-black font-medium">{item.qty} {item.unit}</td>
-                      <td className="p-1 border-r border-black text-right pr-2">${formatMoney(item.unitPrice)}</td>
-                      <td className="p-1 text-right pr-2 font-bold">
+                      <td className="p-1 border-r border-black font-medium text-center">{item.qty} {item.unit}</td>
+                      <td className="p-1 border-r border-black text-center">${formatMoney(item.unitPrice)}</td>
+                      <td className="p-1 text-center font-bold">
                         ${formatMoney((Number(item.qty) || 0) * (Number(item.unitPrice) || 0))}
                       </td>
                     </tr>
                   );
                 })}
-                {items.length < 20 && Array.from({ length: 20 - items.length }).map((_, i) => (
-                  <tr key={`blank-${i}`} className="h-[28px]">
+                {/* Reduced blank rows to 15 to compensate for larger font heights fitting on one A4 page */}
+                {items.length < 15 && Array.from({ length: 15 - items.length }).map((_, i) => (
+                  <tr key={`blank-${i}`} className="h-[32px]">
                     <td className="border-r border-black"></td>
                     <td className="border-r border-black"></td>
                     <td className="border-r border-black"></td>
@@ -247,7 +255,7 @@ function InvoicePreview({
             </table>
 
             <div className="flex w-full mt-4">
-              <div className="w-[70%] pr-4 text-[11px] font-bold leading-snug flex flex-col justify-between">
+              <div className="w-[70%] pr-4 text-[12px] font-bold leading-snug flex flex-col justify-between">
                 <div>
                   <p>请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
                   <p>Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
@@ -260,11 +268,11 @@ function InvoicePreview({
                   <p className="mt-4 font-normal">All payments mode have to be made payable to Three Leaves (Singapore) Trading Enterprise.</p>
                 </div>
                 <div className="mt-8 mb-2">
-                  <div className="w-48 border-t border-black text-center pt-1">Received By</div>
+                  <div className="w-48 border-t border-black text-center pt-1 text-[12px]">Received By</div>
                 </div>
               </div>
 
-              <div className="w-[30%] flex flex-col font-bold text-[12px] pt-2">
+              <div className="w-[30%] flex flex-col font-bold text-[14px] pt-2">
                 <div className="flex justify-between p-1">
                   <span className="pl-1">SUBTOTAL</span>
                   <span className="pr-1">${formatMoney(subtotal)}</span>
@@ -273,7 +281,7 @@ function InvoicePreview({
                   <span className="pl-1">9% GST</span>
                   <span className="pr-1">${formatMoney(gst)}</span>
                 </div>
-                <div className="flex justify-between p-1 mt-4 text-[14px]">
+                <div className="flex justify-between p-1 mt-4 text-[16px]">
                   <span className="pl-1">TOTAL</span>
                   <span className="pr-1">${formatMoney(total)}</span>
                 </div>
