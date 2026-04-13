@@ -292,7 +292,8 @@ function InvoicePreview({
 // ==========================================
 export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
   
-  const generatedInvoiceNumber = useMemo(() => {
+  // Calculate default invoice number based on history
+  const defaultInvoiceNumber = useMemo(() => {
     if (existingInvoice) return existingInvoice.number; 
 
     const date = new Date();
@@ -315,6 +316,8 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
     return `${prefix}${nextSequence}`;
   }, [sys.invoices, existingInvoice]);
 
+  // States
+  const [invoiceNumber, setInvoiceNumber] = useState(defaultInvoiceNumber);
   const [customerId, setCustomerId] = useState(existingInvoice ? existingInvoice.customerId : '');
   const [paymentTerms, setPaymentTerms] = useState(existingInvoice ? existingInvoice.paymentTerms : '30_days');
   const [items, setItems] = useState(existingInvoice ? existingInvoice.items : []);
@@ -341,8 +344,14 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
     return price;
   };
 
+  // Sync state if default generator calculates a new number after component mounts
   useEffect(() => {
-    // --- THE FIX: PREVENT AUTO-FILL FROM WIPING EXISTING ITEMS ---
+    if (!existingInvoice) {
+      setInvoiceNumber(defaultInvoiceNumber);
+    }
+  }, [defaultInvoiceNumber, existingInvoice]);
+
+  useEffect(() => {
     if (existingInvoice && customerId === existingInvoice.customerId) {
       return; 
     }
@@ -451,8 +460,8 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
 
   const handleRegister = (printAfter = false) => {
     const invoice = {
-      id: existingInvoice ? existingInvoice.id : `INV-${generatedInvoiceNumber}`,
-      number: generatedInvoiceNumber,
+      id: existingInvoice ? existingInvoice.id : `INV-${invoiceNumber}`,
+      number: invoiceNumber,
       customerId,
       customer: customer?.name || existingInvoice?.customer || 'Unknown Customer',
       region: customer?.region || existingInvoice?.region || '',
@@ -495,7 +504,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
       <InvoicePreview
         customer={customer}
         gst={gst}
-        invoiceNumber={generatedInvoiceNumber}
+        invoiceNumber={invoiceNumber}
         items={items}
         onBack={() => setPreviewMode(false)}
         onRegister={handleRegister}
@@ -604,7 +613,15 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
 
               <div className="w-1/3 pl-6 text-right">
                 <label className="text-[10px] font-black uppercase text-gray-400">Serial No.</label>
-                <p className="text-3xl font-black tracking-tighter text-red-600">#{generatedInvoiceNumber}</p>
+                <div className="flex items-center justify-end text-3xl font-black tracking-tighter text-red-600 mt-1">
+                  <span className="mr-1">#</span>
+                  <input 
+                    type="text" 
+                    value={invoiceNumber} 
+                    onChange={(e) => setInvoiceNumber(e.target.value)}
+                    className="w-full max-w-[140px] bg-transparent border-b-2 border-transparent hover:border-red-200 focus:border-red-600 outline-none text-right focus:ring-0 p-0 m-0"
+                  />
+                </div>
               </div>
             </div>
 
