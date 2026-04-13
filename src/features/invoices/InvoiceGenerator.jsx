@@ -292,7 +292,6 @@ function InvoicePreview({
 // ==========================================
 export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
   
-  // Calculate default invoice number based on history
   const defaultInvoiceNumber = useMemo(() => {
     if (existingInvoice) return existingInvoice.number; 
 
@@ -316,7 +315,6 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
     return `${prefix}${nextSequence}`;
   }, [sys.invoices, existingInvoice]);
 
-  // States
   const [invoiceNumber, setInvoiceNumber] = useState(defaultInvoiceNumber);
   const [customerId, setCustomerId] = useState(existingInvoice ? existingInvoice.customerId : '');
   const [paymentTerms, setPaymentTerms] = useState(existingInvoice ? existingInvoice.paymentTerms : '30_days');
@@ -336,15 +334,18 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
   const gst = subtotal * 0.09;
   const total = subtotal + gst;
 
+  // --- CUSTOM PRICING ENGINE ---
   const getSafePrice = (product) => {
-    let price = sys.getApplicablePrice ? sys.getApplicablePrice(product.id, customerId) : null;
-    if (price === null || price === undefined || isNaN(price)) {
-      price = product.unitPrice || product['Unit Price (SG)'] || 0;
+    // 1. Check if this customer has a custom price override stored in their profile!
+    if (customer?.custom_prices && customer.custom_prices[product.id] !== undefined) {
+      return Number(customer.custom_prices[product.id]);
     }
-    return price;
+
+    // 2. Otherwise use the standard catalog price
+    let price = product.unitPrice || product['Unit Price (SG)'] || 0;
+    return Number(price);
   };
 
-  // Sync state if default generator calculates a new number after component mounts
   useEffect(() => {
     if (!existingInvoice) {
       setInvoiceNumber(defaultInvoiceNumber);
@@ -390,7 +391,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
             name: product.name || product.Items,
             unit: stats.unit || product.unit || product.Unit || '箱',
             qty: Math.max(1, Math.round(stats.totalQty / stats.count)),
-            unitPrice: getSafePrice(product),
+            unitPrice: getSafePrice(product), // <-- WILL USE CUSTOM PRICE IF EXISTS
             picked: false,
           });
         }
@@ -447,7 +448,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
           name: foundItem.name || foundItem.Items,
           unit: foundItem.unit || foundItem.Unit || '箱',
           qty,
-          unitPrice: getSafePrice(foundItem),
+          unitPrice: getSafePrice(foundItem), // <-- WILL USE CUSTOM PRICE IF EXISTS
           picked: false,
         });
       }
@@ -699,7 +700,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                               itemId: selectedId,
                               name: product.name || product.Items,
                               unit: product.unit || product.Unit || '箱',
-                              unitPrice: getSafePrice(product),
+                              unitPrice: getSafePrice(product), // <-- WILL USE CUSTOM PRICE IF SET
                             };
                             setItems(nextItems);
                           }}
@@ -736,9 +737,9 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                         value={item.qty}
                       />
                     </td>
-                    <td className="p-2 text-right">
+                    <td className="p-2 align-top pt-3">
                       <input
-                        className="w-full border-none bg-transparent p-1 text-right font-black focus:ring-0"
+                        className="w-full border-none bg-transparent p-1 text-right font-black focus:ring-0 m-0 leading-none"
                         onChange={(event) => {
                           const nextItems = [...items];
                           nextItems[index].unitPrice = event.target.value;
@@ -748,6 +749,16 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                         type="number"
                         value={item.unitPrice}
                       />
+                      {/* THE CUSTOM PRICING BADGE */}
+                      {item.itemId && customer && (
+                        <p className={`text-[9px] text-right uppercase tracking-widest mt-0.5 ${
+                          customer?.custom_prices && customer.custom_prices[item.itemId] !== undefined 
+                            ? 'text-emerald-500 font-black' 
+                            : 'text-slate-400 font-semibold'
+                        }`}>
+                          {customer?.custom_prices && customer.custom_prices[item.itemId] !== undefined ? '★ Custom' : 'Default'}
+                        </p>
+                      )}
                     </td>
                     <td className="p-4 text-right font-mono text-lg font-black tracking-tighter text-slate-900">
                       ${formatMoney((Number(item.qty) || 0) * (Number(item.unitPrice) || 0))}
