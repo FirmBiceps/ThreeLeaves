@@ -116,6 +116,7 @@ function InvoicePreview({
   subtotal,
   sys,
   total,
+  existingInvoice
 }) {
   return (
     <div className="fixed inset-0 z-[3000] overflow-y-auto bg-slate-950/90 print:bg-white print:p-0">
@@ -148,17 +149,13 @@ function InvoicePreview({
             </div>
           </div>
 
-          {/* --- PRINTABLE TEMPLATE --- */}
           <div id="printable-invoice" className="bg-white text-black font-sans w-full h-full flex flex-col pt-0">
             
-            {/* EXACT MATCH HEADER */}
             <div className="flex justify-between items-start mb-6">
-              {/* Logo */}
               <div className="w-[25%]">
                 <img src={logo} alt="Three Leaves Logo" className="w-[110px] h-auto object-contain" />
               </div>
 
-              {/* Centered Company Info */}
               <div className="w-[50%] text-center leading-tight pt-2">
                 <h1 className="font-bold text-[14px]">THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
                 <h2 className="font-bold text-[13px] mb-1">三叶（新加坡） 贸易公司</h2>
@@ -167,7 +164,6 @@ function InvoicePreview({
                 <p className="text-[10px]">HP: 97578869 (Mr Ye) &nbsp; HP: 91113505 (Min) &nbsp; Email: 3leaves.sg@gmail.com</p>
               </div>
 
-              {/* Right Side Invoice Details (No Gridlines) */}
               <div className="w-[25%] flex flex-col items-end pt-1">
                 <div className="text-center w-full mb-2">
                   <h2 className="text-[18px] font-bold tracking-[0.2em] leading-none mb-0.5">發票</h2>
@@ -186,27 +182,31 @@ function InvoicePreview({
               </div>
             </div>
 
-            {/* CUSTOMER INFO ROW (With Underlines and moved Date) */}
             <div className="mb-4 text-[12px] font-bold flex flex-col w-full">
               <div className="flex justify-between w-full mb-2">
                 <div className="flex items-end w-[65%] pr-4">
                   <span className="w-10 shrink-0">TO:</span>
-                  <span className="flex-1 uppercase border-b border-black pb-0.5">{customer?.name || ''}</span>
+                  <span className="flex-1 uppercase border-b border-black pb-0.5">
+                    {customer?.name || existingInvoice?.customer || ''}
+                  </span>
                 </div>
                 <div className="flex items-end w-[35%] pl-4">
                   <span className="w-12 shrink-0">DATE:</span>
                   <span className="flex-1 text-center border-b border-black pb-0.5">
-                    {new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}
+                    {existingInvoice?.date 
+                      ? new Date(existingInvoice.date).toLocaleDateString('en-GB').replace(/\//g, '-') 
+                      : new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}
                   </span>
                 </div>
               </div>
               <div className="flex items-end w-full">
                 <span className="w-20 shrink-0">ADDRESS:</span>
-                <span className="flex-1 uppercase leading-tight border-b border-black pb-0.5">{customer?.address || ''}</span>
+                <span className="flex-1 uppercase leading-tight border-b border-black pb-0.5">
+                  {customer?.address || ''}
+                </span>
               </div>
             </div>
 
-            {/* EXACT MATCH TABLE (No inner horizontal lines) */}
             <table className="w-full text-[12px] border-2 border-black text-center mb-0 leading-tight flex-grow">
               <thead className="border-b-2 border-black">
                 <tr className="font-bold bg-white">
@@ -220,7 +220,7 @@ function InvoicePreview({
               <tbody>
                 {items.map((item, idx) => {
                   const foundProduct = sys.inventory.find((entry) => entry.id === item.itemId);
-                  const productName = foundProduct ? (foundProduct.name || foundProduct.Items) : '-';
+                  const productName = foundProduct ? (foundProduct.name || foundProduct.Items) : (item.name || '-');
 
                   return (
                     <tr key={idx} className="h-[28px] align-top">
@@ -234,7 +234,6 @@ function InvoicePreview({
                     </tr>
                   );
                 })}
-                {/* Dynamically pad out rows to push the footer down (No horizontal borders) */}
                 {items.length < 20 && Array.from({ length: 20 - items.length }).map((_, i) => (
                   <tr key={`blank-${i}`} className="h-[28px]">
                     <td className="border-r border-black"></td>
@@ -247,9 +246,7 @@ function InvoicePreview({
               </tbody>
             </table>
 
-            {/* FOOTER & TOTALS (No surrounding box) */}
             <div className="flex w-full mt-4">
-              {/* Left Side: Terms and Bank Info */}
               <div className="w-[70%] pr-4 text-[11px] font-bold leading-snug flex flex-col justify-between">
                 <div>
                   <p>请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
@@ -262,13 +259,11 @@ function InvoicePreview({
                   </div>
                   <p className="mt-4 font-normal">All payments mode have to be made payable to Three Leaves (Singapore) Trading Enterprise.</p>
                 </div>
-                {/* Signature Line */}
                 <div className="mt-8 mb-2">
                   <div className="w-48 border-t border-black text-center pt-1">Received By</div>
                 </div>
               </div>
 
-              {/* Right Side: Flushed Totals */}
               <div className="w-[30%] flex flex-col font-bold text-[12px] pt-2">
                 <div className="flex justify-between p-1">
                   <span className="pl-1">SUBTOTAL</span>
@@ -286,8 +281,6 @@ function InvoicePreview({
             </div>
 
           </div>
-          {/* --- END PRINTABLE TEMPLATE --- */}
-
         </div>
       </div>
     </div>
@@ -297,8 +290,11 @@ function InvoicePreview({
 // ==========================================
 // MAIN INVOICE GENERATOR COMPONENT
 // ==========================================
-export function InvoiceGenerator({ sys, onClose }) {
+export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
+  
   const generatedInvoiceNumber = useMemo(() => {
+    if (existingInvoice) return existingInvoice.number; 
+
     const date = new Date();
     const yy = String(date.getFullYear()).slice(-2); 
     const mm = String(date.getMonth() + 1).padStart(2, '0'); 
@@ -317,11 +313,12 @@ export function InvoiceGenerator({ sys, onClose }) {
 
     const nextSequence = String(maxSequence + 1).padStart(3, '0');
     return `${prefix}${nextSequence}`;
-  }, [sys.invoices]);
+  }, [sys.invoices, existingInvoice]);
 
-  const [customerId, setCustomerId] = useState('');
-  const [paymentTerms, setPaymentTerms] = useState('30_days');
-  const [items, setItems] = useState([]);
+  const [customerId, setCustomerId] = useState(existingInvoice ? existingInvoice.customerId : '');
+  const [paymentTerms, setPaymentTerms] = useState(existingInvoice ? existingInvoice.paymentTerms : '30_days');
+  const [items, setItems] = useState(existingInvoice ? existingInvoice.items : []);
+  
   const [isParsing, setIsParsing] = useState(false);
   const [parseText, setParseText] = useState('');
   const [previewMode, setPreviewMode] = useState(false);
@@ -345,6 +342,11 @@ export function InvoiceGenerator({ sys, onClose }) {
   };
 
   useEffect(() => {
+    // --- THE FIX: PREVENT AUTO-FILL FROM WIPING EXISTING ITEMS ---
+    if (existingInvoice && customerId === existingInvoice.customerId) {
+      return; 
+    }
+
     if (!customerId) {
       setItems([]);
       setAutoFillNotif(false);
@@ -394,7 +396,7 @@ export function InvoiceGenerator({ sys, onClose }) {
       setItems([]);
       setAutoFillNotif(false);
     }
-  }, [customerId, sys.invoices, sys.inventory]);
+  }, [customerId, sys.invoices, sys.inventory, existingInvoice]);
 
   const suggestions = useMemo(() => {
     if (!customerId) return [];
@@ -449,28 +451,34 @@ export function InvoiceGenerator({ sys, onClose }) {
 
   const handleRegister = (printAfter = false) => {
     const invoice = {
-      id: `INV-${generatedInvoiceNumber}`,
+      id: existingInvoice ? existingInvoice.id : `INV-${generatedInvoiceNumber}`,
       number: generatedInvoiceNumber,
       customerId,
-      customer: customer.name,
-      region: customer.region,
-      date: new Date().toISOString().split('T')[0],
+      customer: customer?.name || existingInvoice?.customer || 'Unknown Customer',
+      region: customer?.region || existingInvoice?.region || '',
+      date: existingInvoice ? existingInvoice.date : new Date().toISOString().split('T')[0],
       items,
       total,
       status: 'Paid',
       paymentTerms,
     };
 
-    const nextInventory = [...sys.inventory];
-    items.forEach((item) => {
-      const index = nextInventory.findIndex((entry) => entry.id === item.itemId);
-      if (index > -1) {
-        nextInventory[index].stock -= Number(item.qty) || 0;
-      }
-    });
+    if (!existingInvoice) {
+      const nextInventory = [...sys.inventory];
+      items.forEach((item) => {
+        const index = nextInventory.findIndex((entry) => entry.id === item.itemId);
+        if (index > -1) {
+          nextInventory[index].stock -= Number(item.qty) || 0;
+        }
+      });
+      sys.setInventory(nextInventory);
+    }
 
-    sys.setInventory(nextInventory);
-    sys.setInvoices([...sys.invoices, invoice]);
+    if (existingInvoice) {
+      sys.setInvoices(sys.invoices.map(inv => inv.id === existingInvoice.id ? invoice : inv));
+    } else {
+      sys.setInvoices([...sys.invoices, invoice]);
+    }
 
     if (printAfter) {
       setTimeout(() => {
@@ -496,6 +504,7 @@ export function InvoiceGenerator({ sys, onClose }) {
         subtotal={subtotal}
         sys={sys}
         total={total}
+        existingInvoice={existingInvoice}
       />
     );
   }
@@ -506,7 +515,9 @@ export function InvoiceGenerator({ sys, onClose }) {
         <div className="flex shrink-0 items-center justify-between bg-slate-900 p-4 px-8 text-white">
           <div className="flex items-center space-x-3">
             <FileText className="text-blue-500" />
-            <h2 className="text-sm font-black uppercase tracking-widest">Draft Invoice Workspace</h2>
+            <h2 className="text-sm font-black uppercase tracking-widest">
+              {existingInvoice ? 'Edit Existing Invoice' : 'Draft Invoice Workspace'}
+            </h2>
           </div>
           <div className="flex space-x-3">
             <button
@@ -563,6 +574,7 @@ export function InvoiceGenerator({ sys, onClose }) {
                   className="mt-1 w-full border-none bg-transparent p-0 text-xl font-black focus:ring-0"
                   onChange={(event) => setCustomerId(event.target.value)}
                   value={customerId}
+                  disabled={!!existingInvoice} 
                 >
                   <option value="">Select Entity...</option>
                   {sys.customers.map((entry) => (
@@ -596,7 +608,7 @@ export function InvoiceGenerator({ sys, onClose }) {
               </div>
             </div>
 
-            {suggestions.length > 0 && (
+            {suggestions.length > 0 && !existingInvoice && (
               <div className="mb-6 rounded border border-dashed border-blue-200 bg-blue-50/50 p-4">
                 <p className="mb-2 text-[9px] font-black uppercase tracking-widest text-blue-400">
                   Secondary Recommendations (Occasional Buys)
