@@ -60,8 +60,8 @@ function ProductSearchSelect({ value, inventory, onChange }) {
           {displayName || '- Search Product -'}
         </button>
       ) : (
-        <div className="absolute z-[5000] top-0 left-0 w-72 bg-white border border-blue-200 rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-100">
-          <div className="flex items-center p-2 border-b border-slate-100 bg-slate-50">
+        <div className="absolute z-[5000] top-0 left-0 w-72 bg-white border border-slate-300 rounded shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+          <div className="flex items-center p-2 border-b border-slate-200 bg-slate-50">
             <Search size={14} className="text-slate-400 ml-1 mr-2 shrink-0" />
             <input
               autoFocus
@@ -80,7 +80,7 @@ function ProductSearchSelect({ value, inventory, onChange }) {
                   <button
                     key={item.id}
                     type="button"
-                    className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 border-b border-slate-50 last:border-0 transition-colors"
+                    className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 border-b border-slate-100 last:border-0 transition-colors"
                     onClick={() => {
                       onChange(item.id);
                       setIsOpen(false);
@@ -103,7 +103,7 @@ function ProductSearchSelect({ value, inventory, onChange }) {
 }
 
 // ==========================================
-// INVOICE PREVIEW COMPONENT (UPDATED LAYOUT)
+// EXACT MATCH PDF PREVIEW
 // ==========================================
 function InvoicePreview({
   customer,
@@ -273,23 +273,22 @@ function InvoicePreview({
     </div>
   );
 }
+
 // ==========================================
 // MAIN INVOICE GENERATOR COMPONENT
 // ==========================================
 export function InvoiceGenerator({ sys, onClose }) {
-  // --- DYNAMIC YYMMXXX GENERATOR ---
   const generatedInvoiceNumber = useMemo(() => {
     const date = new Date();
-    const yy = String(date.getFullYear()).slice(-2); // e.g., '26'
-    const mm = String(date.getMonth() + 1).padStart(2, '0'); // e.g., '04'
+    const yy = String(date.getFullYear()).slice(-2); 
+    const mm = String(date.getMonth() + 1).padStart(2, '0'); 
     const prefix = `${yy}${mm}`;
 
-    // Look at existing invoices to find the highest sequence this month
     const monthlyInvoices = sys.invoices.filter(inv => String(inv.number).startsWith(prefix));
     let maxSequence = 0;
     
     monthlyInvoices.forEach(inv => {
-      const seqStr = String(inv.number).slice(4); // Extract the 'xxx' part
+      const seqStr = String(inv.number).slice(4); 
       const seqNum = parseInt(seqStr, 10);
       if (!isNaN(seqNum) && seqNum > maxSequence) {
         maxSequence = seqNum;
@@ -483,7 +482,7 @@ export function InvoiceGenerator({ sys, onClose }) {
 
   return (
     <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-950/90 p-4 backdrop-blur-md">
-      <div className="flex h-[95vh] w-full max-w-5xl flex-col overflow-hidden rounded-[48px] border border-white/20 bg-white shadow-2xl">
+      <div className="flex h-[95vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-white/20 bg-white shadow-2xl">
         <div className="flex shrink-0 items-center justify-between bg-slate-900 p-4 px-8 text-white">
           <div className="flex items-center space-x-3">
             <FileText className="text-blue-500" />
@@ -509,12 +508,12 @@ export function InvoiceGenerator({ sys, onClose }) {
 
         <div className="flex-1 overflow-y-auto bg-slate-100 p-8">
           {isParsing && (
-            <div className="mb-8 rounded-[32px] bg-blue-600 p-8 text-white shadow-2xl">
+            <div className="mb-8 rounded-2xl bg-blue-600 p-8 text-white shadow-2xl">
               <h3 className="mb-2 flex items-center text-lg font-black">
                 <Wand2 className="mr-3" size={24} /> Smart Order Extractor
               </h3>
               <textarea
-                className="mb-4 h-32 w-full rounded-2xl border-2 border-blue-400 bg-blue-700/50 p-4 text-sm font-medium outline-none placeholder:text-blue-300"
+                className="mb-4 h-32 w-full rounded border border-blue-400 bg-blue-700/50 p-4 text-sm font-medium outline-none placeholder:text-blue-300"
                 onChange={(event) => setParseText(event.target.value)}
                 placeholder="Paste order details here..."
                 value={parseText}
@@ -524,7 +523,7 @@ export function InvoiceGenerator({ sys, onClose }) {
                   Cancel
                 </button>
                 <button
-                  className="rounded-xl bg-white px-8 py-2 text-xs font-black text-blue-600"
+                  className="rounded bg-white px-8 py-2 text-xs font-black text-blue-600"
                   onClick={handleSmartExtract}
                   type="button"
                 >
@@ -578,14 +577,14 @@ export function InvoiceGenerator({ sys, onClose }) {
             </div>
 
             {suggestions.length > 0 && (
-              <div className="mb-6 rounded-xl border-2 border-dashed border-blue-200 bg-blue-50/50 p-4">
+              <div className="mb-6 rounded border border-dashed border-blue-200 bg-blue-50/50 p-4">
                 <p className="mb-2 text-[9px] font-black uppercase tracking-widest text-blue-400">
                   Secondary Recommendations (Occasional Buys)
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {suggestions.map((item) => (
                     <button
-                      className="rounded-full border border-blue-100 bg-white px-3 py-1.5 text-[10px] font-bold text-blue-700 shadow-sm"
+                      className="rounded border border-blue-100 bg-white px-3 py-1.5 text-[10px] font-bold text-blue-700 shadow-sm"
                       key={item.id}
                       onClick={() =>
                         setItems([
@@ -623,7 +622,7 @@ export function InvoiceGenerator({ sys, onClose }) {
               </thead>
               <tbody>
                 {items.map((item, index) => (
-                  <tr className="border-b border-gray-50 font-bold" key={`${item.itemId}-${index}`}>
+                  <tr className="border-b border-gray-100 font-bold" key={`${item.itemId}-${index}`}>
                     <td className="p-4 text-center font-mono text-xs text-slate-300">{index + 1}</td>
                     
                     <td className="p-2 relative">
@@ -661,7 +660,7 @@ export function InvoiceGenerator({ sys, onClose }) {
 
                     <td className="p-2">
                       <select
-                        className="w-full border-none text-center text-xs font-bold focus:ring-0"
+                        className="w-full border-none text-center text-xs font-bold focus:ring-0 bg-transparent"
                         onChange={(event) => {
                           const nextItems = [...items];
                           nextItems[index].unit = event.target.value;
@@ -719,7 +718,7 @@ export function InvoiceGenerator({ sys, onClose }) {
             </table>
 
             <button
-              className="mt-8 rounded-xl bg-blue-50 px-5 py-2 text-[9px] font-black uppercase text-blue-500 shadow-sm transition-all"
+              className="mt-8 rounded bg-blue-50 px-5 py-2 text-[10px] font-bold uppercase text-blue-600 shadow-sm transition-all"
               onClick={() =>
                 setItems([
                   ...items,
@@ -750,17 +749,17 @@ export function InvoiceGenerator({ sys, onClose }) {
           </div>
         </div>
 
-        <div className="shrink-0 rounded-t-3xl border-t bg-white p-10 shadow-inner">
+        <div className="shrink-0 rounded-b-3xl border-t bg-white p-8 shadow-inner">
           <div className="flex justify-end space-x-4">
             <button
-              className="px-8 py-4 text-sm font-black uppercase tracking-widest text-gray-400"
+              className="px-8 py-3 text-sm font-black uppercase tracking-widest text-gray-400"
               onClick={onClose}
               type="button"
             >
               Discard
             </button>
             <button
-              className="flex items-center rounded-2xl bg-indigo-600 px-10 py-4 text-xs font-black uppercase tracking-widest text-white shadow-xl transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+              className="flex items-center rounded bg-indigo-600 px-10 py-3 text-xs font-black uppercase tracking-widest text-white shadow-xl transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
               disabled={!customerId || items.length === 0}
               onClick={() => setPreviewMode(true)}
               type="button"
