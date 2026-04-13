@@ -15,7 +15,6 @@ import { CompanyHeader } from '../../components/shared/CompanyHeader';
 import { UNIT_OPTIONS } from '../../data/company';
 import { formatMoney } from '../../utils/format';
 
-// 1. IMPORT YOUR LOGO DIRECTLY HERE
 import logo from './three_leaves_logo.png';
 
 // ==========================================
@@ -173,8 +172,6 @@ function InvoicePreview({
                   <h2 className="text-[18px] font-bold tracking-[0.2em] leading-none mb-0.5">發票</h2>
                   <h3 className="text-[14px] font-bold tracking-widest uppercase">TAX INVOICE</h3>
                 </div>
-                
-                {/* REDUCED WHITE SPACING: Tight Flex Box, 16px Fonts */}
                 <div className="w-full text-[16px] text-left mt-1 pl-4 flex flex-col leading-tight gap-1">
                   <div className="flex items-center">
                     <span className="font-bold w-14 shrink-0">No.</span>
@@ -213,7 +210,6 @@ function InvoicePreview({
               </div>
             </div>
 
-            {/* TABLE */}
             <table className="w-full text-[15px] border-2 border-black text-center mb-0 leading-tight flex-grow">
               <thead className="border-b-2 border-black">
                 <tr className="font-bold bg-white text-[14px]">
@@ -253,9 +249,7 @@ function InvoicePreview({
               </tbody>
             </table>
 
-            {/* FLUSHED ALIGNED TOTALS & UNBOXED FOOTER */}
             <div className="flex w-full mt-2">
-              {/* Left Side: Notes */}
               <div className="flex-1 pr-4 text-[12px] font-bold leading-snug flex flex-col justify-between">
                 <div>
                   <p>请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
@@ -273,7 +267,6 @@ function InvoicePreview({
                 </div>
               </div>
 
-              {/* Right Side: Totals aligned perfectly with Unit Price (w-32) & Amount (w-32) */}
               <div className="flex flex-col font-bold text-[15px] shrink-0 w-[16rem]">
                 <div className="flex">
                   <div className="w-32 p-1 text-center">SUBTOTAL</div>
@@ -337,6 +330,14 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
   
   const customer = sys.customers.find((entry) => entry.id === customerId);
 
+  // --- DUPLICATE INVOICE NUMBER CHECK ---
+  const isDuplicateNumber = useMemo(() => {
+    return sys.invoices.some(inv => 
+      String(inv.number) === String(invoiceNumber) && 
+      inv.id !== (existingInvoice ? existingInvoice.id : null)
+    );
+  }, [invoiceNumber, sys.invoices, existingInvoice]);
+
   const subtotal = items.reduce(
     (sum, item) => sum + (Number(item.qty) || 0) * (Number(item.unitPrice) || 0),
     0,
@@ -344,7 +345,6 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
   const gst = subtotal * 0.09;
   const total = subtotal + gst;
 
-  // --- UNIT-AWARE PRICING ENGINE ---
   const getSafePrice = (product, unit = '箱') => {
     const ruleKey = `${product.id}|${unit}`;
     if (customer?.custom_prices && customer.custom_prices[ruleKey] !== undefined) {
@@ -400,7 +400,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
             name: product.name || product.Items,
             unit: determinedUnit,
             qty: Math.max(1, Math.round(stats.totalQty / stats.count)),
-            unitPrice: getSafePrice(product, determinedUnit), // Unit Aware
+            unitPrice: getSafePrice(product, determinedUnit), 
             picked: false,
           });
         }
@@ -458,7 +458,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
           name: foundItem.name || foundItem.Items,
           unit: determinedUnit,
           qty,
-          unitPrice: getSafePrice(foundItem, determinedUnit), // Unit Aware
+          unitPrice: getSafePrice(foundItem, determinedUnit), 
           picked: false,
         });
       }
@@ -623,7 +623,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                 </select>
               </div>
 
-              <div className="w-1/3 pl-6 text-right">
+              <div className="w-1/3 pl-6 text-right relative">
                 <label className="text-[10px] font-black uppercase text-gray-400">Serial No.</label>
                 <div className="flex items-center justify-end text-3xl font-black tracking-tighter text-red-600 mt-1">
                   <span className="mr-1">#</span>
@@ -631,9 +631,12 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                     type="text" 
                     value={invoiceNumber} 
                     onChange={(e) => setInvoiceNumber(e.target.value)}
-                    className="w-full max-w-[140px] bg-transparent border-b-2 border-transparent hover:border-red-200 focus:border-red-600 outline-none text-right focus:ring-0 p-0 m-0"
+                    className={`w-full max-w-[140px] bg-transparent border-b-2 outline-none text-right focus:ring-0 p-0 m-0 ${isDuplicateNumber ? 'border-red-500 text-red-600' : 'border-transparent hover:border-red-200 focus:border-red-600'}`}
                   />
                 </div>
+                {isDuplicateNumber && (
+                  <p className="text-[10px] font-black text-red-500 uppercase mt-1">Number Already Exists!</p>
+                )}
               </div>
             </div>
 
@@ -656,7 +659,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                             name: item.name || item.Items,
                             unit: determinedUnit,
                             qty: 1,
-                            unitPrice: getSafePrice(item, determinedUnit), // Unit Aware
+                            unitPrice: getSafePrice(item, determinedUnit), 
                             picked: false,
                           },
                         ])
@@ -684,7 +687,6 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
               </thead>
               <tbody>
                 {items.map((item, index) => {
-                  // Figure out if this item is using a custom price!
                   const ruleKey = `${item.itemId}|${item.unit}`;
                   const hasCustomPrice = customer?.custom_prices && customer.custom_prices[ruleKey] !== undefined;
 
@@ -734,7 +736,6 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                             const newUnit = event.target.value;
                             nextItems[index].unit = newUnit;
                             
-                            // Re-calculate price instantly if the unit changed!
                             const product = sys.inventory.find(p => p.id === nextItems[index].itemId);
                             if (product) {
                               nextItems[index].unitPrice = getSafePrice(product, newUnit);
@@ -775,7 +776,6 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                           type="number"
                           value={item.unitPrice}
                         />
-                        {/* CUSTOM PRICING BADGE */}
                         {item.itemId && customer && (
                           <p className={`text-[9px] text-right uppercase tracking-widest mt-0.5 ${
                             hasCustomPrice ? 'text-emerald-500 font-black' : 'text-slate-400 font-semibold'
@@ -845,7 +845,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
             </button>
             <button
               className="flex items-center rounded bg-indigo-600 px-10 py-3 text-xs font-black uppercase tracking-widest text-white shadow-xl transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
-              disabled={!customerId || items.length === 0}
+              disabled={!customerId || items.length === 0 || isDuplicateNumber}
               onClick={() => setPreviewMode(true)}
               type="button"
             >
