@@ -103,7 +103,7 @@ function ProductSearchSelect({ value, inventory, onChange }) {
 }
 
 // ==========================================
-// INVOICE PREVIEW COMPONENT (UPDATED LAYOUT)
+// INVOICE PREVIEW COMPONENT (HIGH DENSITY LAYOUT)
 // ==========================================
 function InvoicePreview({
   customer,
@@ -120,8 +120,9 @@ function InvoicePreview({
   return (
     <div className="fixed inset-0 z-[3000] overflow-y-auto bg-slate-950/90 print:bg-white print:p-0">
       <div className="flex min-h-full justify-center py-12 print:py-0">
-        <div className="relative flex min-h-[297mm] w-full max-w-[210mm] flex-col bg-white p-10 shadow-2xl print:w-full print:p-0 print:shadow-none">
+        <div className="relative flex min-h-[297mm] w-full max-w-[210mm] flex-col bg-white px-10 py-8 shadow-2xl print:w-full print:p-0 print:shadow-none">
           
+          {/* Action Bar (Hidden when printing) */}
           <div className="absolute -top-16 left-0 right-0 flex items-center justify-between px-4 print:hidden">
             <button
               className="flex items-center rounded-xl bg-slate-800 px-6 py-2.5 font-bold text-white transition-all hover:bg-slate-700"
@@ -143,7 +144,7 @@ function InvoicePreview({
                 onClick={() => onRegister(true)}
                 type="button"
               >
-                <Printer className="mr-2" size={18} /> Authorize & Print
+                <Printer className="mr-2" size={18} /> Print
               </button>
             </div>
           </div>
@@ -151,55 +152,53 @@ function InvoicePreview({
           {/* --- PRINTABLE TEMPLATE --- */}
           <div id="printable-invoice" className="bg-white text-black font-sans w-full h-full flex flex-col pt-0">
             
-            {/* EXACT MATCH HEADER */}
-            <div className="flex justify-between items-start mb-4">
+            {/* HEADER ROW (Scaled down by 30%) */}
+            <div className="flex justify-between items-start mb-3">
               <div className="w-[20%]">
-                <img src={logo} alt="Three Leaves Logo" className="w-28 h-auto object-contain" />
+                <img src={logo} alt="Three Leaves Logo" className="w-24 h-auto object-contain" />
               </div>
 
-              <div className="w-[60%] text-center text-xs leading-tight pt-2">
-                <h1 className="font-bold text-[15px] mb-1">THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
-                <h2 className="font-bold text-[15px] mb-1">三叶（新加坡） 贸易公司</h2>
-                <p className="font-bold text-[10px]">CO.REG NO.53033969B &nbsp;&nbsp;&nbsp; GST REG NO. M90355440L</p>
-                <p className="text-[10px]">280 Woodlands Industrial Park E5 #06-35 Harvest @ Singapore 757322</p>
-                <p className="font-bold text-[10px]">HP: 97578869 &nbsp; Tel: 67942592 &nbsp; Email: tl.sg@hotmail.com</p>
+              <div className="w-[60%] text-center leading-[1.2] pt-1">
+                <h1 className="font-bold text-[11px]">THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
+                <h2 className="font-bold text-[11px] mb-0.5">三叶（新加坡） 贸易公司</h2>
+                <p className="font-bold text-[8px]">CO.REG NO.53033969B &nbsp;&nbsp;&nbsp; GST REG NO. M90355440L</p>
+                <p className="text-[8px]">280 Woodlands Industrial Park E5 #06-35 Harvest @ Singapore 757322</p>
+                <p className="font-bold text-[8px]">HP: 97578869 &nbsp; Tel: 67942592 &nbsp; Email: tl.sg@hotmail.com</p>
               </div>
 
-              <div className="w-[20%] text-right pt-2">
-                {/* Empty block to balance the logo flex space */}
-              </div>
+              <div className="w-[20%] text-right pt-2"></div>
             </div>
 
             {/* CUSTOMER & INVOICE DETAILS ROW */}
-            <div className="flex justify-between items-end mb-4 border-b-2 border-black pb-2">
-              <div className="w-2/3 text-[13px] font-bold flex flex-col gap-1 pr-4">
+            <div className="flex justify-between items-end mb-2 border-b-2 border-black pb-1">
+              <div className="w-2/3 text-xs font-bold flex flex-col gap-1 pr-4">
                 <div className="flex items-start">
-                  <span className="w-20 shrink-0">TO:</span>
-                  <span className="flex-1 uppercase">{customer?.name || ''}</span>
+                  <span className="w-16 shrink-0">TO:</span>
+                  <span className="flex-1 uppercase leading-tight">{customer?.name || ''}</span>
                 </div>
               </div>
               <div className="w-1/3 text-right">
-                <h2 className="text-2xl font-black tracking-widest uppercase mb-1">INVOICE</h2>
-                <div className="flex justify-end gap-2 font-bold text-sm">
+                <h2 className="text-lg font-black tracking-widest uppercase mb-1">INVOICE</h2>
+                <div className="flex justify-end gap-2 font-bold text-xs">
                   <span>No.</span>
                   <span className="text-red-600 font-mono tracking-wider">{invoiceNumber}</span>
                 </div>
-                <div className="flex justify-end gap-2 font-bold text-xs mt-1">
+                <div className="flex justify-end gap-2 font-bold text-[10px] mt-0.5">
                   <span>DATE:</span>
                   <span>{new Date().toLocaleDateString('en-GB')}</span>
                 </div>
               </div>
             </div>
 
-            {/* TABLE BODY (SOLID BORDERS) */}
-            <table className="w-full text-xs border-2 border-black text-center mb-0">
+            {/* TABLE (Products scaled up by 20%, fitting 25 items max) */}
+            <table className="w-full text-[14px] border-2 border-black text-center mb-0 leading-tight">
               <thead className="border-b-2 border-black">
-                <tr className="font-bold bg-white">
-                  <th className="p-2 border-r-2 border-black w-12">NO.</th>
-                  <th className="p-2 border-r-2 border-black text-left pl-4">DESCRIPTION</th>
-                  <th className="p-2 border-r-2 border-black w-28">QUANTITY</th>
-                  <th className="p-2 border-r-2 border-black w-32">UNIT PRICE</th>
-                  <th className="p-2 w-32">AMOUNT</th>
+                <tr className="font-bold bg-white text-xs">
+                  <th className="py-1 px-1 border-r-2 border-black w-10">NO.</th>
+                  <th className="py-1 px-2 border-r-2 border-black text-left">DESCRIPTION</th>
+                  <th className="py-1 px-1 border-r-2 border-black w-20">QTY</th>
+                  <th className="py-1 px-1 border-r-2 border-black w-24">U.PRICE</th>
+                  <th className="py-1 px-1 w-24">AMOUNT</th>
                 </tr>
               </thead>
               <tbody>
@@ -208,20 +207,20 @@ function InvoicePreview({
                   const productName = foundProduct ? (foundProduct.name || foundProduct.Items) : '-';
 
                   return (
-                    <tr key={idx} className="h-8 border-b border-black/20 last:border-b-0">
-                      <td className="p-1 border-r-2 border-black font-medium">{idx + 1}</td>
-                      <td className="p-1 border-r-2 border-black text-left pl-4 font-bold">{productName}</td>
-                      <td className="p-1 border-r-2 border-black font-medium">{item.qty} {item.unit}</td>
-                      <td className="p-1 border-r-2 border-black text-right pr-4">${formatMoney(item.unitPrice)}</td>
-                      <td className="p-1 text-right pr-4 font-bold">
+                    <tr key={idx} className="border-b border-black/20 h-[24px]">
+                      <td className="p-0 border-r-2 border-black font-medium text-xs">{idx + 1}</td>
+                      <td className="p-0 border-r-2 border-black text-left pl-2 font-bold truncate max-w-[200px]">{productName}</td>
+                      <td className="p-0 border-r-2 border-black font-medium">{item.qty} {item.unit}</td>
+                      <td className="p-0 border-r-2 border-black text-right pr-2">${formatMoney(item.unitPrice)}</td>
+                      <td className="p-0 text-right pr-2 font-bold">
                         ${formatMoney((Number(item.qty) || 0) * (Number(item.unitPrice) || 0))}
                       </td>
                     </tr>
                   );
                 })}
-                {/* Dynamically pad out rows to match the reference look */}
-                {items.length < 12 && Array.from({ length: 12 - items.length }).map((_, i) => (
-                  <tr key={`blank-${i}`} className="h-8 border-b border-black/20 last:border-b-0">
+                {/* Dynamically pad out rows to ensure exactly 25 rows fit */}
+                {items.length < 25 && Array.from({ length: 25 - items.length }).map((_, i) => (
+                  <tr key={`blank-${i}`} className="border-b border-black/20 h-[24px]">
                     <td className="border-r-2 border-black"></td>
                     <td className="border-r-2 border-black"></td>
                     <td className="border-r-2 border-black"></td>
@@ -230,48 +229,46 @@ function InvoicePreview({
                   </tr>
                 ))}
               </tbody>
-            </table>
-
-            {/* TOTALS GRID */}
-            <div className="flex justify-end border-x-2 border-b-2 border-black">
-              <table className="w-64 text-xs font-bold text-right bg-white">
-                <tbody>
-                  <tr className="border-b border-black/20">
-                    <td className="p-2 border-r-2 border-black text-center">SUBTOTAL</td>
-                    <td className="p-2 pr-4 w-32">${formatMoney(subtotal)}</td>
-                  </tr>
-                  <tr className="border-b border-black/20">
-                    <td className="p-2 border-r-2 border-black text-center">9% GST</td>
-                    <td className="p-2 pr-4">${formatMoney(gst)}</td>
-                  </tr>
-                  <tr>
-                    <td className="p-2 border-r-2 border-black text-center text-sm">TOTAL</td>
-                    <td className="p-2 pr-4 text-sm">${formatMoney(total)}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            {/* EXACT MATCH FOOTER */}
-            <div className="mt-8 text-[11px] font-bold flex flex-col gap-1 flex-grow">
-              <p>请在下午3点之前下单。之后将无法保证配送。</p>
-              <p>Please order before 3pm. Delivery will not be guaranteed afterwards.</p>
               
-              <div className="mt-4 flex flex-col gap-0.5">
-                <p>UEN: 53033969B</p>
-                <p>A/C Name: Three Leaves (Singapore) Trading Enterprise</p>
-                <p>A/C Number: 535-846562-001</p>
-                <p>Bank Name: OCBC</p>
-              </div>
-
-              <p className="mt-4">所有付款方式必须支付给 Three Leaves (Singapore) Trading Enterprise</p>
-              <p>All payments mode have to be made payable to Three Leaves (Singapore) Trading Enterprise.</p>
-            </div>
-
-            {/* SIGNATURE BLOCK */}
-            <div className="border-t border-black mt-8 pt-2 w-48 text-center text-xs font-bold">
-              Received By
-            </div>
+              {/* COMPACT FOOTER AND TOTALS (Merged directly into the table) */}
+              <tfoot>
+                <tr>
+                  <td colSpan="3" rowSpan="3" className="border-r-2 border-black p-2 text-left align-top">
+                    <div className="flex justify-between h-full">
+                      {/* Left: Tucked Notes taking ~30% of horizontal page width */}
+                      <div className="w-[48%] text-[8px] leading-[1.2] font-bold flex flex-col">
+                        <p>请在下午3点之前下单。之后将无法保证配送。</p>
+                        <p>Please order before 3pm. Delivery will not be guaranteed afterwards.</p>
+                        <div className="mt-2">
+                          <p>UEN: 53033969B</p>
+                          <p>A/C Name: Three Leaves (Singapore) Trading Enterprise</p>
+                          <p>A/C Number: 535-846562-001</p>
+                          <p>Bank Name: OCBC</p>
+                        </div>
+                        <p className="mt-2">所有付款方式必须支付给 Three Leaves (Singapore) Trading Enterprise</p>
+                      </div>
+                      
+                      {/* Right: Signature Box */}
+                      <div className="w-[35%] flex flex-col justify-end pb-2 pr-4">
+                        <div className="border-t-[1.5px] border-black text-center text-[10px] font-bold pt-1">
+                          Received By
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="border-r-2 border-b-2 border-black p-1 font-bold text-xs">SUBTOTAL</td>
+                  <td className="border-b-2 border-black p-1 text-right pr-2 font-bold text-xs">${formatMoney(subtotal)}</td>
+                </tr>
+                <tr>
+                  <td className="border-r-2 border-b-2 border-black p-1 font-bold text-xs">9% GST</td>
+                  <td className="border-b-2 border-black p-1 text-right pr-2 font-bold text-xs">${formatMoney(gst)}</td>
+                </tr>
+                <tr>
+                  <td className="border-r-2 border-black p-1 font-bold text-[14px]">TOTAL</td>
+                  <td className="p-1 text-right pr-2 font-bold text-[14px]">${formatMoney(total)}</td>
+                </tr>
+              </tfoot>
+            </table>
 
           </div>
           {/* --- END PRINTABLE TEMPLATE --- */}
@@ -289,16 +286,15 @@ export function InvoiceGenerator({ sys, onClose }) {
   // --- DYNAMIC YYMMXXX GENERATOR ---
   const generatedInvoiceNumber = useMemo(() => {
     const date = new Date();
-    const yy = String(date.getFullYear()).slice(-2); // e.g., '26'
-    const mm = String(date.getMonth() + 1).padStart(2, '0'); // e.g., '04'
+    const yy = String(date.getFullYear()).slice(-2); 
+    const mm = String(date.getMonth() + 1).padStart(2, '0'); 
     const prefix = `${yy}${mm}`;
 
-    // Look at existing invoices to find the highest sequence this month
     const monthlyInvoices = sys.invoices.filter(inv => String(inv.number).startsWith(prefix));
     let maxSequence = 0;
     
     monthlyInvoices.forEach(inv => {
-      const seqStr = String(inv.number).slice(4); // Extract the 'xxx' part
+      const seqStr = String(inv.number).slice(4); 
       const seqNum = parseInt(seqStr, 10);
       if (!isNaN(seqNum) && seqNum > maxSequence) {
         maxSequence = seqNum;
