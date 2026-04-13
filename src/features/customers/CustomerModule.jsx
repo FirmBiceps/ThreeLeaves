@@ -10,9 +10,12 @@ import {
   TrendingDown,
   TrendingUp,
   User,
+  Tag,
+  Trash2,
+  Save
 } from 'lucide-react';
 import { EntityModal } from '../../components/shared/EntityModal';
-import { formatMoneyWhole } from '../../utils/format';
+import { formatMoney, formatMoneyWhole } from '../../utils/format';
 
 const STATUS_STYLES = {
   active: { bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'Active' },
@@ -28,6 +31,7 @@ const EMPTY_CUSTOMER = {
   contactNumber: '',
   address: '',
   region: 'North',
+  custom_prices: {}, // Prepare the dictionary for special rates!
 };
 
 function CustomerFormModal({ initialValue, onClose, onSave }) {
@@ -88,6 +92,10 @@ export function CustomerModule({ sys }) {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [filter, setFilter] = useState('All');
 
+  // State for Custom Pricing Engine
+  const [pricingItem, setPricingItem] = useState('');
+  const [pricingValue, setPricingValue] = useState('');
+
   const analytics = useMemo(() => {
     const now = new Date();
 
@@ -131,7 +139,7 @@ export function CustomerModule({ sys }) {
         customerInvoices.forEach((invoice) => {
           invoice.items?.forEach((item) => {
             const product = sys.inventory.find((entry) => entry.id === item.itemId);
-            const name = product?.name || item.itemId || 'Unknown';
+            const name = product?.name || product?.Items || item.itemId || 'Unknown';
             itemCounts[name] = (itemCounts[name] || 0) + Number(item.qty || 0);
           });
         });
@@ -180,6 +188,7 @@ export function CustomerModule({ sys }) {
   const stagnantCount = analytics.filter((entry) =>
     ['at-risk', 'churned', 'cooling'].includes(entry.status),
   ).length;
+  
   const displayList = analytics.filter((entry) =>
     filter === 'All' ? true : ['at-risk', 'churned', 'cooling'].includes(entry.status),
   );
@@ -188,13 +197,44 @@ export function CustomerModule({ sys }) {
     if (form.id) {
       sys.setCustomers(sys.customers.map((customer) => (customer.id === form.id ? form : customer)));
     } else {
-      sys.setCustomers([...sys.customers, { ...form, id: `c${Date.now()}` }]);
+      sys.setCustomers([...sys.customers, { ...form, id: `c${Date.now()}`, custom_prices: {} }]);
     }
     setIsOpen(false);
   };
 
+  // Engine for adding/removing special pricing rules
+  const handleAddPricingRule = () => {
+    if (!pricingItem || !pricingValue) return;
+    
+    const updatedCustomer = { ...selectedCustomer.customer };
+    if (!updatedCustomer.custom_prices) {
+      updatedCustomer.custom_prices = {};
+    }
+    
+    updatedCustomer.custom_prices[pricingItem] = Number(pricingValue);
+    
+    // Save to Database
+    sys.setCustomers(sys.customers.map(c => c.id === updatedCustomer.id ? updatedCustomer : c));
+    
+    // Update local profile view instantly
+    setSelectedCustomer({ ...selectedCustomer, customer: updatedCustomer });
+    setPricingItem('');
+    setPricingValue('');
+  };
+
+  const handleRemovePricingRule = (itemId) => {
+    const updatedCustomer = { ...selectedCustomer.customer };
+    if (updatedCustomer.custom_prices) {
+      delete updatedCustomer.custom_prices[itemId];
+    }
+    
+    sys.setCustomers(sys.customers.map(c => c.id === updatedCustomer.id ? updatedCustomer : c));
+    setSelectedCustomer({ ...selectedCustomer, customer: updatedCustomer });
+  };
+
   if (selectedCustomer) {
     const statusStyle = STATUS_STYLES[selectedCustomer.status] || STATUS_STYLES.inactive;
+    const customPrices = selectedCustomer.customer.custom_prices || {};
 
     return (
       <div className="space-y-6">
@@ -208,6 +248,8 @@ export function CustomerModule({ sys }) {
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div className="space-y-6 lg:col-span-2">
+            
+            {/* MAIN PROFILE CARD */}
             <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
               <div className="mb-6 flex items-start justify-between">
                 <div>
@@ -270,6 +312,87 @@ export function CustomerModule({ sys }) {
               </div>
             </div>
 
+            {/* SPECIAL PRICING AGREEMENTS CARD */}
+            <div className="rounded-2xl border border-blue-200 bg-white p-8 shadow-sm">
+              <h3 className="mb-6 flex items-center text-sm font-black uppercase tracking-widest text-blue-800">
+                <Tag className="mr-2 text-blue-500" size={18} /> Special Pricing Agreements
+              </h3>
+              
+              {/* Form to Add New Rule */}
+              <div className="flex space-x-3 mb-6 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                <select
+                  className="flex-1 rounded-lg border border-slate-200 p-2 text-sm font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  value={pricingItem}
+                  onChange={(e) => setPricingItem(e.target.value)}
+                >
+                  <option value="">-- Select Product --</option>
+                  {sys.inventory.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name || item.Items} (Default: ${formatMoney(item.unitPrice || item['Unit Price (SG)'] || 0)})
+                    </option>
+                  ))}
+                </select>
+                <div className="relative w-32">
+                  <span className="absolute left-3 top-2.5 font-bold text-slate-400">$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00"
+                    className="w-full rounded-lg border border-slate-200 p-2 pl-7 text-sm font-bold text-slate-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    value={pricingValue}
+                    onChange={(e) => setPricingValue(e.target.value)}
+                  />
+                </div>
+                <button
+                  onClick={handleAddPricingRule}
+                  disabled={!pricingItem || !pricingValue}
+                  className="flex items-center rounded-lg bg-blue-600 px-4 py-2 text-xs font-black uppercase tracking-widest text-white shadow-md hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                >
+                  <Save className="mr-2" size={14} /> Lock Rate
+                </button>
+              </div>
+
+              {/* Active Rules List */}
+              <div className="space-y-3">
+                {Object.keys(customPrices).length === 0 ? (
+                  <div className="text-center p-6 border-2 border-dashed border-slate-100 rounded-xl">
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">No active pricing rules</p>
+                    <p className="text-xs text-slate-400 mt-1">This customer will be charged standard catalog prices.</p>
+                  </div>
+                ) : (
+                  Object.entries(customPrices).map(([itemId, price]) => {
+                    const product = sys.inventory.find(i => i.id === itemId);
+                    const defaultPrice = product?.unitPrice || product?.['Unit Price (SG)'] || 0;
+                    
+                    return (
+                      <div key={itemId} className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl shadow-sm hover:border-blue-200 transition-colors">
+                        <div>
+                          <p className="text-sm font-bold text-slate-800">{product?.name || product?.Items || 'Unknown Product'}</p>
+                          <p className="text-xs font-medium text-slate-500 mt-0.5">
+                            Catalog Default: <span className="line-through">${formatMoney(defaultPrice)}</span>
+                          </p>
+                        </div>
+                        <div className="flex items-center space-x-6">
+                          <div className="text-right">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-emerald-500">Locked Rate</p>
+                            <p className="text-lg font-black text-slate-900">${formatMoney(price)}</p>
+                          </div>
+                          <button 
+                            onClick={() => handleRemovePricingRule(itemId)}
+                            className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Remove Pricing Rule"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* BEHAVIORAL ANALYSIS CARD */}
             <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
               <h3 className="mb-4 text-sm font-black uppercase tracking-widest text-slate-700">
                 Behavioral Analysis & Actions
