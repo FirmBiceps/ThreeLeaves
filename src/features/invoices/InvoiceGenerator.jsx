@@ -334,14 +334,12 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
   const gst = subtotal * 0.09;
   const total = subtotal + gst;
 
-  // --- CUSTOM PRICING ENGINE ---
-  const getSafePrice = (product) => {
-    // 1. Check if this customer has a custom price override stored in their profile!
-    if (customer?.custom_prices && customer.custom_prices[product.id] !== undefined) {
-      return Number(customer.custom_prices[product.id]);
+  // --- UNIT-AWARE PRICING ENGINE ---
+  const getSafePrice = (product, unit = '箱') => {
+    const ruleKey = `${product.id}|${unit}`;
+    if (customer?.custom_prices && customer.custom_prices[ruleKey] !== undefined) {
+      return Number(customer.custom_prices[ruleKey]);
     }
-
-    // 2. Otherwise use the standard catalog price
     let price = product.unitPrice || product['Unit Price (SG)'] || 0;
     return Number(price);
   };
@@ -386,12 +384,13 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
       if (stats.count / history.length >= 0.9) {
         const product = sys.inventory.find((entry) => entry.id === itemId);
         if (product) {
+          const determinedUnit = stats.unit || product.unit || product.Unit || '箱';
           autoFilled.push({
             itemId,
             name: product.name || product.Items,
-            unit: stats.unit || product.unit || product.Unit || '箱',
+            unit: determinedUnit,
             qty: Math.max(1, Math.round(stats.totalQty / stats.count)),
-            unitPrice: getSafePrice(product), // <-- WILL USE CUSTOM PRICE IF EXISTS
+            unitPrice: getSafePrice(product, determinedUnit), // Unit Aware
             picked: false,
           });
         }
@@ -443,12 +442,13 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
       });
 
       if (foundItem) {
+        const determinedUnit = foundItem.unit || foundItem.Unit || '箱';
         nextDraftItems.push({
           itemId: foundItem.id,
           name: foundItem.name || foundItem.Items,
-          unit: foundItem.unit || foundItem.Unit || '箱',
+          unit: determinedUnit,
           qty,
-          unitPrice: getSafePrice(foundItem), // <-- WILL USE CUSTOM PRICE IF EXISTS
+          unitPrice: getSafePrice(foundItem, determinedUnit), // Unit Aware
           picked: false,
         });
       }
@@ -469,7 +469,8 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
       date: existingInvoice ? existingInvoice.date : new Date().toISOString().split('T')[0],
       items,
       total,
-      status: 'Paid',
+      status: existingInvoice ? existingInvoice.status : 'Paid',
+      deliveryStatus: existingInvoice ? existingInvoice.deliveryStatus : 'Pending',
       paymentTerms,
     };
 
@@ -636,19 +637,20 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                     <button
                       className="rounded border border-blue-100 bg-white px-3 py-1.5 text-[10px] font-bold text-blue-700 shadow-sm"
                       key={item.id}
-                      onClick={() =>
+                      onClick={() => {
+                        const determinedUnit = item.unit || item.Unit || '箱';
                         setItems([
                           ...items,
                           {
                             itemId: item.id,
                             name: item.name || item.Items,
-                            unit: item.unit || item.Unit || '箱',
+                            unit: determinedUnit,
                             qty: 1,
-                            unitPrice: getSafePrice(item),
+                            unitPrice: getSafePrice(item, determinedUnit), // Unit Aware
                             picked: false,
                           },
                         ])
-                      }
+                      }}
                       type="button"
                     >
                       + {item.name || item.Items}
@@ -671,109 +673,122 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                 </tr>
               </thead>
               <tbody>
-                {items.map((item, index) => (
-                  <tr className="border-b border-gray-100 font-bold" key={`${item.itemId}-${index}`}>
-                    <td className="p-4 text-center font-mono text-xs text-slate-300">{index + 1}</td>
-                    
-                    <td className="p-2 relative">
-                      <div className="flex items-center space-x-2">
-                        <input
-                          checked={item.picked || false}
-                          className="h-4 w-4 cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500 shrink-0"
+                {items.map((item, index) => {
+                  // Figure out if this item is using a custom price!
+                  const ruleKey = `${item.itemId}|${item.unit}`;
+                  const hasCustomPrice = customer?.custom_prices && customer.custom_prices[ruleKey] !== undefined;
+
+                  return (
+                    <tr className="border-b border-gray-100 font-bold" key={`${item.itemId}-${index}`}>
+                      <td className="p-4 text-center font-mono text-xs text-slate-300">{index + 1}</td>
+                      
+                      <td className="p-2 relative">
+                        <div className="flex items-center space-x-2">
+                          <input
+                            checked={item.picked || false}
+                            className="h-4 w-4 cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500 shrink-0"
+                            onChange={(event) => {
+                              const nextItems = [...items];
+                              nextItems[index].picked = event.target.checked;
+                              setItems(nextItems);
+                            }}
+                            type="checkbox"
+                          />
+                          <ProductSearchSelect
+                            value={item.itemId}
+                            inventory={sys.inventory}
+                            onChange={(selectedId) => {
+                              const product = sys.inventory.find((entry) => entry.id === selectedId);
+                              if (!product) return;
+                              
+                              const nextItems = [...items];
+                              const determinedUnit = product.unit || product.Unit || '箱';
+                              nextItems[index] = {
+                                ...nextItems[index],
+                                itemId: selectedId,
+                                name: product.name || product.Items,
+                                unit: determinedUnit,
+                                unitPrice: getSafePrice(product, determinedUnit),
+                              };
+                              setItems(nextItems);
+                            }}
+                          />
+                        </div>
+                      </td>
+
+                      <td className="p-2 align-top pt-3">
+                        <select
+                          className="w-full border-none text-center text-xs font-bold focus:ring-0 bg-transparent m-0"
                           onChange={(event) => {
                             const nextItems = [...items];
-                            nextItems[index].picked = event.target.checked;
-                            setItems(nextItems);
-                          }}
-                          type="checkbox"
-                        />
-                        <ProductSearchSelect
-                          value={item.itemId}
-                          inventory={sys.inventory}
-                          onChange={(selectedId) => {
-                            const product = sys.inventory.find((entry) => entry.id === selectedId);
-                            if (!product) return;
+                            const newUnit = event.target.value;
+                            nextItems[index].unit = newUnit;
                             
-                            const nextItems = [...items];
-                            nextItems[index] = {
-                              ...nextItems[index],
-                              itemId: selectedId,
-                              name: product.name || product.Items,
-                              unit: product.unit || product.Unit || '箱',
-                              unitPrice: getSafePrice(product), // <-- WILL USE CUSTOM PRICE IF SET
-                            };
+                            // Re-calculate price instantly if the unit changed!
+                            const product = sys.inventory.find(p => p.id === nextItems[index].itemId);
+                            if (product) {
+                              nextItems[index].unitPrice = getSafePrice(product, newUnit);
+                            }
+
                             setItems(nextItems);
                           }}
+                          value={item.unit}
+                        >
+                          {UNIT_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="p-2 align-top pt-2">
+                        <input
+                          className="w-full border-none bg-transparent p-1 text-center font-black text-blue-600 focus:ring-0 m-0"
+                          onChange={(event) => {
+                            const nextItems = [...items];
+                            nextItems[index].qty = event.target.value;
+                            setItems(nextItems);
+                          }}
+                          type="number"
+                          value={item.qty}
                         />
-                      </div>
-                    </td>
-
-                    <td className="p-2">
-                      <select
-                        className="w-full border-none text-center text-xs font-bold focus:ring-0 bg-transparent"
-                        onChange={(event) => {
-                          const nextItems = [...items];
-                          nextItems[index].unit = event.target.value;
-                          setItems(nextItems);
-                        }}
-                        value={item.unit}
-                      >
-                        {UNIT_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="p-2">
-                      <input
-                        className="w-full border-none bg-transparent p-1 text-center font-black text-blue-600 focus:ring-0"
-                        onChange={(event) => {
-                          const nextItems = [...items];
-                          nextItems[index].qty = event.target.value;
-                          setItems(nextItems);
-                        }}
-                        type="number"
-                        value={item.qty}
-                      />
-                    </td>
-                    <td className="p-2 align-top pt-3">
-                      <input
-                        className="w-full border-none bg-transparent p-1 text-right font-black focus:ring-0 m-0 leading-none"
-                        onChange={(event) => {
-                          const nextItems = [...items];
-                          nextItems[index].unitPrice = event.target.value;
-                          setItems(nextItems);
-                        }}
-                        step="0.01"
-                        type="number"
-                        value={item.unitPrice}
-                      />
-                      {/* THE CUSTOM PRICING BADGE */}
-                      {item.itemId && customer && (
-                        <p className={`text-[9px] text-right uppercase tracking-widest mt-0.5 ${
-                          customer?.custom_prices && customer.custom_prices[item.itemId] !== undefined 
-                            ? 'text-emerald-500 font-black' 
-                            : 'text-slate-400 font-semibold'
-                        }`}>
-                          {customer?.custom_prices && customer.custom_prices[item.itemId] !== undefined ? '★ Custom' : 'Default'}
-                        </p>
-                      )}
-                    </td>
-                    <td className="p-4 text-right font-mono text-lg font-black tracking-tighter text-slate-900">
-                      ${formatMoney((Number(item.qty) || 0) * (Number(item.unitPrice) || 0))}
-                    </td>
-                    <td className="w-8 p-0">
-                      <button
-                        className="ml-2 text-red-200 hover:text-red-500"
-                        onClick={() => setItems(items.filter((_, itemIndex) => itemIndex !== index))}
-                        type="button"
-                      >
-                        <Trash2 size={18} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="p-2 align-top pt-2">
+                        <input
+                          className="w-full border-none bg-transparent p-1 text-right font-black focus:ring-0 m-0 leading-none"
+                          onChange={(event) => {
+                            const nextItems = [...items];
+                            nextItems[index].unitPrice = event.target.value;
+                            setItems(nextItems);
+                          }}
+                          step="0.01"
+                          type="number"
+                          value={item.unitPrice}
+                        />
+                        {/* CUSTOM PRICING BADGE */}
+                        {item.itemId && customer && (
+                          <p className={`text-[9px] text-right uppercase tracking-widest mt-0.5 ${
+                            hasCustomPrice ? 'text-emerald-500 font-black' : 'text-slate-400 font-semibold'
+                          }`}>
+                            {hasCustomPrice ? '★ Custom' : 'Default'}
+                          </p>
+                        )}
+                      </td>
+                      <td className="p-4 text-right font-mono text-lg font-black tracking-tighter text-slate-900 align-top">
+                        ${formatMoney((Number(item.qty) || 0) * (Number(item.unitPrice) || 0))}
+                      </td>
+                      <td className="w-8 p-0 align-top pt-4">
+                        <button
+                          className="ml-2 text-red-200 hover:text-red-500"
+                          onClick={() => setItems(items.filter((_, itemIndex) => itemIndex !== index))}
+                          type="button"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
 
