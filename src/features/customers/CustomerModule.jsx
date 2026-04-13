@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import {
   Activity,
   AlertTriangle,
@@ -12,10 +12,13 @@ import {
   User,
   Tag,
   Trash2,
-  Save
+  Save,
+  Edit,
+  Search
 } from 'lucide-react';
 import { EntityModal } from '../../components/shared/EntityModal';
 import { formatMoney, formatMoneyWhole } from '../../utils/format';
+import { UNIT_OPTIONS } from '../../data/company';
 
 const STATUS_STYLES = {
   active: { bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'Active' },
@@ -31,8 +34,94 @@ const EMPTY_CUSTOMER = {
   contactNumber: '',
   address: '',
   region: 'North',
-  custom_prices: {}, // Prepare the dictionary for special rates!
+  custom_prices: {}, 
 };
+
+// ==========================================
+// SEARCHABLE PRODUCT DROPDOWN
+// ==========================================
+function ProductSearchSelect({ value, inventory, onChange }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const selectedProduct = inventory.find((entry) => entry.id === value);
+  const displayName = selectedProduct ? (selectedProduct.name || selectedProduct.Items) : '';
+
+  const filteredInventory = inventory.filter((item) => {
+    const itemName = (item.name || item.Items || '').toLowerCase();
+    return itemName.includes(searchTerm.toLowerCase());
+  });
+
+  return (
+    <div className="relative w-full text-left flex-1" ref={dropdownRef}>
+      {!isOpen ? (
+        <button
+          type="button"
+          onClick={() => {
+            setIsOpen(true);
+            setSearchTerm(''); 
+          }}
+          className={`w-full text-left rounded-lg border border-slate-200 p-2 text-sm font-bold transition-colors focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${
+            displayName ? 'text-slate-900 bg-white' : 'text-slate-400 bg-white'
+          }`}
+        >
+          {displayName || '-- Search Product --'}
+        </button>
+      ) : (
+        <div className="absolute z-[5000] top-0 left-0 w-full min-w-[300px] bg-white border border-slate-300 rounded shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+          <div className="flex items-center p-2 border-b border-slate-200 bg-slate-50">
+            <Search size={14} className="text-slate-400 ml-1 mr-2 shrink-0" />
+            <input
+              autoFocus
+              type="text"
+              className="w-full bg-transparent border-none text-xs font-bold text-slate-800 p-1 focus:ring-0 placeholder:text-slate-400 outline-none"
+              placeholder="Type to search..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <div className="max-h-52 overflow-y-auto">
+            {filteredInventory.length > 0 ? (
+              filteredInventory.map((item) => {
+                const itemName = item.name || item.Items || 'Unnamed Product';
+                const defaultPrice = formatMoney(item.unitPrice || item['Unit Price (SG)'] || 0);
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 border-b border-slate-100 last:border-0 transition-colors flex justify-between"
+                    onClick={() => {
+                      onChange(item.id);
+                      setIsOpen(false);
+                    }}
+                  >
+                    <span>{itemName}</span>
+                    <span className="text-slate-400 font-normal">Def: ${defaultPrice}</span>
+                  </button>
+                );
+              })
+            ) : (
+              <div className="p-3 text-center text-xs text-slate-400 font-medium">
+                No products found.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function CustomerFormModal({ initialValue, onClose, onSave }) {
   const [form, setForm] = useState(initialValue);
@@ -94,6 +183,7 @@ export function CustomerModule({ sys }) {
 
   // State for Custom Pricing Engine
   const [pricingItem, setPricingItem] = useState('');
+  const [pricingUnit, setPricingUnit] = useState('箱');
   const [pricingValue, setPricingValue] = useState('');
 
   const analytics = useMemo(() => {
@@ -194,38 +284,44 @@ export function CustomerModule({ sys }) {
   );
 
   const handleSave = (form) => {
+    // If it exists, update it but preserve the custom_prices dictionary!
     if (form.id) {
-      sys.setCustomers(sys.customers.map((customer) => (customer.id === form.id ? form : customer)));
+      sys.setCustomers(sys.customers.map((c) => (c.id === form.id ? { ...c, ...form } : c)));
+      
+      // Also update the local view instantly if we are looking at them
+      if (selectedCustomer && selectedCustomer.customer.id === form.id) {
+        setSelectedCustomer({ ...selectedCustomer, customer: { ...selectedCustomer.customer, ...form }});
+      }
     } else {
       sys.setCustomers([...sys.customers, { ...form, id: `c${Date.now()}`, custom_prices: {} }]);
     }
     setIsOpen(false);
   };
 
-  // Engine for adding/removing special pricing rules
+  // Engine for adding/removing special pricing rules (Unit-Aware)
   const handleAddPricingRule = () => {
-    if (!pricingItem || !pricingValue) return;
+    if (!pricingItem || !pricingValue || !pricingUnit) return;
     
     const updatedCustomer = { ...selectedCustomer.customer };
     if (!updatedCustomer.custom_prices) {
       updatedCustomer.custom_prices = {};
     }
     
-    updatedCustomer.custom_prices[pricingItem] = Number(pricingValue);
+    // Create a composite key: "ProductID|Unit" so we can have different prices for Boxes vs Kgs
+    const ruleKey = `${pricingItem}|${pricingUnit}`;
+    updatedCustomer.custom_prices[ruleKey] = Number(pricingValue);
     
-    // Save to Database
     sys.setCustomers(sys.customers.map(c => c.id === updatedCustomer.id ? updatedCustomer : c));
     
-    // Update local profile view instantly
     setSelectedCustomer({ ...selectedCustomer, customer: updatedCustomer });
     setPricingItem('');
     setPricingValue('');
   };
 
-  const handleRemovePricingRule = (itemId) => {
+  const handleRemovePricingRule = (ruleKey) => {
     const updatedCustomer = { ...selectedCustomer.customer };
     if (updatedCustomer.custom_prices) {
-      delete updatedCustomer.custom_prices[itemId];
+      delete updatedCustomer.custom_prices[ruleKey];
     }
     
     sys.setCustomers(sys.customers.map(c => c.id === updatedCustomer.id ? updatedCustomer : c));
@@ -253,7 +349,20 @@ export function CustomerModule({ sys }) {
             <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
               <div className="mb-6 flex items-start justify-between">
                 <div>
-                  <h2 className="text-2xl font-black text-slate-900">{selectedCustomer.customer.name}</h2>
+                  <div className="flex items-center">
+                    <h2 className="text-2xl font-black text-slate-900">{selectedCustomer.customer.name}</h2>
+                    {sys.hasPerm('manage_customers') && (
+                      <button
+                        onClick={() => {
+                          setEditingCustomer(selectedCustomer.customer);
+                          setIsOpen(true);
+                        }}
+                        className="ml-4 flex items-center rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-200 transition-colors"
+                      >
+                        <Edit size={14} className="mr-1" /> Edit Details
+                      </button>
+                    )}
+                  </div>
                   <p className="mt-1 text-sm font-medium text-gray-500">
                     {selectedCustomer.customer.address} ({selectedCustomer.customer.region})
                   </p>
@@ -312,27 +421,39 @@ export function CustomerModule({ sys }) {
               </div>
             </div>
 
-            {/* SPECIAL PRICING AGREEMENTS CARD */}
+            {/* SPECIAL PRICING AGREEMENTS CARD (Now Unit-Aware!) */}
             <div className="rounded-2xl border border-blue-200 bg-white p-8 shadow-sm">
               <h3 className="mb-6 flex items-center text-sm font-black uppercase tracking-widest text-blue-800">
                 <Tag className="mr-2 text-blue-500" size={18} /> Special Pricing Agreements
               </h3>
               
               {/* Form to Add New Rule */}
-              <div className="flex space-x-3 mb-6 bg-slate-50 p-4 rounded-xl border border-slate-100">
-                <select
-                  className="flex-1 rounded-lg border border-slate-200 p-2 text-sm font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              <div className="flex space-x-3 mb-6 bg-slate-50 p-4 rounded-xl border border-slate-100 items-center">
+                <ProductSearchSelect
                   value={pricingItem}
-                  onChange={(e) => setPricingItem(e.target.value)}
+                  inventory={sys.inventory}
+                  onChange={(selectedId) => {
+                    setPricingItem(selectedId);
+                    const product = sys.inventory.find((entry) => entry.id === selectedId);
+                    if (product) {
+                      setPricingUnit(product.unit || product.Unit || '箱');
+                    }
+                  }}
+                />
+                
+                <select
+                  className="w-24 rounded-lg border border-slate-200 p-2 text-sm font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 shrink-0"
+                  value={pricingUnit}
+                  onChange={(e) => setPricingUnit(e.target.value)}
                 >
-                  <option value="">-- Select Product --</option>
-                  {sys.inventory.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name || item.Items} (Default: ${formatMoney(item.unitPrice || item['Unit Price (SG)'] || 0)})
+                  {UNIT_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
                     </option>
                   ))}
                 </select>
-                <div className="relative w-32">
+
+                <div className="relative w-32 shrink-0">
                   <span className="absolute left-3 top-2.5 font-bold text-slate-400">$</span>
                   <input
                     type="number"
@@ -343,32 +464,38 @@ export function CustomerModule({ sys }) {
                     onChange={(e) => setPricingValue(e.target.value)}
                   />
                 </div>
+                
                 <button
                   onClick={handleAddPricingRule}
                   disabled={!pricingItem || !pricingValue}
-                  className="flex items-center rounded-lg bg-blue-600 px-4 py-2 text-xs font-black uppercase tracking-widest text-white shadow-md hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                  className="flex items-center rounded-lg bg-blue-600 px-4 py-2 text-xs font-black uppercase tracking-widest text-white shadow-md hover:bg-blue-700 disabled:opacity-50 transition-colors shrink-0"
                 >
-                  <Save className="mr-2" size={14} /> Lock Rate
+                  <Save className="mr-2" size={14} /> Lock
                 </button>
               </div>
 
               {/* Active Rules List */}
               <div className="space-y-3">
                 {Object.keys(customPrices).length === 0 ? (
-                  <div className="text-center p-6 border-2 border-dashed border-slate-100 rounded-xl">
+                  <div className="text-center p-6 border-2 border-dashed border-slate-200 rounded-xl">
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">No active pricing rules</p>
                     <p className="text-xs text-slate-400 mt-1">This customer will be charged standard catalog prices.</p>
                   </div>
                 ) : (
-                  Object.entries(customPrices).map(([itemId, price]) => {
+                  Object.entries(customPrices).map(([ruleKey, price]) => {
+                    // Extract ID and Unit from the composite key "itemId|unit"
+                    const [itemId, unit] = ruleKey.includes('|') ? ruleKey.split('|') : [ruleKey, '箱'];
                     const product = sys.inventory.find(i => i.id === itemId);
                     const defaultPrice = product?.unitPrice || product?.['Unit Price (SG)'] || 0;
                     
                     return (
-                      <div key={itemId} className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl shadow-sm hover:border-blue-200 transition-colors">
+                      <div key={ruleKey} className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl shadow-sm hover:border-blue-200 transition-colors">
                         <div>
-                          <p className="text-sm font-bold text-slate-800">{product?.name || product?.Items || 'Unknown Product'}</p>
-                          <p className="text-xs font-medium text-slate-500 mt-0.5">
+                          <p className="text-sm font-bold text-slate-800 flex items-center">
+                            {product?.name || product?.Items || 'Unknown Product'} 
+                            <span className="ml-3 px-2 py-0.5 bg-blue-50 text-blue-600 rounded text-xs font-black border border-blue-100">{unit}</span>
+                          </p>
+                          <p className="text-xs font-medium text-slate-500 mt-1">
                             Catalog Default: <span className="line-through">${formatMoney(defaultPrice)}</span>
                           </p>
                         </div>
@@ -378,7 +505,7 @@ export function CustomerModule({ sys }) {
                             <p className="text-lg font-black text-slate-900">${formatMoney(price)}</p>
                           </div>
                           <button 
-                            onClick={() => handleRemovePricingRule(itemId)}
+                            onClick={() => handleRemovePricingRule(ruleKey)}
                             className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                             title="Remove Pricing Rule"
                           >
