@@ -1,7 +1,8 @@
 import { Lock } from 'lucide-react';
 
 export function LoginView({ sys, loginError, setLoginError }) {
-  const handleSubmit = (event) => {
+  // 1. Made this function 'async'
+  const handleSubmit = async (event) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const username = form.get('username');
@@ -9,8 +10,9 @@ export function LoginView({ sys, loginError, setLoginError }) {
     const user = sys.users.find((entry) => entry.username === username && entry.password === password);
 
     if (user) {
-      sys.setCurrentUser(user);
       setLoginError('');
+      // 2. Added 'await' so the app waits for the token to securely save before trying to route you!
+      await sys.setCurrentUser(user); 
       return;
     }
 
