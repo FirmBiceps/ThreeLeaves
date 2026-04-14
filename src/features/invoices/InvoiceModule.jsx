@@ -12,6 +12,7 @@ import {
   Search,
   BrainCircuit,
   Plus,
+  Edit,
   ChevronLeft,
   ChevronRight
 } from 'lucide-react';
@@ -26,7 +27,7 @@ import logo from './three_leaves_logo.png';
 const CJK_FONT = '"Microsoft YaHei", "微软雅黑", "PingFang SC", "SimHei", "黑体", Arial, sans-serif';
 
 // ==========================================
-// 1. SEARCHABLE PRODUCT DROPDOWN
+// SEARCHABLE PRODUCT DROPDOWN
 // ==========================================
 function ProductSearchSelect({ value, inventory, onChange }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -110,92 +111,12 @@ function ProductSearchSelect({ value, inventory, onChange }) {
 }
 
 // ==========================================
-// 2. SEARCHABLE CUSTOMER DROPDOWN (NEW)
-// ==========================================
-function CustomerSearchSelect({ value, customers, onChange, disabled }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const dropdownRef = useRef(null);
-
-  useEffect(() => {
-    function handleClickOutside(event) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setIsOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const selectedCustomer = customers.find((c) => c.id === value);
-  const displayName = selectedCustomer ? selectedCustomer.name : '';
-
-  const filteredCustomers = customers.filter((c) =>
-    (c.name || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  return (
-    <div className="relative w-full text-left" ref={dropdownRef}>
-      {!isOpen ? (
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => {
-            setIsOpen(true);
-            setSearchTerm(''); 
-          }}
-          className={`mt-1 w-full text-left text-lg font-black p-0 border border-transparent bg-transparent focus:outline-none transition-colors ${
-            displayName ? 'text-slate-900' : 'text-slate-400'
-          } ${disabled ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:text-blue-600'}`}
-        >
-          {displayName || 'Select Entity...'}
-        </button>
-      ) : (
-        <div className="absolute z-[5000] top-8 left-0 w-80 bg-white border border-slate-300 rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-100">
-          <div className="flex items-center p-3 border-b border-slate-200 bg-slate-50">
-            <Search size={16} className="text-slate-400 ml-1 mr-2 shrink-0" />
-            <input
-              autoFocus
-              type="text"
-              className="w-full bg-transparent border-none text-sm font-bold text-slate-800 p-1 focus:ring-0 placeholder:text-slate-400 outline-none"
-              placeholder="Search customer..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-          <div className="max-h-60 overflow-y-auto">
-            {filteredCustomers.length > 0 ? (
-              filteredCustomers.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  className="w-full text-left px-4 py-3 text-sm font-bold text-slate-700 hover:bg-blue-50 border-b border-slate-100 last:border-0 transition-colors"
-                  onClick={() => {
-                    onChange(c.id);
-                    setIsOpen(false);
-                  }}
-                >
-                  {c.name}
-                </button>
-              ))
-            ) : (
-              <div className="p-4 text-center text-sm text-slate-400 font-medium">
-                No customers found.
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ==========================================
-// COMPONENT 3: INVOICE PREVIEW MODAL
+// COMPONENT 1: INVOICE PREVIEW MODAL
 // ==========================================
 function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
   if (!invoice) return null;
 
+  // Extract variables for printable layout
   const customerObj = sys.customers.find(c => c.id === invoice.customerId) || {};
   const customerAddress = customerObj.address || '';
   const subtotal = invoice.items.reduce((sum, item) => sum + (Number(item.qty) || 0) * (Number(item.unitPrice) || 0), 0);
@@ -203,23 +124,20 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
   const total = subtotal + gst;
 
   return (
-    <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm print:static print:inset-auto print:bg-white print:p-0 print:block print:z-auto">
+    <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm print:bg-white print:p-0 print:block print:absolute print:inset-0 print:z-[9999]">
       
+      {/* HARD-INJECTED PRINT STYLES TO FORCE BROWSER TO RENDER CHINESE CHARACTERS */}
       <style type="text/css">
         {`
           @media print {
-            @page {
-              size: A4;
-              margin: 0mm; 
-            }
+            @page { margin: 0; }
             body {
-              margin: 0mm;
-              padding: 0mm;
+              margin: 1cm;
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
             }
-            *, html, body, div, p, span, h1, h2, h3, table, th, td {
-              font-family: ${CJK_FONT} !important;
+            *, html, body {
+              font-family: "Microsoft YaHei", "微软雅黑", "PingFang SC", "SimHei", "黑体", Arial, sans-serif !important;
             }
           }
         `}
@@ -324,9 +242,7 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
 
       {/* PRINT VIEW (EXACT MATCH PDF LAYOUT) */}
       <div 
-        lang="zh"
-        className="hidden print:flex w-full flex-col bg-white box-border px-[15mm] py-[15mm] text-black"
-        style={{ fontFamily: CJK_FONT }}
+        className="hidden print:flex w-[210mm] min-h-[297mm] flex-col bg-white p-8 text-black"
       >
         <div className="flex justify-between items-start mb-6">
           <div className="w-[25%]">
@@ -334,8 +250,8 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
           </div>
 
           <div className="w-[50%] text-center leading-tight pt-2">
-            <h1 className="font-bold text-[14px]" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
-            <h2 className="font-bold text-[13px] mb-1" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
+            <h1 className="font-bold text-[14px]">THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
+            <h2 className="font-bold text-[13px] mb-1">三叶（新加坡） 贸易公司</h2>
             <p className="font-bold text-[10px] mb-0.5">CO.REG NO.53033969B &nbsp;&nbsp;&nbsp; GST REG NO. M90355440L</p>
             <p className="text-[10px] mb-0.5">280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
             <p className="text-[10px]">HP: 97578869 (Mr Ye) &nbsp; HP: 91113505 (Min) &nbsp; Email: 3leaves.sg@gmail.com</p>
@@ -343,7 +259,7 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
 
           <div className="w-[25%] flex flex-col items-end pt-1">
             <div className="text-center w-full mb-2">
-              <h2 className="text-[18px] font-bold tracking-[0.2em] leading-none mb-0.5" style={{ fontFamily: CJK_FONT }}>發票</h2>
+              <h2 className="text-[18px] font-bold tracking-[0.2em] leading-none mb-0.5">發票</h2>
               <h3 className="text-[14px] font-bold tracking-widest uppercase">TAX INVOICE</h3>
             </div>
             
@@ -364,7 +280,7 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
           <div className="flex justify-between w-full mb-2">
             <div className="flex items-end w-[65%] pr-4">
               <span className="w-12 shrink-0">TO:</span>
-              <span className="flex-1 uppercase border-b border-black pb-0.5" style={{ fontFamily: CJK_FONT }}>
+              <span className="flex-1 uppercase border-b border-black pb-0.5">
                 {invoice.customer || ''}
               </span>
             </div>
@@ -379,13 +295,13 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
           </div>
           <div className="flex items-end w-full mt-1">
             <span className="w-24 shrink-0">ADDRESS:</span>
-            <span className="flex-1 uppercase leading-tight border-b border-black pb-0.5 break-words whitespace-pre-wrap" style={{ fontFamily: CJK_FONT }}>
+            <span className="flex-1 uppercase leading-tight border-b border-black pb-0.5">
               {customerAddress}
             </span>
           </div>
         </div>
 
-        <table className="w-full text-[15px] border-2 border-black text-center mb-0 leading-tight flex-grow" style={{ fontFamily: CJK_FONT }}>
+        <table className="w-full text-[15px] border-2 border-black text-center mb-0 leading-tight flex-grow">
           <thead className="border-b-2 border-black">
             <tr className="font-bold bg-white text-[14px]">
               <th className="py-2 px-1 border-r border-black w-10">NO.</th>
@@ -395,15 +311,15 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
               <th className="py-2 px-1 w-32 text-center">AMOUNT</th>
             </tr>
           </thead>
-          <tbody style={{ fontFamily: CJK_FONT }}>
+          <tbody>
             {invoice.items && invoice.items.map((item, idx) => {
               const productName = item.name || item.Items || '-';
 
               return (
-                <tr key={idx} className="h-[32px] align-top" style={{ fontFamily: CJK_FONT }}>
+                <tr key={idx} className="h-[32px] align-top">
                   <td className="p-1 border-r border-black font-medium text-center">{idx + 1}</td>
-                  <td className="p-1 border-r border-black text-left pl-2 font-bold" style={{ fontFamily: CJK_FONT }}>{productName}</td>
-                  <td className="p-1 border-r border-black font-medium text-center" style={{ fontFamily: CJK_FONT }}>{item.qty || item.quantity} {item.unit}</td>
+                  <td className="p-1 border-r border-black text-left pl-2 font-bold">{productName}</td>
+                  <td className="p-1 border-r border-black font-medium text-center">{item.qty || item.quantity} {item.unit}</td>
                   <td className="p-1 border-r border-black text-center">${formatMoney(item.unitPrice)}</td>
                   <td className="p-1 text-center font-bold">
                     ${formatMoney((Number(item.qty || item.quantity) || 0) * (Number(item.unitPrice) || 0))}
@@ -425,7 +341,7 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
 
         <div className="flex w-full mt-2">
           <div className="flex-1 pr-4 text-[12px] font-bold leading-snug flex flex-col justify-between">
-            <div style={{ fontFamily: CJK_FONT }}>
+            <div>
               <p>请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
               <p>Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
               <div className="mt-4">
@@ -463,7 +379,7 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
 }
 
 // ==========================================
-// EXACT MATCH PDF PREVIEW (For Generator)
+// EXACT MATCH PDF PREVIEW
 // ==========================================
 function InvoicePreview({
   customer,
@@ -480,18 +396,18 @@ function InvoicePreview({
   existingInvoice
 }) {
   return (
-    <div className="fixed inset-0 z-[3000] overflow-y-auto bg-slate-950/90 print:static print:inset-auto print:bg-white print:p-0 print:block print:z-auto print:overflow-visible">
+    <div className="fixed inset-0 z-[3000] overflow-y-auto bg-slate-950/90 print:bg-white print:p-0">
       
       <style type="text/css">
         {`
           @media print {
             @page { 
               size: A4;
-              margin: 0mm; 
+              margin: 0 !important; 
             }
             body {
-              margin: 0mm;
-              padding: 0mm;
+              margin: 0 !important;
+              padding: 0 !important;
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
             }
@@ -502,8 +418,8 @@ function InvoicePreview({
         `}
       </style>
 
-      <div className="flex min-h-full justify-center py-12 print:p-0 print:block">
-        <div className="relative flex min-h-[297mm] w-full max-w-[210mm] flex-col bg-white p-8 shadow-2xl print:w-full print:max-w-none print:min-h-0 print:h-auto print:mx-0 print:box-border print:px-[15mm] print:py-[15mm] print:shadow-none">
+      <div className="flex min-h-full justify-center py-12 print:py-0">
+        <div className="relative flex min-h-[297mm] w-full max-w-[210mm] flex-col bg-white p-8 shadow-2xl print:w-[210mm] print:h-[297mm] print:mx-auto print:box-border print:p-[15mm] print:shadow-none">
           
           <div className="absolute -top-16 left-0 right-0 flex items-center justify-between px-4 print:hidden">
             <button
@@ -587,7 +503,7 @@ function InvoicePreview({
               </div>
               <div className="flex items-end w-full mt-1">
                 <span className="w-24 shrink-0">ADDRESS:</span>
-                <span className="flex-1 uppercase leading-tight border-b border-black pb-0.5 break-words whitespace-pre-wrap" style={{ fontFamily: CJK_FONT }}>
+                <span className="flex-1 uppercase leading-tight border-b border-black pb-0.5" style={{ fontFamily: CJK_FONT }}>
                   {customer?.address || ''}
                 </span>
               </div>
@@ -702,6 +618,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
   }, [sys.invoices, existingInvoice]);
 
   const [invoiceNumber, setInvoiceNumber] = useState(defaultInvoiceNumber);
+  // NEW: State to control the manually selected date
   const [invoiceDate, setInvoiceDate] = useState(
     existingInvoice ? existingInvoice.date : new Date().toISOString().split('T')[0]
   );
@@ -893,7 +810,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
       customerId,
       customer: customer?.name || existingInvoice?.customer || 'Unknown Customer',
       region: customer?.region || existingInvoice?.region || '',
-      date: invoiceDate,
+      date: invoiceDate, // NEW: Uses the manually selected date
       items,
       total,
       status: existingInvoice ? existingInvoice.status : 'Paid',
@@ -960,7 +877,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
         customer={customer}
         gst={gst}
         invoiceNumber={invoiceNumber}
-        invoiceDate={invoiceDate}
+        invoiceDate={invoiceDate} // NEW: Pass it into the print layout
         items={items}
         onBack={() => setPreviewMode(false)}
         onRegister={handleRegister}
@@ -1036,16 +953,21 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
             <CompanyHeader />
 
             <div className="mb-12 flex justify-between">
-              
-              {/* THE FIX: Replaced <select> with new searchable Customer dropdown */}
               <div className="w-[30%] border-r border-slate-100 pr-6">
                 <label className="text-[10px] font-black uppercase text-gray-400">Customer Account:</label>
-                <CustomerSearchSelect 
-                  value={customerId} 
-                  customers={sys.customers} 
-                  onChange={setCustomerId} 
+                <select
+                  className="mt-1 w-full border-none bg-transparent p-0 text-lg font-black focus:ring-0"
+                  onChange={(event) => setCustomerId(event.target.value)}
+                  value={customerId}
                   disabled={!!existingInvoice} 
-                />
+                >
+                  <option value="">Select Entity...</option>
+                  {sys.customers.map((entry) => (
+                    <option key={entry.id} value={entry.id}>
+                      {entry.name}
+                    </option>
+                  ))}
+                </select>
                 {autoFillNotif && (
                   <p className="mt-2 flex items-center text-[10px] font-black uppercase tracking-widest text-emerald-500">
                     <Sparkles className="mr-1" size={12} /> Predictively Prefilled
@@ -1053,7 +975,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                 )}
               </div>
 
-              {/* THE FIX: Set font size explicitly to 16px */}
+              {/* NEW: The manual Date Picker with text-[16px] */}
               <div className="w-[20%] border-r border-slate-100 px-6">
                 <label className="text-[10px] font-black uppercase text-gray-400">Invoice Date:</label>
                 <input
@@ -1317,7 +1239,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
 }
 
 // ==========================================
-// COMPONENT 4: MAIN INVOICE MODULE
+// COMPONENT 2: MAIN INVOICE MODULE
 // ==========================================
 export function InvoiceModule({ sys }) {
   const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
