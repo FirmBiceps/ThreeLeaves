@@ -107,6 +107,87 @@ function ProductSearchSelect({ value, inventory, onChange }) {
 }
 
 // ==========================================
+// SEARCHABLE CUSTOMER DROPDOWN (NEW)
+// ==========================================
+function CustomerSearchSelect({ value, customers, onChange, disabled }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const selectedCustomer = (customers || []).find((c) => c.id === value);
+  const displayName = selectedCustomer ? selectedCustomer.name : '';
+
+  const filteredCustomers = (customers || []).filter((c) =>
+    (c.name || '').toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  return (
+    <div className="relative w-full text-left" ref={dropdownRef}>
+      {!isOpen ? (
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => {
+            setIsOpen(true);
+            setSearchTerm(''); 
+          }}
+          className={`mt-1 w-full text-left text-[16px] font-black p-0 border border-transparent bg-transparent focus:outline-none transition-colors ${
+            displayName ? 'text-slate-900' : 'text-slate-400'
+          } ${disabled ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:text-blue-600'}`}
+        >
+          {displayName || 'Select Entity...'}
+        </button>
+      ) : (
+        <div className="absolute z-[5000] top-8 left-0 w-80 bg-white border border-slate-300 rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+          <div className="flex items-center p-3 border-b border-slate-200 bg-slate-50">
+            <Search size={16} className="text-slate-400 ml-1 mr-2 shrink-0" />
+            <input
+              autoFocus
+              type="text"
+              className="w-full bg-transparent border-none text-sm font-bold text-slate-800 p-1 focus:ring-0 placeholder:text-slate-400 outline-none"
+              placeholder="Search customer..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <div className="max-h-60 overflow-y-auto">
+            {filteredCustomers.length > 0 ? (
+              filteredCustomers.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className="w-full text-left px-4 py-3 text-sm font-bold text-slate-700 hover:bg-blue-50 border-b border-slate-100 last:border-0 transition-colors"
+                  onClick={() => {
+                    onChange(c.id);
+                    setIsOpen(false);
+                  }}
+                >
+                  {c.name}
+                </button>
+              ))
+            ) : (
+              <div className="p-4 text-center text-sm text-slate-400 font-medium">
+                No customers found.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ==========================================
 // EXACT MATCH PDF PREVIEW
 // ==========================================
 function InvoicePreview({
@@ -231,7 +312,7 @@ function InvoicePreview({
               </div>
               <div className="flex items-end w-full mt-1">
                 <span className="w-24 shrink-0">ADDRESS:</span>
-                <span className="flex-1 uppercase leading-tight border-b border-black pb-0.5" style={{ fontFamily: CJK_FONT }}>
+                <span className="flex-1 uppercase leading-tight border-b border-black pb-0.5 break-words whitespace-pre-wrap" style={{ fontFamily: CJK_FONT }}>
                   {customer?.address || ''}
                 </span>
               </div>
@@ -346,7 +427,6 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
   }, [sys.invoices, existingInvoice]);
 
   const [invoiceNumber, setInvoiceNumber] = useState(defaultInvoiceNumber);
-  // NEW: State to control the manually selected date
   const [invoiceDate, setInvoiceDate] = useState(
     existingInvoice ? existingInvoice.date : new Date().toISOString().split('T')[0]
   );
@@ -538,7 +618,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
       customerId,
       customer: customer?.name || existingInvoice?.customer || 'Unknown Customer',
       region: customer?.region || existingInvoice?.region || '',
-      date: invoiceDate, // NEW: Uses the manually selected date
+      date: invoiceDate,
       items,
       total,
       status: existingInvoice ? existingInvoice.status : 'Paid',
@@ -605,7 +685,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
         customer={customer}
         gst={gst}
         invoiceNumber={invoiceNumber}
-        invoiceDate={invoiceDate} // NEW: Pass it into the print layout
+        invoiceDate={invoiceDate}
         items={items}
         onBack={() => setPreviewMode(false)}
         onRegister={handleRegister}
@@ -680,23 +760,16 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
           <div className="mx-auto mb-12 w-full max-w-[800px] border-b-8 border-blue-600 bg-white p-12 text-sm text-gray-800 shadow-xl">
             <CompanyHeader />
 
-            {/* NEW: Adjusted layout to comfortably fit 4 options now */}
             <div className="mb-12 flex justify-between">
+              
               <div className="w-[30%] border-r border-slate-100 pr-6">
                 <label className="text-[10px] font-black uppercase text-gray-400">Customer Account:</label>
-                <select
-                  className="mt-1 w-full border-none bg-transparent p-0 text-lg font-black focus:ring-0"
-                  onChange={(event) => setCustomerId(event.target.value)}
-                  value={customerId}
+                <CustomerSearchSelect 
+                  value={customerId} 
+                  customers={sys.customers} 
+                  onChange={setCustomerId} 
                   disabled={!!existingInvoice} 
-                >
-                  <option value="">Select Entity...</option>
-                  {sys.customers.map((entry) => (
-                    <option key={entry.id} value={entry.id}>
-                      {entry.name}
-                    </option>
-                  ))}
-                </select>
+                />
                 {autoFillNotif && (
                   <p className="mt-2 flex items-center text-[10px] font-black uppercase tracking-widest text-emerald-500">
                     <Sparkles className="mr-1" size={12} /> Predictively Prefilled
@@ -704,12 +777,11 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                 )}
               </div>
 
-              {/* NEW: The manual Date Picker! */}
               <div className="w-[20%] border-r border-slate-100 px-6">
                 <label className="text-[10px] font-black uppercase text-gray-400">Invoice Date:</label>
                 <input
                   type="date"
-                  className="mt-1 w-full cursor-pointer border-none bg-transparent p-0 text-lg font-black text-slate-800 focus:ring-0 outline-none"
+                  className="mt-1 w-full cursor-pointer border-none bg-transparent p-0 text-[16px] font-black text-slate-800 focus:ring-0 outline-none"
                   value={invoiceDate}
                   onChange={(event) => setInvoiceDate(event.target.value)}
                 />
