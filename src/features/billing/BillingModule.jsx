@@ -1,455 +1,341 @@
-import { useMemo, useState } from 'react';
-import {
-  ArrowRight,
-  BarChart2,
-  Calendar,
-  Printer,
-  Receipt,
-  TrendingDown,
-  TrendingUp,
-} from 'lucide-react';
-import { CompanyHeader } from '../../components/shared/CompanyHeader';
-import { formatMonthLabel, shiftMonthString } from '../../utils/date';
+import { useMemo, useState, useEffect } from 'react';
+import { FileText, Printer, Search, Calendar } from 'lucide-react';
 import { formatMoney } from '../../utils/format';
 
-function StatementPreview({ previewStatement, selectedMonth, statementType, onBack }) {
+// Re-use the logo from your invoices folder (adjust path if needed)
+import logo from '../invoices/three_leaves_logo.png'; 
+
+export function StatementModule({ sys }) {
+  // Default to current month (e.g., "2026-04")
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [searchTerm, setSearchTerm] = useState('');
+  
+  // Controls what gets sent to the printer: 'ALL' or a specific 'customerId'
+  const [printTarget, setPrintTarget] = useState(null);
+
+  // 1. Group all invoices by Customer for the selected month
+  const statementData = useMemo(() => {
+    const data = {};
+
+    // Filter invoices by the selected month (YYYY-MM)
+    const monthInvoices = sys.invoices.filter(inv => {
+      if (!inv.date) return false;
+      return inv.date.startsWith(selectedMonth);
+    });
+
+    monthInvoices.forEach(inv => {
+      if (!data[inv.customerId]) {
+        const customerObj = sys.customers.find(c => c.id === inv.customerId);
+        data[inv.customerId] = {
+          customer: customerObj,
+          customerName: customerObj?.name || inv.customer || 'Unknown Customer',
+          invoices: [],
+          totalBilled: 0,
+          totalPaid: 0,
+          totalOutstanding: 0,
+        };
+      }
+
+      data[inv.customerId].invoices.push(inv);
+      data[inv.customerId].totalBilled += (inv.total || 0);
+
+      if (inv.status === 'Paid') {
+        data[inv.customerId].totalPaid += (inv.total || 0);
+      } else {
+        data[inv.customerId].totalOutstanding += (inv.total || 0);
+      }
+    });
+
+    // Convert object to array and sort alphabetically
+    let results = Object.values(data).sort((a, b) => a.customerName.localeCompare(b.customerName));
+
+    // Apply Search Filter
+    if (searchTerm) {
+      const lowerSearch = searchTerm.toLowerCase();
+      results = results.filter(row => row.customerName.toLowerCase().includes(lowerSearch));
+    }
+
+    // Sort the invoices inside each customer by date
+    results.forEach(row => {
+      row.invoices.sort((a, b) => new Date(a.date) - new Date(b.date));
+    });
+
+    return results;
+  }, [sys.invoices, sys.customers, selectedMonth, searchTerm]);
+
+  // Handle Print Action
+  const handlePrint = (target) => {
+    setPrintTarget(target);
+    // Give React a tiny fraction of a second to render the hidden print views before triggering browser print
+    setTimeout(() => {
+      window.print();
+      setPrintTarget(null); // Reset after printing
+    }, 100);
+  };
+
+  // Determine which statements to render in the hidden print area
+  const statementsToPrint = useMemo(() => {
+    if (printTarget === 'ALL') return statementData;
+    if (printTarget) return statementData.filter(data => data.customer?.id === printTarget);
+    return [];
+  }, [printTarget, statementData]);
+
+  // Format the month nicely for display (e.g., "April 2026")
+  const displayMonth = useMemo(() => {
+    if (!selectedMonth) return '';
+    const [year, month] = selectedMonth.split('-');
+    const date = new Date(year, parseInt(month) - 1, 1);
+    return date.toLocaleString('default', { month: 'long', year: 'numeric' });
+  }, [selectedMonth]);
+
   return (
-    <div className="fixed inset-0 z-[3000] overflow-y-auto bg-slate-950/90 print:bg-white print:p-0">
-      <div className="flex min-h-full justify-center py-24 print:py-0">
-        <div className="relative flex min-h-[297mm] w-full max-w-[210mm] flex-col bg-white p-12 shadow-2xl print:w-full print:p-0 print:shadow-none">
-          <div className="absolute -top-16 left-0 right-0 flex items-center justify-between px-4 print:hidden">
-            <button
-              className="flex items-center rounded-xl bg-slate-800 px-6 py-2.5 font-bold text-white transition-all hover:bg-slate-700"
-              onClick={onBack}
-              type="button"
-            >
-              <ArrowRight className="mr-2 rotate-180" size={18} /> Back to Billing
-            </button>
-            <button
-              className="flex items-center rounded-xl bg-blue-600 px-8 py-2.5 font-black text-white shadow-xl transition-all hover:bg-blue-700"
-              onClick={() => setTimeout(() => window.print(), 100)}
-              type="button"
-            >
-              <Printer className="mr-2" size={18} /> Print Statement
-            </button>
-          </div>
+    <div className="p-8 h-full overflow-y-auto relative">
+      
+      {/* HARD-INJECTED PRINT STYLES */}
+      <style type="text/css">
+        {`
+          @media print {
+            *, html, body {
+              font-family: Arial, "Helvetica Neue", Helvetica, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "SimHei", sans-serif !important;
+            }
+            .page-break {
+              page-break-after: always !important;
+              break-after: page !important;
+            }
+            /* Hide the main app UI when printing */
+            #screen-ui { display: none !important; }
+            /* Show only the print container */
+            #print-ui { display: block !important; }
+          }
+        `}
+      </style>
 
-          <CompanyHeader />
-
-          <div className="mb-8 text-center">
-            <h3 className="text-3xl font-black uppercase tracking-widest text-slate-900">
-              {statementType === 'cod' ? 'Cash On Delivery Summary' : 'Statement of Account'}
-            </h3>
-            <p className="mt-2 text-sm font-bold uppercase tracking-widest text-slate-500">
-              Billing Period: {formatMonthLabel(selectedMonth)}
+      {/* ========================================================================= */}
+      {/* SCREEN UI */}
+      {/* ========================================================================= */}
+      <div id="screen-ui">
+        <div className="flex justify-between items-center mb-8">
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-900 flex items-center">
+              <FileText className="mr-3 text-blue-600" size={28} />
+              Statements of Account (SOA)
+            </h1>
+            <p className="text-base text-slate-500 mt-1">
+              Generate and batch-print monthly summaries for your customers.
             </p>
-            <div className="mt-3 inline-block rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-slate-600">
-              Terms: {statementType === 'cod' ? 'COD' : '30 Days'}
+          </div>
+          <button
+            className="flex items-center rounded-xl bg-blue-600 px-6 py-2.5 font-medium text-white shadow-lg transition-all hover:bg-blue-700 active:scale-95 disabled:opacity-50"
+            onClick={() => handlePrint('ALL')}
+            disabled={statementData.length === 0}
+            type="button"
+          >
+            <Printer className="mr-2" size={18} /> Print ALL Statements
+          </button>
+        </div>
+
+        <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+          
+          {/* FILTERS */}
+          <div className="flex flex-col sm:flex-row justify-between items-center border-b border-slate-100 bg-slate-50 p-4 gap-4">
+            <div className="flex items-center bg-white border border-slate-200 rounded-xl px-4 py-2 shadow-sm">
+              <Calendar className="text-slate-400 mr-2" size={18} />
+              <input
+                type="month"
+                className="bg-transparent border-none focus:ring-0 text-sm font-bold text-slate-700 outline-none"
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+              />
+            </div>
+
+            <div className="flex items-center bg-white border border-slate-200 rounded-xl px-4 py-2 shadow-sm w-full sm:w-72">
+              <Search className="text-slate-400 mr-2" size={18} />
+              <input
+                type="text"
+                placeholder="Search customer..."
+                className="w-full bg-transparent border-none focus:ring-0 text-sm placeholder:text-slate-400 outline-none"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
             </div>
           </div>
 
-          <div className="mb-10 flex justify-between">
-            <div className="w-1/2">
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                Bill To:
-              </span>
-              <p className="mt-1 text-xl font-black text-slate-900">
-                {previewStatement.customer?.name || 'N/A'}
-              </p>
-              <p className="mt-2 text-xs font-bold uppercase leading-relaxed text-slate-500">
-                {previewStatement.customer?.address || ''}
-              </p>
-            </div>
-            <div className="text-right">
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                Statement Date
-              </span>
-              <p className="mt-1 text-lg font-black tracking-tighter">{new Date().toLocaleDateString()}</p>
-            </div>
-          </div>
+          {/* SUMMARY TABLE */}
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-white border-b border-slate-200 text-xs uppercase tracking-widest text-slate-500 font-semibold">
+                <th className="p-5 pl-8">Customer Entity</th>
+                <th className="p-5 text-center">Invoices</th>
+                <th className="p-5 text-right">Total Billed</th>
+                <th className="p-5 text-right">Total Paid</th>
+                <th className="p-5 text-right text-red-600">Outstanding</th>
+                <th className="p-5 pr-8 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-sm">
+              {statementData.map((row) => (
+                <tr className="font-medium hover:bg-slate-50 transition-colors" key={row.customer?.id || row.customerName}>
+                  <td className="p-5 pl-8 font-bold text-slate-800">
+                    {row.customerName}
+                  </td>
+                  <td className="p-5 text-center text-slate-500">{row.invoices.length}</td>
+                  <td className="p-5 text-right text-slate-600">${formatMoney(row.totalBilled)}</td>
+                  <td className="p-5 text-right text-emerald-600">${formatMoney(row.totalPaid)}</td>
+                  <td className="p-5 text-right font-black text-red-600">${formatMoney(row.totalOutstanding)}</td>
+                  <td className="p-5 pr-8 text-right">
+                    <button
+                      onClick={() => handlePrint(row.customer?.id)}
+                      className="inline-flex items-center text-[10px] font-black uppercase tracking-widest text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors"
+                    >
+                      <Printer size={12} className="mr-1" /> Print
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {statementData.length === 0 && (
+                <tr>
+                  <td className="p-12 text-center text-sm font-bold text-slate-400" colSpan="6">
+                    No transactions found for {displayMonth}.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
-          <div className="flex-1">
-            <table className="mb-10 w-full text-left">
-              <thead className="border-y-2 border-slate-900">
-                <tr className="text-[9px] font-black uppercase tracking-widest text-slate-500">
-                  <th className="w-28 p-4">Date</th>
-                  <th className="p-4">Invoice Reference</th>
-                  <th className="p-4 text-center">Status</th>
-                  <th className="w-36 p-4 text-right">Amount</th>
+      {/* ========================================================================= */}
+      {/* PRINT UI (HIDDEN ON SCREEN, VISIBLE ON PRINT) */}
+      {/* ========================================================================= */}
+      <div id="print-ui" className="hidden">
+        {statementsToPrint.map((data, index) => (
+          <div 
+            key={data.customer?.id || index} 
+            className="page-break w-[210mm] min-h-[297mm] bg-white p-8 text-black flex flex-col mx-auto"
+          >
+            {/* EXACT MATCH HEADER */}
+            <div className="flex justify-between items-start mb-8">
+              <div className="w-[25%]">
+                <img src={logo} alt="Three Leaves Logo" className="w-[110px] h-auto object-contain" />
+              </div>
+
+              <div className="w-[50%] text-center leading-tight pt-2">
+                <h1 className="font-bold text-[14px]">THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
+                <h2 className="font-bold text-[13px] mb-1">三叶（新加坡） 贸易公司</h2>
+                <p className="font-bold text-[10px] mb-0.5">CO.REG NO.53033969B &nbsp;&nbsp;&nbsp; GST REG NO. M90355440L</p>
+                <p className="text-[10px] mb-0.5">280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
+                <p className="text-[10px]">HP: 97578869 (Mr Ye) &nbsp; HP: 91113505 (Min) &nbsp; Email: 3leaves.sg@gmail.com</p>
+              </div>
+
+              <div className="w-[25%] flex flex-col items-end pt-1">
+                <div className="text-center w-full mb-2">
+                  <h2 className="text-[18px] font-bold tracking-widest leading-none mb-0.5">结账单</h2>
+                  <h3 className="text-[14px] font-bold tracking-widest uppercase">STATEMENT</h3>
+                </div>
+              </div>
+            </div>
+
+            {/* CUSTOMER DETAILS */}
+            <div className="mb-6 text-[15px] font-bold flex flex-col w-full">
+              <div className="flex justify-between w-full mb-2">
+                <div className="flex items-end w-[60%] pr-4">
+                  <span className="w-12 shrink-0">TO:</span>
+                  <span className="flex-1 uppercase border-b border-black pb-0.5">
+                    {data.customerName}
+                  </span>
+                </div>
+                <div className="flex items-end w-[40%] pl-4">
+                  <span className="w-32 shrink-0">STMT MONTH:</span>
+                  <span className="flex-1 text-center border-b border-black pb-0.5 uppercase">
+                    {displayMonth}
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-end w-full mt-1">
+                <span className="w-24 shrink-0">ADDRESS:</span>
+                <span className="flex-1 uppercase leading-tight border-b border-black pb-0.5">
+                  {data.customer?.address || ''}
+                </span>
+              </div>
+            </div>
+
+            {/* STATEMENT TABLE */}
+            <table className="w-full text-[15px] border-2 border-black text-center mb-0 leading-tight flex-grow">
+              <thead className="border-b-2 border-black">
+                <tr className="font-bold bg-white text-[14px]">
+                  <th className="py-2 px-2 border-r border-black text-left w-28">DATE</th>
+                  <th className="py-2 px-2 border-r border-black text-left">INVOICE NO.</th>
+                  <th className="py-2 px-2 border-r border-black text-right w-32">BILLED</th>
+                  <th className="py-2 px-2 border-r border-black text-right w-32">PAID</th>
+                  <th className="py-2 px-2 text-right w-32">BALANCE</th>
                 </tr>
               </thead>
               <tbody>
-                {previewStatement.invoices.map((invoice, index) => (
-                  <tr className="border-b border-gray-50 font-bold text-slate-800 last:border-0" key={invoice.id || index}>
-                    <td className="p-4 text-xs">{invoice.date || '-'}</td>
-                    <td className="p-4 font-mono text-blue-600">Invoice #{invoice.number || '-'}</td>
-                    <td className="p-4 text-center text-xs uppercase text-slate-400">Issued</td>
-                    <td className="p-4 text-right font-mono text-lg font-black tracking-tighter">
-                      ${formatMoney(invoice.total)}
-                    </td>
+                {data.invoices.map((inv, idx) => {
+                  const billed = inv.total || 0;
+                  const isPaid = inv.status === 'Paid';
+                  const paidAmt = isPaid ? billed : 0;
+                  const balanceAmt = isPaid ? 0 : billed;
+
+                  return (
+                    <tr key={inv.id} className="h-[32px] align-top">
+                      <td className="p-1 border-r border-black text-left pl-2 font-medium">
+                        {inv.date ? new Date(inv.date).toLocaleDateString('en-GB').replace(/\//g, '-') : '-'}
+                      </td>
+                      <td className="p-1 border-r border-black text-left pl-2 font-bold">#{inv.number}</td>
+                      <td className="p-1 border-r border-black text-right pr-2">${formatMoney(billed)}</td>
+                      <td className="p-1 border-r border-black text-right pr-2">${formatMoney(paidAmt)}</td>
+                      <td className="p-1 text-right pr-2 font-bold text-black">
+                        ${formatMoney(balanceAmt)}
+                      </td>
+                    </tr>
+                  );
+                })}
+                
+                {/* Pad empty rows so the totals sit cleanly at the bottom */}
+                {data.invoices.length < 15 && Array.from({ length: 15 - data.invoices.length }).map((_, i) => (
+                  <tr key={`blank-${i}`} className="h-[32px]">
+                    <td className="border-r border-black"></td>
+                    <td className="border-r border-black"></td>
+                    <td className="border-r border-black"></td>
+                    <td className="border-r border-black"></td>
+                    <td></td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
 
-          <div className="mt-8 flex justify-end border-t-2 border-slate-900 pt-8">
-            <div className="w-80 space-y-3">
-              <div className="flex items-center justify-between pt-2">
-                <span className="text-xs font-black uppercase tracking-[0.2em]">Total Balance Due</span>
-                <span className="border-b-4 border-double border-slate-900 px-1 font-mono text-4xl font-black tracking-tighter text-slate-900">
-                  ${formatMoney(previewStatement.total)}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="mb-4 mt-16 text-center text-[10px] font-bold text-slate-500">
-            Please issue crossed cheque payable to:
-            <br />
-            <span className="uppercase text-slate-900">
-              THREE LEAVES (SINGAPORE) TRADING ENTERPRISE
-            </span>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export function BillingModule({ sys }) {
-  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
-  const [statementType, setStatementType] = useState('30_days');
-  const [previewStatement, setPreviewStatement] = useState(null);
-
-  const monthlyStatements = useMemo(() => {
-    const statements = {};
-
-    sys.invoices.forEach((invoice) => {
-      const invoiceTerm = invoice.paymentTerms || '30_days';
-      if (!invoice.date?.startsWith(selectedMonth) || invoiceTerm !== statementType) {
-        return;
-      }
-
-      if (!statements[invoice.customerId]) {
-        statements[invoice.customerId] = {
-          customer:
-            sys.customers.find((customer) => customer.id === invoice.customerId) || {
-              name: 'Unknown',
-              address: '',
-              region: '',
-            },
-          invoices: [],
-          total: 0,
-        };
-      }
-
-      statements[invoice.customerId].invoices.push(invoice);
-      statements[invoice.customerId].total += invoice.total || 0;
-    });
-
-    return Object.values(statements).sort((left, right) =>
-      (left.customer?.name || '').localeCompare(right.customer?.name || ''),
-    );
-  }, [selectedMonth, statementType, sys.customers, sys.invoices]);
-
-  const totalMonthlyRevenue = useMemo(
-    () => monthlyStatements.reduce((sum, statement) => sum + (statement.total || 0), 0),
-    [monthlyStatements],
-  );
-
-  const financialAnalytics = useMemo(() => {
-    const chartMonths = [];
-    let maxRevenue = 0;
-
-    for (let offset = 5; offset >= 0; offset -= 1) {
-      const monthKey = shiftMonthString(selectedMonth, offset);
-      const monthInvoices = sys.invoices.filter(
-        (invoice) =>
-          invoice.date.startsWith(monthKey) && (invoice.paymentTerms || '30_days') === statementType,
-      );
-      const revenue = monthInvoices.reduce((sum, invoice) => sum + (invoice.total || 0), 0);
-      maxRevenue = Math.max(maxRevenue, revenue);
-      chartMonths.push({ key: monthKey, label: formatMonthLabel(monthKey), revenue });
-    }
-
-    const previousMonth = shiftMonthString(selectedMonth, 1);
-    const currentInvoices = sys.invoices.filter(
-      (invoice) =>
-        invoice.date.startsWith(selectedMonth) && (invoice.paymentTerms || '30_days') === statementType,
-    );
-    const previousInvoices = sys.invoices.filter(
-      (invoice) =>
-        invoice.date.startsWith(previousMonth) && (invoice.paymentTerms || '30_days') === statementType,
-    );
-
-    const currentRevenue = currentInvoices.reduce((sum, invoice) => sum + (invoice.total || 0), 0);
-    const previousRevenue = previousInvoices.reduce((sum, invoice) => sum + (invoice.total || 0), 0);
-    const diff = currentRevenue - previousRevenue;
-    const pctChange =
-      previousRevenue === 0 ? (currentRevenue > 0 ? 100 : 0) : (diff / previousRevenue) * 100;
-
-    const currentCustomerRevenue = {};
-    const previousCustomerRevenue = {};
-    currentInvoices.forEach((invoice) => {
-      currentCustomerRevenue[invoice.customerId] =
-        (currentCustomerRevenue[invoice.customerId] || 0) + (invoice.total || 0);
-    });
-    previousInvoices.forEach((invoice) => {
-      previousCustomerRevenue[invoice.customerId] =
-        (previousCustomerRevenue[invoice.customerId] || 0) + (invoice.total || 0);
-    });
-
-    let driverId = null;
-    let maxChange = -1;
-    sys.customers.forEach((customer) => {
-      const customerDiff =
-        (currentCustomerRevenue[customer.id] || 0) - (previousCustomerRevenue[customer.id] || 0);
-      if (diff >= 0 && customerDiff > maxChange) {
-        maxChange = customerDiff;
-        driverId = customer.id;
-      } else if (diff < 0 && customerDiff < -maxChange) {
-        maxChange = Math.abs(customerDiff);
-        driverId = customer.id;
-      }
-    });
-
-    const driverName = sys.customers.find((customer) => customer.id === driverId)?.name || 'multiple accounts';
-    let insightTitle = diff >= 0 ? 'Revenue Expansion' : 'Revenue Contraction';
-    let insightText = `For ${statementType === 'cod' ? 'COD' : '30 Days Term'}, sales have ${
-      diff >= 0 ? 'increased' : 'decreased'
-    } by ${Math.abs(pctChange).toFixed(1)}% ($${Math.abs(diff).toFixed(0)}) compared to last month. `;
-
-    if (currentRevenue === 0 && previousRevenue === 0) {
-      insightTitle = 'No Activity';
-      insightText = 'There has been no recorded sales activity for the selected payment terms in the current and previous month.';
-    } else if (maxChange > 0) {
-      insightText += `This shift is heavily influenced by ${
-        diff >= 0 ? 'increased' : 'decreased'
-      } order volume from ${driverName}.`;
-    } else {
-      insightText += 'This change is due to general market fluctuations across your customer base.';
-    }
-
-    return {
-      chart: chartMonths.map((month) => ({
-        ...month,
-        heightPct: maxRevenue === 0 ? 0 : (month.revenue / maxRevenue) * 100,
-      })),
-      insightTitle,
-      insightText,
-      diff,
-      pctChange,
-    };
-  }, [selectedMonth, statementType, sys.customers, sys.invoices]);
-
-  if (previewStatement) {
-    return (
-      <StatementPreview
-        onBack={() => setPreviewStatement(null)}
-        previewStatement={previewStatement}
-        selectedMonth={selectedMonth}
-        statementType={statementType}
-      />
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-        <div className="flex items-center justify-between rounded-xl bg-gray-50 p-6">
-          <div>
-            <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">
-              Financial Statements
-            </h3>
-            <p className="mt-1 text-xs font-medium text-slate-500">
-              Performance analytics and billing reports
-            </p>
-          </div>
-          <div className="flex items-center space-x-6">
-            <div className="mr-2 flex rounded-lg border border-gray-200 bg-white p-1 shadow-sm">
-              <button
-                className={`rounded-md px-4 py-1.5 text-[10px] font-black uppercase tracking-widest transition-all ${
-                  statementType === '30_days'
-                    ? 'bg-blue-600 text-white shadow'
-                    : 'text-gray-500 hover:bg-gray-50'
-                }`}
-                onClick={() => setStatementType('30_days')}
-                type="button"
-              >
-                30 Days Terms
-              </button>
-              <button
-                className={`rounded-md px-4 py-1.5 text-[10px] font-black uppercase tracking-widest transition-all ${
-                  statementType === 'cod'
-                    ? 'bg-amber-500 text-white shadow'
-                    : 'text-gray-500 hover:bg-gray-50'
-                }`}
-                onClick={() => setStatementType('cod')}
-                type="button"
-              >
-                COD
-              </button>
-            </div>
-            <div className="h-10 border-l border-gray-200" />
-            <div className="flex items-center space-x-3 rounded-xl border border-gray-200 bg-white p-2 shadow-sm">
-              <Calendar className="ml-2 text-gray-400" size={18} />
-              <input
-                className="cursor-pointer border-none text-sm font-bold text-slate-700 outline-none focus:ring-0"
-                onChange={(event) => setSelectedMonth(event.target.value)}
-                type="month"
-                value={selectedMonth}
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="flex flex-col rounded-2xl border border-gray-200 bg-white p-8 shadow-sm lg:col-span-2">
-          <div className="mb-8 flex items-center justify-between">
-            <h3 className="flex items-center text-xs font-black uppercase tracking-widest text-slate-700">
-              <BarChart2 className="mr-2 text-blue-500" size={16} /> 6-Month Revenue Trend
-            </h3>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
-              {statementType === 'cod' ? 'Cash on Delivery' : '30 Days Term'}
-            </span>
-          </div>
-          <div className="mt-2 flex h-48 flex-1 items-end justify-between space-x-4 border-b-2 border-gray-100 pb-2">
-            {financialAnalytics.chart.map((month) => (
-              <div
-                className="group relative flex h-full flex-1 flex-col items-center justify-end"
-                key={month.key}
-              >
-                <div className="absolute -top-6 rounded bg-slate-900 px-2 py-1 text-[10px] font-bold text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
-                  ${month.revenue.toFixed(0)}
+            {/* STATEMENT TOTALS */}
+            <div className="flex w-full mt-2 justify-end">
+              <div className="flex flex-col font-bold text-[15px] shrink-0 w-[20rem]">
+                <div className="flex">
+                  <div className="w-40 p-1 text-right">TOTAL BILLED</div>
+                  <div className="w-40 p-1 text-right">${formatMoney(data.totalBilled)}</div>
                 </div>
-                <div
-                  className={`w-full max-w-[48px] rounded-t-md transition-all duration-500 ${
-                    month.key === selectedMonth
-                      ? 'bg-blue-500 shadow-lg shadow-blue-500/30'
-                      : 'bg-blue-100 group-hover:bg-blue-200'
-                  }`}
-                  style={{ height: `${Math.max(month.heightPct, 2)}%` }}
-                />
+                <div className="flex">
+                  <div className="w-40 p-1 text-right">TOTAL PAID</div>
+                  <div className="w-40 p-1 text-right">${formatMoney(data.totalPaid)}</div>
+                </div>
+                <div className="flex mt-2 pt-2 border-t-2 border-black text-[17px]">
+                  <div className="w-40 p-1 text-right">AMOUNT DUE</div>
+                  <div className="w-40 p-1 text-right">${formatMoney(data.totalOutstanding)}</div>
+                </div>
               </div>
-            ))}
-          </div>
-          <div className="mt-3 flex justify-between space-x-4 px-2">
-            {financialAnalytics.chart.map((month) => (
-              <div
-                className={`flex-1 text-center text-[10px] font-black uppercase tracking-widest ${
-                  month.key === selectedMonth ? 'text-blue-600' : 'text-slate-400'
-                }`}
-                key={`${month.key}-label`}
-              >
-                {month.label}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="relative flex flex-col justify-center overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 p-8 text-white shadow-xl">
-          <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-blue-500/20 blur-3xl" />
-          <div className="relative z-10">
-            <div className="mb-6 flex items-center">
-              <div
-                className={`mr-4 flex h-10 w-10 items-center justify-center rounded-full ${
-                  financialAnalytics.diff >= 0
-                    ? 'bg-emerald-500/20 text-emerald-400'
-                    : 'bg-red-500/20 text-red-400'
-                }`}
-              >
-                {financialAnalytics.diff >= 0 ? <TrendingUp size={20} /> : <TrendingDown size={20} />}
-              </div>
-              <h3 className="text-xs font-black uppercase leading-tight tracking-widest text-slate-200">
-                Monthly
-                <br />
-                Analysis
-              </h3>
             </div>
 
-            <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-500">
-              {financialAnalytics.insightTitle}
-            </p>
-            <div className="mb-4 flex items-end font-mono text-4xl font-black tracking-tighter">
-              {financialAnalytics.diff > 0 ? '+' : ''}
-              {financialAnalytics.pctChange.toFixed(1)}%
+            {/* FOOTER MESSAGE */}
+            <div className="mt-8 pt-4 border-t border-gray-300 text-center text-[12px] font-bold">
+              <p>Please make cheques payable to <b>Three Leaves (Singapore) Trading Enterprise</b></p>
+              <p className="mt-1">Bank: OCBC &nbsp;&nbsp;|&nbsp;&nbsp; A/C: 535-846562-001 &nbsp;&nbsp;|&nbsp;&nbsp; UEN: 53033969B</p>
             </div>
 
-            <div className="rounded-xl border border-slate-700 bg-slate-800/50 p-4">
-              <p className="text-xs font-medium leading-relaxed text-slate-300">
-                {financialAnalytics.insightText}
-              </p>
-            </div>
           </div>
-        </div>
+        ))}
       </div>
 
-      <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-        <div className="flex items-center justify-between rounded-t-xl border-b border-gray-100 bg-gray-50 p-5">
-          <h3 className="text-xs font-black uppercase tracking-widest text-slate-700">
-            Detailed Statements ({formatMonthLabel(selectedMonth)})
-          </h3>
-          <div className="text-right">
-            <div className="mb-1 text-[10px] font-black uppercase tracking-widest text-gray-400">
-              Total {statementType === 'cod' ? 'COD' : 'Terms'} Revenue
-            </div>
-            <div className="font-mono text-xl font-black tracking-tighter text-emerald-600">
-              ${formatMoney(totalMonthlyRevenue)}
-            </div>
-          </div>
-        </div>
-        <table className="w-full text-left">
-          <thead className="border-b text-[10px] font-black uppercase tracking-widest text-gray-400">
-            <tr>
-              <th className="p-5">Customer Account</th>
-              <th className="p-5 text-center">Invoices Found</th>
-              <th className="p-5 text-right">Total Accrued</th>
-              <th className="p-5 text-right">Generate Report</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100 text-sm font-medium">
-            {monthlyStatements.map((statement, index) => (
-              <tr className="transition-colors hover:bg-blue-50/50" key={index}>
-                <td className="p-5 font-bold text-slate-900">
-                  {statement.customer?.name || 'Unknown Customer'}
-                  <div className="mt-1 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                    {statement.customer?.region || '-'} Sector
-                  </div>
-                </td>
-                <td className="p-5 text-center">
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">
-                    {statement.invoices.length} Records
-                  </span>
-                </td>
-                <td className="p-5 text-right font-mono text-lg font-black tracking-tighter text-slate-900">
-                  ${formatMoney(statement.total)}
-                </td>
-                <td className="p-5 text-right">
-                  <button
-                    className="ml-auto flex w-full max-w-[140px] items-center justify-end rounded-xl bg-indigo-50 px-4 py-2 text-xs font-bold text-indigo-700 transition-all hover:bg-indigo-600 hover:text-white"
-                    onClick={() => setPreviewStatement(statement)}
-                    type="button"
-                  >
-                    <Receipt className="mr-2" size={14} /> View SOA
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {monthlyStatements.length === 0 && (
-              <tr>
-                <td className="p-16 text-center text-xs font-bold uppercase tracking-widest text-slate-400" colSpan="4">
-                  No <span className={statementType === 'cod' ? 'text-amber-500' : 'text-blue-500'}>
-                    {statementType === 'cod' ? 'COD' : '30 Days Term'}
-                  </span>{' '}
-                  sales data found for {formatMonthLabel(selectedMonth)}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
     </div>
   );
 }
