@@ -5,8 +5,7 @@ import { formatMoney } from '../../utils/format';
 // Re-use the logo from your invoices folder (adjust path if needed)
 import logo from '../invoices/three_leaves_logo.png'; 
 
-export function StatementModule({ sys }) {
-  // Default to current month (e.g., "2026-04")
+export function BillingModule({ sys }) {
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
