@@ -25,6 +25,25 @@ export function InvoiceDetailsModal({ invoice, sys, onClose, onEdit }) {
   return (
     <div className="fixed inset-0 z-[4000] flex items-center justify-center bg-slate-950/90 p-4 print:p-0 print:bg-white">
       
+      {/* THE FIX: Aggressively prioritize Chinese fonts first to force the print spooler to load them, and remove browser margins */}
+      <style type="text/css">
+        {`
+          @media print {
+            @page {
+              margin: 0; 
+            }
+            body {
+              margin: 1cm;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+            *, html, body, div, p, span, h1, h2, h3, table, th, td {
+              font-family: "Microsoft YaHei", "微软雅黑", "PingFang SC", "SimHei", "黑体", Arial, sans-serif !important;
+            }
+          }
+        `}
+      </style>
+
       {/* 1. CONTROL PANEL (Hidden during printing) */}
       <div className="absolute top-4 left-0 right-0 flex justify-center gap-4 print:hidden">
         
@@ -66,7 +85,10 @@ export function InvoiceDetailsModal({ invoice, sys, onClose, onEdit }) {
       </div>
 
       {/* 2. THE PDF PREVIEW (Exact same Excel design we built earlier) */}
-      <div className="bg-white w-full max-w-[210mm] min-h-[297mm] p-12 shadow-2xl print:w-full print:shadow-none print:p-0 mt-16 print:mt-0 flex flex-col">
+      <div 
+        className="bg-white w-full max-w-[210mm] min-h-[297mm] p-12 shadow-2xl print:w-full print:shadow-none print:p-0 mt-16 print:mt-0 flex flex-col"
+        style={{ fontFamily: '"Microsoft YaHei", "微软雅黑", "PingFang SC", "SimHei", "黑体", Arial, sans-serif' }}
+      >
         
         {/* If there's an issue, show a watermark on screen (hides on print) */}
         {deliveryStatus === 'Partial' && (
@@ -77,7 +99,7 @@ export function InvoiceDetailsModal({ invoice, sys, onClose, onEdit }) {
 
         <div className="flex justify-between items-start mb-6">
           <div className="w-1/4">
-            <img src={logo} alt="Three Leaves Logo" className="w-32 h-auto" />
+            <img src={logo} alt="Three Leaves Logo" className="w-32 h-auto object-contain" />
           </div>
 
           <div className="w-2/4 text-center text-[11px] leading-tight pt-2">
@@ -126,7 +148,7 @@ export function InvoiceDetailsModal({ invoice, sys, onClose, onEdit }) {
           </thead>
           <tbody>
             {invoice.items.map((item, idx) => (
-              <tr key={idx} className="h-7">
+              <tr key={idx} className="h-7 align-top">
                 <td className="p-1">{idx + 1}</td>
                 <td className="p-1 text-left">{item.name}</td>
                 <td className="p-1">{item.qty} {item.unit}</td>
