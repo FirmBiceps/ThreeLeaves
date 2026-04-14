@@ -11,6 +11,8 @@ import { LogisticsModule } from './features/logistics/LogisticsModule';
 import { PickingModule } from './features/picking/PickingModule';
 import { SupplierModule } from './features/suppliers/SupplierModule';
 import { TeamModule } from './features/team/TeamModule';
+// 1. IMPORT THE NEW EMPLOYEE MODULE
+import { EmployeeModule } from './features/hr/EmployeeModule'; 
 import { useEnterpriseSystem } from './hooks/useEnterpriseSystem';
 
 export default function App() {
@@ -25,6 +27,8 @@ export default function App() {
     { value: 'invoices', label: 'Invoices' },
     { value: 'billing', label: 'Statements' },
     { value: 'inventory', label: 'Inventory' },
+    // 2. ADD TO MOBILE SELECT OPTIONS
+    { value: 'employees', label: 'Employees' }, 
     { value: 'picking', label: 'Pick List' },
     { value: 'logistics', label: 'Delivery Map' },
     { value: 'gst', label: 'GST Ledger' },
@@ -93,6 +97,10 @@ export default function App() {
           {activeTab === 'invoices' && <InvoiceModule sys={sys} />}
           {activeTab === 'billing' && <BillingModule sys={sys} />}
           {activeTab === 'inventory' && <InventoryModule sys={sys} />}
+          
+          {/* 3. ADD THE CONTENT RENDERER FOR EMPLOYEES */}
+          {activeTab === 'employees' && <EmployeeModule sys={sys} />}
+          
           {activeTab === 'picking' && <PickingModule sys={sys} />}
           {activeTab === 'logistics' && <LogisticsModule sys={sys} />}
           {activeTab === 'gst' && <GSTModule sys={sys} />}
