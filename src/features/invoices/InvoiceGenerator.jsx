@@ -23,9 +23,10 @@ import logo from './three_leaves_logo.png';
 const CJK_FONT = '"Microsoft YaHei", "微软雅黑", "PingFang SC", "SimHei", "黑体", Arial, sans-serif';
 
 // ==========================================
-// SEARCHABLE PRODUCT DROPDOWN
+// SEARCHABLE PRODUCT DROPDOWN (unchanged)
 // ==========================================
 function ProductSearchSelect({ value, inventory, onChange }) {
+  // ... exactly as in your original code ...
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const dropdownRef = useRef(null);
@@ -55,7 +56,7 @@ function ProductSearchSelect({ value, inventory, onChange }) {
           type="button"
           onClick={() => {
             setIsOpen(true);
-            setSearchTerm(''); 
+            setSearchTerm('');
           }}
           className={`w-full text-left text-xs font-bold p-1 border border-transparent rounded hover:bg-slate-200 transition-colors focus:outline-none ${
             displayName ? 'text-slate-900' : 'text-slate-400'
@@ -107,16 +108,23 @@ function ProductSearchSelect({ value, inventory, onChange }) {
 }
 
 // ==========================================
-// SEARCHABLE CUSTOMER DROPDOWN (NEW)
+// NEW: CUSTOMER SEARCH BAR (ALWAYS VISIBLE SEARCH + DROPDOWN DISPLAY)
 // ==========================================
-function CustomerSearchSelect({ value, customers, onChange, disabled }) {
-  const [isOpen, setIsOpen] = useState(false);
+function CustomerSearchBar({ value, customers, onChange, disabled }) {
   const [searchTerm, setSearchTerm] = useState('');
-  const dropdownRef = useRef(null);
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef(null);
+
+  const selectedCustomer = (customers || []).find((c) => c.id === value);
+  const displayName = selectedCustomer ? selectedCustomer.name : 'Select Customer...';
+
+  const filteredCustomers = (customers || []).filter((c) =>
+    (c.name || '').toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   useEffect(() => {
     function handleClickOutside(event) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+      if (containerRef.current && !containerRef.current.contains(event.target)) {
         setIsOpen(false);
       }
     }
@@ -124,63 +132,57 @@ function CustomerSearchSelect({ value, customers, onChange, disabled }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const selectedCustomer = (customers || []).find((c) => c.id === value);
-  const displayName = selectedCustomer ? selectedCustomer.name : '';
-
-  const filteredCustomers = (customers || []).filter((c) =>
-    (c.name || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
   return (
-    <div className="relative w-full text-left" ref={dropdownRef}>
-      {!isOpen ? (
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => {
-            setIsOpen(true);
-            setSearchTerm(''); 
-          }}
-          className={`mt-1 w-full text-left text-[16px] font-black p-0 border border-transparent bg-transparent focus:outline-none transition-colors ${
-            displayName ? 'text-slate-900' : 'text-slate-400'
-          } ${disabled ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:text-blue-600'}`}
+    <div className="relative w-full" ref={containerRef}>
+      {/* Display selected customer name */}
+      <div className="flex items-center justify-between">
+        <span
+          className={`text-[16px] font-black ${
+            selectedCustomer ? 'text-slate-900' : 'text-slate-400'
+          }`}
         >
-          {displayName || 'Select Entity...'}
-        </button>
-      ) : (
-        <div className="absolute z-[5000] top-8 left-0 w-80 bg-white border border-slate-300 rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-100">
-          <div className="flex items-center p-3 border-b border-slate-200 bg-slate-50">
-            <Search size={16} className="text-slate-400 ml-1 mr-2 shrink-0" />
-            <input
-              autoFocus
-              type="text"
-              className="w-full bg-transparent border-none text-sm font-bold text-slate-800 p-1 focus:ring-0 placeholder:text-slate-400 outline-none"
-              placeholder="Search customer..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-          <div className="max-h-60 overflow-y-auto">
-            {filteredCustomers.length > 0 ? (
-              filteredCustomers.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  className="w-full text-left px-4 py-3 text-sm font-bold text-slate-700 hover:bg-blue-50 border-b border-slate-100 last:border-0 transition-colors"
-                  onClick={() => {
-                    onChange(c.id);
-                    setIsOpen(false);
-                  }}
-                >
-                  {c.name}
-                </button>
-              ))
-            ) : (
-              <div className="p-4 text-center text-sm text-slate-400 font-medium">
-                No customers found.
-              </div>
-            )}
-          </div>
+          {displayName}
+        </span>
+        {/* Search input always visible */}
+        <div className="relative ml-4 w-64">
+          <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search customers..."
+            className="w-full rounded-md border border-slate-200 py-1.5 pl-8 pr-3 text-sm font-medium focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            value={searchTerm}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setIsOpen(true);
+            }}
+            onFocus={() => setIsOpen(true)}
+            disabled={disabled}
+          />
+        </div>
+      </div>
+
+      {/* Dropdown list of filtered customers */}
+      {isOpen && !disabled && filteredCustomers.length > 0 && (
+        <div className="absolute left-0 right-0 z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border border-slate-200 bg-white shadow-lg">
+          {filteredCustomers.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              className="w-full px-4 py-2 text-left text-sm font-bold text-slate-700 hover:bg-blue-50 transition-colors"
+              onClick={() => {
+                onChange(c.id);
+                setSearchTerm('');
+                setIsOpen(false);
+              }}
+            >
+              {c.name}
+            </button>
+          ))}
+        </div>
+      )}
+      {isOpen && !disabled && filteredCustomers.length === 0 && (
+        <div className="absolute left-0 right-0 z-50 mt-1 rounded-md border border-slate-200 bg-white p-4 text-center text-sm text-slate-400 shadow-lg">
+          No customers found.
         </div>
       )}
     </div>
@@ -188,7 +190,7 @@ function CustomerSearchSelect({ value, customers, onChange, disabled }) {
 }
 
 // ==========================================
-// EXACT MATCH PDF PREVIEW
+// EXACT MATCH PDF PREVIEW (unchanged)
 // ==========================================
 function InvoicePreview({
   customer,
@@ -204,6 +206,7 @@ function InvoicePreview({
   total,
   existingInvoice
 }) {
+  // ... exactly as in your original code ...
   return (
     <div className="fixed inset-0 z-[3000] overflow-y-auto bg-slate-950/90 print:bg-white print:p-0">
       
@@ -399,7 +402,7 @@ function InvoicePreview({
 }
 
 // ==========================================
-// MAIN INVOICE GENERATOR COMPONENT
+// MAIN INVOICE GENERATOR COMPONENT (UPDATED WITH CUSTOMER SEARCH BAR)
 // ==========================================
 export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
   
@@ -764,7 +767,8 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
               
               <div className="w-[30%] border-r border-slate-100 pr-6">
                 <label className="text-[10px] font-black uppercase text-gray-400">Customer Account:</label>
-                <CustomerSearchSelect 
+                {/* 🔁 REPLACED: CustomerSearchBar now used instead of CustomerSearchSelect */}
+                <CustomerSearchBar 
                   value={customerId} 
                   customers={sys.customers} 
                   onChange={setCustomerId} 
