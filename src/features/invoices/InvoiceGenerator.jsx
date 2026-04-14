@@ -113,6 +113,7 @@ function InvoicePreview({
   customer,
   gst,
   invoiceNumber,
+  invoiceDate,
   items,
   onBack,
   onRegister,
@@ -128,9 +129,13 @@ function InvoicePreview({
       <style type="text/css">
         {`
           @media print {
-            @page { margin: 0; }
+            @page { 
+              size: A4;
+              margin: 0 !important; 
+            }
             body {
-              margin: 1cm;
+              margin: 0 !important;
+              padding: 0 !important;
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
             }
@@ -142,7 +147,7 @@ function InvoicePreview({
       </style>
 
       <div className="flex min-h-full justify-center py-12 print:py-0">
-        <div className="relative flex min-h-[297mm] w-full max-w-[210mm] flex-col bg-white p-8 shadow-2xl print:w-full print:p-0 print:shadow-none">
+        <div className="relative flex min-h-[297mm] w-full max-w-[210mm] flex-col bg-white p-8 shadow-2xl print:w-[210mm] print:h-[297mm] print:mx-auto print:box-border print:p-[15mm] print:shadow-none">
           
           <div className="absolute -top-16 left-0 right-0 flex items-center justify-between px-4 print:hidden">
             <button
@@ -220,9 +225,7 @@ function InvoicePreview({
                 <div className="flex items-end w-[35%] pl-4">
                   <span className="w-14 shrink-0">DATE:</span>
                   <span className="flex-1 text-center border-b border-black pb-0.5">
-                    {existingInvoice?.date 
-                      ? new Date(existingInvoice.date).toLocaleDateString('en-GB').replace(/\//g, '-') 
-                      : new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}
+                    {new Date(invoiceDate).toLocaleDateString('en-GB').replace(/\//g, '-')}
                   </span>
                 </div>
               </div>
@@ -252,7 +255,6 @@ function InvoicePreview({
                   return (
                     <tr key={idx} className="h-[32px] align-top" style={{ fontFamily: CJK_FONT }}>
                       <td className="p-1 border-r border-black font-medium text-center">{idx + 1}</td>
-                      {/* THIS IS THE FIX: The inline style physically forces the Chromium engine to render this string in Chinese no matter what */}
                       <td className="p-1 border-r border-black text-left pl-2 font-bold" style={{ fontFamily: CJK_FONT }}>{productName}</td>
                       <td className="p-1 border-r border-black font-medium text-center" style={{ fontFamily: CJK_FONT }}>{item.qty} {item.unit}</td>
                       <td className="p-1 border-r border-black text-center">${formatMoney(item.unitPrice)}</td>
@@ -344,6 +346,10 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
   }, [sys.invoices, existingInvoice]);
 
   const [invoiceNumber, setInvoiceNumber] = useState(defaultInvoiceNumber);
+  // NEW: State to control the manually selected date
+  const [invoiceDate, setInvoiceDate] = useState(
+    existingInvoice ? existingInvoice.date : new Date().toISOString().split('T')[0]
+  );
   const [customerId, setCustomerId] = useState(existingInvoice ? existingInvoice.customerId : '');
   const [paymentTerms, setPaymentTerms] = useState(existingInvoice ? existingInvoice.paymentTerms : '30_days');
   const [items, setItems] = useState(existingInvoice ? existingInvoice.items : []);
@@ -462,9 +468,6 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
       .filter((item) => item && !items.find((draftItem) => draftItem.itemId === item.id));
   }, [customerId, items, sys.invoices, sys.inventory]);
 
-  // =====================================================================
-  // MACHINE LEARNING ENGINE (PREDICTION)
-  // =====================================================================
   const handleSmartExtract = () => {
     const lines = parseText.split('\n').filter(l => l.trim() !== '');
     const nextDraftItems = [...items];
@@ -487,7 +490,6 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
           score += 10;
         }
 
-        // ML Scoring System
         if (inventoryItem.learned_phrases && inventoryItem.learned_phrases[searchString]) {
           score += (inventoryItem.learned_phrases[searchString] * 20); 
         }
@@ -529,9 +531,6 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
     setParseText('');
   };
 
-  // =====================================================================
-  // SAVE & MACHINE LEARNING TRAINING LOOP
-  // =====================================================================
   const handleRegister = (printAfter = false) => {
     const invoice = {
       id: existingInvoice ? existingInvoice.id : `INV-${invoiceNumber}`,
@@ -539,7 +538,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
       customerId,
       customer: customer?.name || existingInvoice?.customer || 'Unknown Customer',
       region: customer?.region || existingInvoice?.region || '',
-      date: existingInvoice ? existingInvoice.date : new Date().toISOString().split('T')[0],
+      date: invoiceDate, // NEW: Uses the manually selected date
       items,
       total,
       status: existingInvoice ? existingInvoice.status : 'Paid',
@@ -550,7 +549,6 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
     const nextInventory = [...sys.inventory];
 
     items.forEach((item) => {
-      // 1. Deduct Stock for new invoices
       if (!existingInvoice && item.itemId) {
         const stockIndex = nextInventory.findIndex((entry) => entry.id === item.itemId);
         if (stockIndex > -1) {
@@ -558,10 +556,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
         }
       }
 
-      // 2. MACHINE LEARNING REINFORCEMENT: Reward and Penalize
       if (item.rawSearchString) {
-        
-        // A. REWARD the item you actually chose/finalized
         if (item.itemId) {
           const correctIndex = nextInventory.findIndex((entry) => entry.id === item.itemId);
           if (correctIndex > -1) {
@@ -573,7 +568,6 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
           }
         }
 
-        // B. PENALIZE the AI's original bad guess (if you had to correct it!)
         if (item.originalPredictedId && item.originalPredictedId !== item.itemId) {
           const wrongIndex = nextInventory.findIndex((entry) => entry.id === item.originalPredictedId);
           if (wrongIndex > -1) {
@@ -611,6 +605,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
         customer={customer}
         gst={gst}
         invoiceNumber={invoiceNumber}
+        invoiceDate={invoiceDate} // NEW: Pass it into the print layout
         items={items}
         onBack={() => setPreviewMode(false)}
         onRegister={handleRegister}
@@ -685,11 +680,12 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
           <div className="mx-auto mb-12 w-full max-w-[800px] border-b-8 border-blue-600 bg-white p-12 text-sm text-gray-800 shadow-xl">
             <CompanyHeader />
 
+            {/* NEW: Adjusted layout to comfortably fit 4 options now */}
             <div className="mb-12 flex justify-between">
-              <div className="w-1/3 border-r border-slate-100 pr-6">
+              <div className="w-[30%] border-r border-slate-100 pr-6">
                 <label className="text-[10px] font-black uppercase text-gray-400">Customer Account:</label>
                 <select
-                  className="mt-1 w-full border-none bg-transparent p-0 text-xl font-black focus:ring-0"
+                  className="mt-1 w-full border-none bg-transparent p-0 text-lg font-black focus:ring-0"
                   onChange={(event) => setCustomerId(event.target.value)}
                   value={customerId}
                   disabled={!!existingInvoice} 
@@ -708,19 +704,30 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                 )}
               </div>
 
-              <div className="w-1/3 border-r border-slate-100 px-6">
-                <label className="text-[10px] font-black uppercase text-gray-400">Payment Terms:</label>
+              {/* NEW: The manual Date Picker! */}
+              <div className="w-[20%] border-r border-slate-100 px-6">
+                <label className="text-[10px] font-black uppercase text-gray-400">Invoice Date:</label>
+                <input
+                  type="date"
+                  className="mt-1 w-full cursor-pointer border-none bg-transparent p-0 text-lg font-black text-slate-800 focus:ring-0 outline-none"
+                  value={invoiceDate}
+                  onChange={(event) => setInvoiceDate(event.target.value)}
+                />
+              </div>
+
+              <div className="w-[20%] border-r border-slate-100 px-6">
+                <label className="text-[10px] font-black uppercase text-gray-400">Terms:</label>
                 <select
-                  className="mt-1 w-full cursor-pointer border-none bg-transparent p-0 text-xl font-black text-slate-800 focus:ring-0"
+                  className="mt-1 w-full cursor-pointer border-none bg-transparent p-0 text-lg font-black text-slate-800 focus:ring-0"
                   onChange={(event) => setPaymentTerms(event.target.value)}
                   value={paymentTerms}
                 >
-                  <option value="30_days">30 Days Term</option>
-                  <option value="cod">Cash on Delivery</option>
+                  <option value="30_days">30 Days</option>
+                  <option value="cod">C.O.D</option>
                 </select>
               </div>
 
-              <div className="w-1/3 pl-6 text-right relative">
+              <div className="w-[30%] pl-6 text-right relative">
                 <label className="text-[10px] font-black uppercase text-gray-400">Serial No.</label>
                 <div className="flex items-center justify-end text-3xl font-black tracking-tighter text-red-600 mt-1">
                   <span className="mr-1">#</span>
