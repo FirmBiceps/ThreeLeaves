@@ -122,15 +122,24 @@ function InvoicePreview({
   return (
     <div className="fixed inset-0 z-[3000] overflow-y-auto bg-slate-950/90 print:bg-white print:p-0">
       
-      {/* THE FIX: Aggressively prioritize Chinese fonts first to force the print spooler to load them */}
       <style type="text/css">
         {`
           @media print {
-            html, body, * {
-              font-family: "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "SimHei", Arial, sans-serif !important;
+            /* 1. Removes the default browser headers, URLs, and dates completely */
+            @page {
+              margin: 0; 
             }
-            #printable-invoice, #printable-invoice * {
-              font-family: "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "SimHei", Arial, sans-serif !important;
+            
+            /* 2. Adds safe margins back to the physical page so content isn't cut off */
+            body {
+              margin: 1cm;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+
+            /* 3. Uses the native Chinese script names (微软雅黑, 黑体) to force stubborn printer drivers */
+            *, html, body, div, p, span, h1, h2, h3, table, th, td {
+              font-family: "Microsoft YaHei", "微软雅黑", "PingFang SC", "SimHei", "黑体", Arial, sans-serif !important;
             }
           }
         `}
@@ -168,7 +177,7 @@ function InvoicePreview({
           <div 
             id="printable-invoice" 
             className="bg-white text-black font-sans w-full h-full flex flex-col pt-0"
-            style={{ fontFamily: '"Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "SimHei", Arial, sans-serif' }}
+            style={{ fontFamily: '"Microsoft YaHei", "微软雅黑", "PingFang SC", "SimHei", "黑体", Arial, sans-serif' }}
           >
             
             <div className="flex justify-between items-start mb-6">
@@ -501,7 +510,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
           unitPrice: getSafePrice(bestMatch, determinedUnit),
           picked: false,
           rawSearchString: searchString, 
-          originalPredictedId: bestMatch.id, // <-- We track what the AI guessed!
+          originalPredictedId: bestMatch.id, 
         });
       } else {
         nextDraftItems.push({
@@ -512,7 +521,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
           unitPrice: 0,
           picked: false,
           rawSearchString: searchString,
-          originalPredictedId: null, // <-- AI didn't know what it was
+          originalPredictedId: null, 
         });
       }
     });
@@ -574,7 +583,6 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
               nextInventory[wrongIndex].learned_phrases = {};
             }
             const currentScore = nextInventory[wrongIndex].learned_phrases[item.rawSearchString] || 0;
-            // Apply Negative Reinforcement (-1)
             nextInventory[wrongIndex].learned_phrases[item.rawSearchString] = currentScore - 1;
           }
         }
