@@ -7,16 +7,25 @@ function InvoicePreviewModal({ invoice, onClose }) {
   return (
     <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm print:bg-white print:p-0 print:block print:absolute print:inset-0 print:z-[9999]">
       
-      {/* THE FIX: Force the printer to load Chinese fonts and remove browser URLs */}
+      {/* THE FIX: Perfect A4 margins, zero browser headers/footers, and forced Chinese fonts */}
       <style type="text/css">
         {`
           @media print {
-            @page { margin: 0; }
+            /* 1. This completely nukes the URL, Date, and Page Numbers */
+            @page { 
+              size: A4;
+              margin: 0 !important; 
+            }
+            
+            /* 2. Remove the body margin that was causing the right-shift */
             body {
-              margin: 1cm;
+              margin: 0 !important;
+              padding: 0 !important;
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
             }
+
+            /* 3. Uses the native Chinese script names (微软雅黑, 黑体) to force stubborn printer drivers */
             *, html, body, div, p, span, h1, h2, h3, table, th, td {
               font-family: "Microsoft YaHei", "微软雅黑", "PingFang SC", "SimHei", "黑体", Arial, sans-serif !important;
             }
@@ -24,7 +33,8 @@ function InvoicePreviewModal({ invoice, onClose }) {
         `}
       </style>
 
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh] print:shadow-none print:max-h-none print:rounded-none">
+      {/* THE LAYOUT FIX: Set the print container to exactly 210mm wide and center it automatically */}
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh] print:w-[210mm] print:min-h-[297mm] print:mx-auto print:shadow-none print:max-h-none print:rounded-none">
         
         {/* Header (Hidden when printing so buttons don't show on paper) */}
         <div className="bg-slate-900 px-8 py-5 flex justify-between items-center text-white shrink-0 print:hidden">
@@ -36,7 +46,6 @@ function InvoicePreviewModal({ invoice, onClose }) {
             </div>
           </div>
           <div className="flex space-x-3">
-            {/* Added a Print button here so you can easily test it! */}
             <button onClick={() => window.print()} className="flex items-center bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-xl text-sm font-bold transition-colors">
               <Printer size={16} className="mr-2" /> Print
             </button>
@@ -46,9 +55,9 @@ function InvoicePreviewModal({ invoice, onClose }) {
           </div>
         </div>
 
-        {/* Scrollable Content (Applied Chinese font inline just to be safe) */}
+        {/* Scrollable Content: THE PADDING FIX: added print:p-[15mm] to create a perfect inner border */}
         <div 
-          className="p-8 overflow-y-auto bg-slate-50 flex-grow print:bg-white print:p-0 print:overflow-visible"
+          className="p-8 overflow-y-auto bg-slate-50 flex-grow print:bg-white print:p-[15mm] print:overflow-visible"
           style={{ fontFamily: '"Microsoft YaHei", "微软雅黑", "PingFang SC", "SimHei", "黑体", Arial, sans-serif' }}
         >
           
