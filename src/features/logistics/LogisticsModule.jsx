@@ -11,21 +11,26 @@ export function LogisticsModule({ sys }) {
   const mapRef = useRef(null);
   const markersLayerRef = useRef(null);
   const polylineRef = useRef(null);
-  const todayInvoices = sys.invoices.filter((invoice) => invoice.date === getTodayString());
+  
+  // 1. SAFEGUARD: Ensure data exists before filtering
+  const todayInvoices = (sys?.invoices || []).filter((invoice) => invoice.date === getTodayString());
 
   const regionalGroups = useMemo(() => {
     const groups = { North: [], West: [], East: [], Central: [] };
     todayInvoices.forEach((invoice) => {
-      const customer = sys.customers.find((entry) => entry.id === invoice.customerId);
-      if (customer?.region) {
+      const customer = (sys?.customers || []).find((entry) => entry.id === invoice.customerId);
+      
+      // 2. THE FIX: Strictly require lat and lng to exist before routing them!
+      if (customer && customer.region && customer.lat && customer.lng) {
+        if (!groups[customer.region]) groups[customer.region] = []; // Failsafe if region string is unexpected
         groups[customer.region].push({ ...invoice, cust: customer });
       }
     });
     return groups;
-  }, [sys.customers, todayInvoices]);
+  }, [sys?.customers, todayInvoices]);
 
   const routeMetrics = useMemo(() => {
-    if (!selectedRegion || regionalGroups[selectedRegion].length === 0) {
+    if (!selectedRegion || !regionalGroups[selectedRegion] || regionalGroups[selectedRegion].length === 0) {
       return null;
     }
 
@@ -68,6 +73,7 @@ export function LogisticsModule({ sys }) {
     }
 
     if (!mapRef.current) {
+      // Initialize map once
       mapRef.current = L.map(mapContainer).setView([1.3521, 103.8198], 11);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap contributors',
@@ -83,42 +89,55 @@ export function LogisticsModule({ sys }) {
     }
 
     const layerGroup = L.layerGroup();
-    L.circleMarker([COMPANY_HQ.lat, COMPANY_HQ.lng], {
-      radius: 8,
-      color: '#ef4444',
-      fillColor: '#ef4444',
-      fillOpacity: 1,
-    })
-      .bindPopup('<b>Three Leaves HQ</b>')
-      .addTo(layerGroup);
+    
+    // Draw HQ Marker
+    if (COMPANY_HQ?.lat && COMPANY_HQ?.lng) {
+      L.circleMarker([COMPANY_HQ.lat, COMPANY_HQ.lng], {
+        radius: 8,
+        color: '#ef4444',
+        fillColor: '#ef4444',
+        fillOpacity: 1,
+      })
+        .bindPopup('<b>Three Leaves HQ</b>')
+        .addTo(layerGroup);
+    }
 
-    if (routeMetrics) {
+    if (routeMetrics && routeMetrics.sequence.length > 0) {
+      // Draw Selected Route
       routeMetrics.sequence.forEach((stop) => {
-        L.circleMarker([stop.cust.lat, stop.cust.lng], {
-          radius: 6,
-          color: '#2563eb',
-          fillColor: '#2563eb',
-          fillOpacity: 1,
-        })
-          .bindPopup(`<b>${stop.cust.name}</b>`)
-          .addTo(layerGroup);
+        if (stop.cust.lat && stop.cust.lng) {
+          L.circleMarker([stop.cust.lat, stop.cust.lng], {
+            radius: 6,
+            color: '#2563eb',
+            fillColor: '#2563eb',
+            fillOpacity: 1,
+          })
+            .bindPopup(`<b>${stop.cust.name}</b>`)
+            .addTo(layerGroup);
+        }
       });
 
       const pathCoordinates = [
         [COMPANY_HQ.lat, COMPANY_HQ.lng],
-        ...routeMetrics.sequence.map((stop) => [stop.cust.lat, stop.cust.lng]),
+        ...routeMetrics.sequence
+          .filter(stop => stop.cust.lat && stop.cust.lng) // Filter safe points just in case
+          .map((stop) => [stop.cust.lat, stop.cust.lng]),
         [COMPANY_HQ.lat, COMPANY_HQ.lng],
       ];
+      
       polylineRef.current = L.polyline(pathCoordinates, {
         color: '#2563eb',
         weight: 4,
         dashArray: '10, 10',
       }).addTo(mapRef.current);
+      
       mapRef.current.fitBounds(polylineRef.current.getBounds(), { padding: [50, 50] });
+
     } else {
+      // Draw all available points for today
       todayInvoices.forEach((invoice) => {
-        const customer = sys.customers.find((entry) => entry.id === invoice.customerId);
-        if (customer?.lat) {
+        const customer = (sys?.customers || []).find((entry) => entry.id === invoice.customerId);
+        if (customer?.lat && customer?.lng) {
           L.circleMarker([customer.lat, customer.lng], {
             radius: 6,
             color: '#3b82f6',
@@ -129,20 +148,20 @@ export function LogisticsModule({ sys }) {
             .addTo(layerGroup);
         }
       });
-      if (todayInvoices.length > 0) {
-        const bounds = layerGroup.getBounds();
-        if (bounds.isValid()) {
-          mapRef.current.fitBounds(bounds, { padding: [50, 50] });
-        }
+
+      const bounds = layerGroup.getBounds();
+      if (bounds.isValid()) {
+        mapRef.current.fitBounds(bounds, { padding: [50, 50] });
       }
     }
 
     layerGroup.addTo(mapRef.current);
     markersLayerRef.current = layerGroup;
+    
     const resizeTimer = setTimeout(() => mapRef.current?.invalidateSize(), 50);
 
     return () => clearTimeout(resizeTimer);
-  }, [routeMetrics, sys.customers, todayInvoices]);
+  }, [routeMetrics, sys?.customers, todayInvoices]);
 
   useEffect(() => {
     return () => {
@@ -248,4 +267,3 @@ export function LogisticsModule({ sys }) {
     </div>
   );
 }
-
