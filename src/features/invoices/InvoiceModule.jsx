@@ -1,18 +1,38 @@
 import { useMemo, useState, useEffect } from 'react';
-import { Plus, FileText, X, Edit, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, FileText, X, Edit, Search, ChevronLeft, ChevronRight, Printer } from 'lucide-react';
 import { formatMoney } from '../../utils/format';
 import { InvoiceGenerator } from './InvoiceGenerator';
+import logo from './three_leaves_logo.png';
 
 // ==========================================
 // COMPONENT 1: INVOICE PREVIEW MODAL
 // ==========================================
-function InvoicePreviewModal({ invoice, onClose, onEdit }) {
+function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
   if (!invoice) return null;
 
+  // Extract variables for printable layout
+  const customerObj = sys.customers.find(c => c.id === invoice.customerId) || {};
+  const customerAddress = customerObj.address || '';
+  const subtotal = invoice.items.reduce((sum, item) => sum + (Number(item.qty) || 0) * (Number(item.unitPrice) || 0), 0);
+  const gst = subtotal * 0.09;
+  const total = subtotal + gst;
+
   return (
-    <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
-        
+    <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm print:bg-white print:p-0 print:block print:absolute print:inset-0 print:z-[9999]">
+      
+      {/* THE FIX: HARD-INJECTED PRINT STYLES TO FORCE BROWSER TO RENDER CHINESE CHARACTERS */}
+      <style type="text/css">
+        {`
+          @media print {
+            *, html, body {
+              font-family: Arial, "Helvetica Neue", Helvetica, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "SimHei", sans-serif !important;
+            }
+          }
+        `}
+      </style>
+
+      {/* SCREEN VIEW */}
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh] print:hidden">
         <div className="bg-slate-900 px-8 py-5 flex justify-between items-center text-white shrink-0">
           <div className="flex items-center">
             <FileText size={22} className="mr-3 text-blue-400" />
@@ -22,6 +42,12 @@ function InvoicePreviewModal({ invoice, onClose, onEdit }) {
             </div>
           </div>
           <div className="flex items-center space-x-3">
+            <button 
+              onClick={() => window.print()} 
+              className="flex items-center text-sm font-bold bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-xl transition-colors"
+            >
+              <Printer size={16} className="mr-2" /> Print
+            </button>
             <button 
               onClick={() => onEdit(invoice)} 
               className="flex items-center text-sm font-bold bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-xl transition-colors"
@@ -35,7 +61,6 @@ function InvoicePreviewModal({ invoice, onClose, onEdit }) {
         </div>
 
         <div className="p-8 overflow-y-auto bg-slate-50 flex-grow">
-          
           <div className="grid grid-cols-3 gap-6 mb-8">
             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
               <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Date</p>
@@ -100,8 +125,142 @@ function InvoicePreviewModal({ invoice, onClose, onEdit }) {
               </div>
             </div>
           </div>
-
         </div>
+      </div>
+
+      {/* PRINT VIEW (EXACT MATCH PDF LAYOUT) */}
+      <div 
+        className="hidden print:flex w-[210mm] min-h-[297mm] flex-col bg-white p-8 text-black"
+      >
+        <div className="flex justify-between items-start mb-6">
+          <div className="w-[25%]">
+            <img src={logo} alt="Three Leaves Logo" className="w-[110px] h-auto object-contain" />
+          </div>
+
+          <div className="w-[50%] text-center leading-tight pt-2">
+            <h1 className="font-bold text-[14px]">THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
+            <h2 className="font-bold text-[13px] mb-1">三叶（新加坡） 贸易公司</h2>
+            <p className="font-bold text-[10px] mb-0.5">CO.REG NO.53033969B &nbsp;&nbsp;&nbsp; GST REG NO. M90355440L</p>
+            <p className="text-[10px] mb-0.5">280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
+            <p className="text-[10px]">HP: 97578869 (Mr Ye) &nbsp; HP: 91113505 (Min) &nbsp; Email: 3leaves.sg@gmail.com</p>
+          </div>
+
+          <div className="w-[25%] flex flex-col items-end pt-1">
+            <div className="text-center w-full mb-2">
+              <h2 className="text-[18px] font-bold tracking-[0.2em] leading-none mb-0.5">發票</h2>
+              <h3 className="text-[14px] font-bold tracking-widest uppercase">TAX INVOICE</h3>
+            </div>
+            
+            <div className="w-full text-[16px] text-left mt-1 pl-4 flex flex-col leading-tight gap-1">
+              <div className="flex items-center">
+                <span className="font-bold w-14 shrink-0">No.</span>
+                <span className="text-red-600 font-bold tracking-wider">{invoice.number}</span>
+              </div>
+              <div className="flex items-center">
+                <span className="font-bold w-14 shrink-0">Term:</span>
+                <span className="font-bold">{invoice.paymentTerms === 'cod' ? 'COD' : '30 Days'}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mb-4 text-[15px] font-bold flex flex-col w-full">
+          <div className="flex justify-between w-full mb-2">
+            <div className="flex items-end w-[65%] pr-4">
+              <span className="w-12 shrink-0">TO:</span>
+              <span className="flex-1 uppercase border-b border-black pb-0.5">
+                {invoice.customer || ''}
+              </span>
+            </div>
+            <div className="flex items-end w-[35%] pl-4">
+              <span className="w-14 shrink-0">DATE:</span>
+              <span className="flex-1 text-center border-b border-black pb-0.5">
+                {invoice.date 
+                  ? new Date(invoice.date).toLocaleDateString('en-GB').replace(/\//g, '-') 
+                  : new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}
+              </span>
+            </div>
+          </div>
+          <div className="flex items-end w-full mt-1">
+            <span className="w-24 shrink-0">ADDRESS:</span>
+            <span className="flex-1 uppercase leading-tight border-b border-black pb-0.5">
+              {customerAddress}
+            </span>
+          </div>
+        </div>
+
+        <table className="w-full text-[15px] border-2 border-black text-center mb-0 leading-tight flex-grow">
+          <thead className="border-b-2 border-black">
+            <tr className="font-bold bg-white text-[14px]">
+              <th className="py-2 px-1 border-r border-black w-10">NO.</th>
+              <th className="py-2 px-2 border-r border-black text-left">DESCRIPTION</th>
+              <th className="py-2 px-1 border-r border-black w-24">QUANTITY</th>
+              <th className="py-2 px-1 border-r border-black w-32 text-center">UNIT PRICE</th>
+              <th className="py-2 px-1 w-32 text-center">AMOUNT</th>
+            </tr>
+          </thead>
+          <tbody>
+            {invoice.items && invoice.items.map((item, idx) => {
+              const productName = item.name || item.Items || '-';
+
+              return (
+                <tr key={idx} className="h-[32px] align-top">
+                  <td className="p-1 border-r border-black font-medium text-center">{idx + 1}</td>
+                  <td className="p-1 border-r border-black text-left pl-2 font-bold">{productName}</td>
+                  <td className="p-1 border-r border-black font-medium text-center">{item.qty || item.quantity} {item.unit}</td>
+                  <td className="p-1 border-r border-black text-center">${formatMoney(item.unitPrice)}</td>
+                  <td className="p-1 text-center font-bold">
+                    ${formatMoney((Number(item.qty || item.quantity) || 0) * (Number(item.unitPrice) || 0))}
+                  </td>
+                </tr>
+              );
+            })}
+            {invoice.items && invoice.items.length < 15 && Array.from({ length: 15 - invoice.items.length }).map((_, i) => (
+              <tr key={`blank-${i}`} className="h-[32px]">
+                <td className="border-r border-black"></td>
+                <td className="border-r border-black"></td>
+                <td className="border-r border-black"></td>
+                <td className="border-r border-black"></td>
+                <td></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <div className="flex w-full mt-2">
+          <div className="flex-1 pr-4 text-[12px] font-bold leading-snug flex flex-col justify-between">
+            <div>
+              <p>请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
+              <p>Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
+              <div className="mt-4">
+                <p>UEN: 53033969B</p>
+                <p>A/C Name: Three Leaves (Singapore) Trading Enterprise</p>
+                <p>A/C Number: 535-846562-001</p>
+                <p>Bank Name: OCBC</p>
+              </div>
+              <p className="mt-4 font-normal">All payments mode have to be made payable to Three Leaves (Singapore) Trading Enterprise.</p>
+            </div>
+            <div className="mt-6 mb-1">
+              <div className="w-48 border-t border-black text-center pt-1 text-[12px]">Received By</div>
+            </div>
+          </div>
+
+          <div className="flex flex-col font-bold text-[15px] shrink-0 w-[16rem]">
+            <div className="flex">
+              <div className="w-32 p-1 text-center">SUBTOTAL</div>
+              <div className="w-32 p-1 text-center">${formatMoney(subtotal)}</div>
+            </div>
+            <div className="flex">
+              <div className="w-32 p-1 text-center">9% GST</div>
+              <div className="w-32 p-1 text-center">${formatMoney(gst)}</div>
+            </div>
+            <div className="flex mt-2 pt-2 border-t-2 border-black text-[17px]">
+              <div className="w-32 p-1 text-center">TOTAL</div>
+              <div className="w-32 p-1 text-center">${formatMoney(total)}</div>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
   );
@@ -115,14 +274,12 @@ export function InvoiceModule({ sys }) {
   const [filter, setFilter] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
   
-  // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 30;
 
   const [previewInvoice, setPreviewInvoice] = useState(null);
   const [editingInvoice, setEditingInvoice] = useState(null);
 
-  // Reset to page 1 whenever filters change
   useEffect(() => {
     setCurrentPage(1);
   }, [filter, searchTerm]);
@@ -130,10 +287,8 @@ export function InvoiceModule({ sys }) {
   const filteredInvoices = useMemo(() => {
     let result = [...(sys?.invoices || [])];
 
-    // 1. Default Sort: Latest Date First
     result.sort((a, b) => new Date(b.date) - new Date(a.date));
 
-    // 2. Apply Search
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase();
       result = result.filter(inv => 
@@ -142,7 +297,6 @@ export function InvoiceModule({ sys }) {
       );
     }
 
-    // 3. Apply Date Filters
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -172,7 +326,6 @@ export function InvoiceModule({ sys }) {
     return result;
   }, [sys.invoices, filter, searchTerm]);
 
-  // Calculate Pagination
   const totalPages = Math.ceil(filteredInvoices.length / ITEMS_PER_PAGE) || 1;
   const paginatedInvoices = filteredInvoices.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
@@ -190,9 +343,8 @@ export function InvoiceModule({ sys }) {
     setIsGeneratorOpen(true);
   };
 
-  // Instant inline status update
   const handleStatusChange = (e, invoiceId, fieldKey, newValue) => {
-    e.stopPropagation(); // Prevents the row click (preview) from triggering
+    e.stopPropagation(); 
     const updatedInvoices = sys.invoices.map(inv => 
       inv.id === invoiceId ? { ...inv, [fieldKey]: newValue } : inv
     );
@@ -202,7 +354,6 @@ export function InvoiceModule({ sys }) {
   return (
     <div className="p-8 h-full overflow-y-auto relative">
       
-      {/* HEADER */}
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900 flex items-center">
@@ -226,7 +377,6 @@ export function InvoiceModule({ sys }) {
 
       <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
         
-        {/* FILTERS & SEARCH */}
         <div className="flex flex-col sm:flex-row justify-between items-center border-b border-slate-100 bg-slate-50 p-4 gap-4">
           <div className="flex bg-white rounded-lg p-1 border border-slate-200 shadow-sm">
             {['All', 'Today', 'This Week', 'This Month', 'This Year'].map((option) => (
@@ -255,7 +405,6 @@ export function InvoiceModule({ sys }) {
           </div>
         </div>
 
-        {/* DATA TABLE */}
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-white border-b border-slate-200 text-xs uppercase tracking-widest text-slate-500 font-semibold">
@@ -280,18 +429,17 @@ export function InvoiceModule({ sys }) {
                 <td className="p-5 text-slate-500">{invoice.date}</td>
                 <td className="p-5 text-slate-800">{invoice.customer}</td>
                 
-                {/* PAYMENT STATUS EDITABLE DROPDOWN */}
                 <td className="p-5 text-center">
                   <div className="inline-block relative">
                     <select
                       className={`appearance-none rounded-lg px-3 py-1.5 text-xs font-black uppercase tracking-widest border-none cursor-pointer pr-8 outline-none ${
                         invoice.status === 'Unpaid' ? 'bg-red-50 text-red-700' :
                         invoice.status === 'Overdue' ? 'bg-orange-50 text-orange-700' :
-                        'bg-emerald-50 text-emerald-700' // Default to Paid
+                        'bg-emerald-50 text-emerald-700'
                       }`}
                       value={invoice.status || 'Paid'}
                       onChange={(e) => handleStatusChange(e, invoice.id, 'status', e.target.value)}
-                      onClick={(e) => e.stopPropagation()} // Stop row click
+                      onClick={(e) => e.stopPropagation()} 
                     >
                       <option value="Paid">Paid</option>
                       <option value="Unpaid">Unpaid</option>
@@ -303,18 +451,17 @@ export function InvoiceModule({ sys }) {
                   </div>
                 </td>
 
-                {/* DELIVERY STATUS EDITABLE DROPDOWN */}
                 <td className="p-5 text-center">
                   <div className="inline-block relative">
                     <select
                       className={`appearance-none rounded-lg px-3 py-1.5 text-xs font-black uppercase tracking-widest border-none cursor-pointer pr-8 outline-none ${
                         invoice.deliveryStatus === 'Delivered' ? 'bg-emerald-50 text-emerald-700' :
                         invoice.deliveryStatus === 'Cancelled' ? 'bg-slate-100 text-slate-500' :
-                        'bg-blue-50 text-blue-700' // Default to Pending
+                        'bg-blue-50 text-blue-700' 
                       }`}
                       value={invoice.deliveryStatus || 'Pending'}
                       onChange={(e) => handleStatusChange(e, invoice.id, 'deliveryStatus', e.target.value)}
-                      onClick={(e) => e.stopPropagation()} // Stop row click
+                      onClick={(e) => e.stopPropagation()} 
                     >
                       <option value="Pending">Pending</option>
                       <option value="Delivered">Delivered</option>
@@ -341,7 +488,6 @@ export function InvoiceModule({ sys }) {
           </tbody>
         </table>
 
-        {/* PAGINATION CONTROLS */}
         {totalPages > 1 && (
           <div className="flex items-center justify-between border-t border-slate-100 bg-white p-4 px-8">
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
@@ -372,6 +518,7 @@ export function InvoiceModule({ sys }) {
           invoice={previewInvoice} 
           onClose={() => setPreviewInvoice(null)}
           onEdit={handleEditInvoice}
+          sys={sys}
         />
       )}
 
