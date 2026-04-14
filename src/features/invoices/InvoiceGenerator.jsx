@@ -19,6 +19,9 @@ import { formatMoney } from '../../utils/format';
 // 1. IMPORT YOUR LOGO DIRECTLY HERE
 import logo from './three_leaves_logo.png';
 
+// The ultimate font stack variable to force the browser's hand
+const CJK_FONT = '"Microsoft YaHei", "微软雅黑", "PingFang SC", "SimHei", "黑体", Arial, sans-serif';
+
 // ==========================================
 // SEARCHABLE PRODUCT DROPDOWN
 // ==========================================
@@ -125,21 +128,14 @@ function InvoicePreview({
       <style type="text/css">
         {`
           @media print {
-            /* 1. Removes the default browser headers, URLs, and dates completely */
-            @page {
-              margin: 0; 
-            }
-            
-            /* 2. Adds safe margins back to the physical page so content isn't cut off */
+            @page { margin: 0; }
             body {
               margin: 1cm;
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
             }
-
-            /* 3. Uses the native Chinese script names (微软雅黑, 黑体) to force stubborn printer drivers */
             *, html, body, div, p, span, h1, h2, h3, table, th, td {
-              font-family: "Microsoft YaHei", "微软雅黑", "PingFang SC", "SimHei", "黑体", Arial, sans-serif !important;
+              font-family: ${CJK_FONT} !important;
             }
           }
         `}
@@ -175,9 +171,10 @@ function InvoicePreview({
           </div>
 
           <div 
-            id="printable-invoice" 
-            className="bg-white text-black font-sans w-full h-full flex flex-col pt-0"
-            style={{ fontFamily: '"Microsoft YaHei", "微软雅黑", "PingFang SC", "SimHei", "黑体", Arial, sans-serif' }}
+            id="printable-invoice"
+            lang="zh" 
+            className="bg-white text-black w-full h-full flex flex-col pt-0"
+            style={{ fontFamily: CJK_FONT }}
           >
             
             <div className="flex justify-between items-start mb-6">
@@ -186,8 +183,8 @@ function InvoicePreview({
               </div>
 
               <div className="w-[50%] text-center leading-tight pt-2">
-                <h1 className="font-bold text-[14px]">THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
-                <h2 className="font-bold text-[13px] mb-1">三叶（新加坡） 贸易公司</h2>
+                <h1 className="font-bold text-[14px]" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
+                <h2 className="font-bold text-[13px] mb-1" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
                 <p className="font-bold text-[10px] mb-0.5">CO.REG NO.53033969B &nbsp;&nbsp;&nbsp; GST REG NO. M90355440L</p>
                 <p className="text-[10px] mb-0.5">280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
                 <p className="text-[10px]">HP: 97578869 (Mr Ye) &nbsp; HP: 91113505 (Min) &nbsp; Email: 3leaves.sg@gmail.com</p>
@@ -195,7 +192,7 @@ function InvoicePreview({
 
               <div className="w-[25%] flex flex-col items-end pt-1">
                 <div className="text-center w-full mb-2">
-                  <h2 className="text-[18px] font-bold tracking-[0.2em] leading-none mb-0.5">發票</h2>
+                  <h2 className="text-[18px] font-bold tracking-[0.2em] leading-none mb-0.5" style={{ fontFamily: CJK_FONT }}>發票</h2>
                   <h3 className="text-[14px] font-bold tracking-widest uppercase">TAX INVOICE</h3>
                 </div>
                 
@@ -216,7 +213,7 @@ function InvoicePreview({
               <div className="flex justify-between w-full mb-2">
                 <div className="flex items-end w-[65%] pr-4">
                   <span className="w-12 shrink-0">TO:</span>
-                  <span className="flex-1 uppercase border-b border-black pb-0.5">
+                  <span className="flex-1 uppercase border-b border-black pb-0.5" style={{ fontFamily: CJK_FONT }}>
                     {customer?.name || existingInvoice?.customer || ''}
                   </span>
                 </div>
@@ -231,13 +228,13 @@ function InvoicePreview({
               </div>
               <div className="flex items-end w-full mt-1">
                 <span className="w-24 shrink-0">ADDRESS:</span>
-                <span className="flex-1 uppercase leading-tight border-b border-black pb-0.5">
+                <span className="flex-1 uppercase leading-tight border-b border-black pb-0.5" style={{ fontFamily: CJK_FONT }}>
                   {customer?.address || ''}
                 </span>
               </div>
             </div>
 
-            <table className="w-full text-[15px] border-2 border-black text-center mb-0 leading-tight flex-grow">
+            <table className="w-full text-[15px] border-2 border-black text-center mb-0 leading-tight flex-grow" style={{ fontFamily: CJK_FONT }}>
               <thead className="border-b-2 border-black">
                 <tr className="font-bold bg-white text-[14px]">
                   <th className="py-2 px-1 border-r border-black w-10">NO.</th>
@@ -247,16 +244,17 @@ function InvoicePreview({
                   <th className="py-2 px-1 w-32 text-center">AMOUNT</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody style={{ fontFamily: CJK_FONT }}>
                 {items.map((item, idx) => {
                   const foundProduct = sys.inventory.find((entry) => entry.id === item.itemId);
                   const productName = foundProduct ? (foundProduct.name || foundProduct.Items) : (item.name || '-');
 
                   return (
-                    <tr key={idx} className="h-[32px] align-top">
+                    <tr key={idx} className="h-[32px] align-top" style={{ fontFamily: CJK_FONT }}>
                       <td className="p-1 border-r border-black font-medium text-center">{idx + 1}</td>
-                      <td className="p-1 border-r border-black text-left pl-2 font-bold">{productName}</td>
-                      <td className="p-1 border-r border-black font-medium text-center">{item.qty} {item.unit}</td>
+                      {/* THIS IS THE FIX: The inline style physically forces the Chromium engine to render this string in Chinese no matter what */}
+                      <td className="p-1 border-r border-black text-left pl-2 font-bold" style={{ fontFamily: CJK_FONT }}>{productName}</td>
+                      <td className="p-1 border-r border-black font-medium text-center" style={{ fontFamily: CJK_FONT }}>{item.qty} {item.unit}</td>
                       <td className="p-1 border-r border-black text-center">${formatMoney(item.unitPrice)}</td>
                       <td className="p-1 text-center font-bold">
                         ${formatMoney((Number(item.qty) || 0) * (Number(item.unitPrice) || 0))}
@@ -278,7 +276,7 @@ function InvoicePreview({
 
             <div className="flex w-full mt-2">
               <div className="flex-1 pr-4 text-[12px] font-bold leading-snug flex flex-col justify-between">
-                <div>
+                <div style={{ fontFamily: CJK_FONT }}>
                   <p>请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
                   <p>Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
                   <div className="mt-4">
