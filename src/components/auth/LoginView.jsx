@@ -1,18 +1,22 @@
+import { useState } from 'react';
 import { Lock } from 'lucide-react';
 
 export function LoginView({ sys, loginError, setLoginError }) {
-  // 1. Made this function 'async'
-  const handleSubmit = async (event) => {
+  // 1. We lock the default values into React State so the browser can't ignore them on the first click
+  const [username, setUsername] = useState('admin');
+  const [password, setPassword] = useState('admin123');
+
+  const handleSubmit = (event) => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const username = form.get('username');
-    const password = form.get('password');
-    const user = sys.users.find((entry) => entry.username === username && entry.password === password);
+    
+    // 2. We use the exact state values instead of reading the raw HTML form
+    const user = sys.users.find(
+      (entry) => entry.username === username && entry.password === password
+    );
 
     if (user) {
       setLoginError('');
-      // 2. Added 'await' so the app waits for the token to securely save before trying to route you!
-      await sys.setCurrentUser(user); 
+      sys.setCurrentUser(user); 
       return;
     }
 
@@ -40,20 +44,25 @@ export function LoginView({ sys, loginError, setLoginError }) {
           )}
           <input
             className="w-full rounded-3xl border-none bg-slate-50 p-5 font-bold focus:ring-2 focus:ring-blue-500"
-            defaultValue="admin"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
             name="username"
             placeholder="Username"
             required
           />
           <input
             className="w-full rounded-3xl border-none bg-slate-50 p-5 font-bold focus:ring-2 focus:ring-blue-500"
-            defaultValue="admin123"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
             name="password"
             placeholder="Password"
             required
             type="password"
           />
-          <button className="mt-6 w-full rounded-3xl bg-slate-900 py-5 text-xs font-black uppercase text-white shadow-xl shadow-slate-900/40 transition-all hover:bg-slate-800">
+          <button 
+            type="submit" 
+            className="mt-6 w-full rounded-3xl bg-slate-900 py-5 text-xs font-black uppercase text-white shadow-xl shadow-slate-900/40 transition-all hover:bg-slate-800"
+          >
             Authorize Identity
           </button>
         </form>
