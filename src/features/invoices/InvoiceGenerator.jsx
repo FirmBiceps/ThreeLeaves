@@ -122,12 +122,15 @@ function InvoicePreview({
   return (
     <div className="fixed inset-0 z-[3000] overflow-y-auto bg-slate-950/90 print:bg-white print:p-0">
       
-      {/* HARD-INJECTED PRINT STYLES TO FORCE BROWSER TO RENDER CHINESE CHARACTERS */}
+      {/* THE FIX: Aggressively prioritize Chinese fonts first to force the print spooler to load them */}
       <style type="text/css">
         {`
           @media print {
-            * {
-              font-family: Arial, "Helvetica Neue", Helvetica, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "SimHei", sans-serif !important;
+            html, body, * {
+              font-family: "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "SimHei", Arial, sans-serif !important;
+            }
+            #printable-invoice, #printable-invoice * {
+              font-family: "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "SimHei", Arial, sans-serif !important;
             }
           }
         `}
@@ -165,7 +168,7 @@ function InvoicePreview({
           <div 
             id="printable-invoice" 
             className="bg-white text-black font-sans w-full h-full flex flex-col pt-0"
-            style={{ fontFamily: 'Arial, "Helvetica Neue", Helvetica, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "SimHei", sans-serif' }}
+            style={{ fontFamily: '"Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "SimHei", Arial, sans-serif' }}
           >
             
             <div className="flex justify-between items-start mb-6">
