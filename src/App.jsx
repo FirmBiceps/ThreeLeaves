@@ -12,7 +12,7 @@ import { PickingModule } from './features/picking/PickingModule';
 import { SupplierModule } from './features/suppliers/SupplierModule';
 import { TeamModule } from './features/team/TeamModule';
 // 1. IMPORT THE NEW EMPLOYEE MODULE
-import { EmployeeModule } from './features/hr/EmployeeModule'; 
+import { EmployeeModule } from './features/Employee/EmployeeModule';
 import { useEnterpriseSystem } from './hooks/useEnterpriseSystem';
 
 export default function App() {
