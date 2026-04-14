@@ -10,6 +10,7 @@ import {
   Shield,
   Truck,
   Users,
+  Contact2, // Added for a distinct Employee icon
 } from 'lucide-react';
 
 function NavButton({ id, icon: Icon, label, activeTab, setActiveTab }) {
@@ -44,9 +45,14 @@ export function Sidebar({ sys, activeTab, setActiveTab }) {
         <NavButton activeTab={activeTab} icon={FileText} id="invoices" label="Invoices" setActiveTab={setActiveTab} />
         <NavButton activeTab={activeTab} icon={Receipt} id="billing" label="Statements" setActiveTab={setActiveTab} />
         <NavButton activeTab={activeTab} icon={Package} id="inventory" label="Inventory" setActiveTab={setActiveTab} />
+        
+        {/* NEW EMPLOYEE MODULE BUTTON */}
+        <NavButton activeTab={activeTab} icon={Contact2} id="employees" label="Employees" setActiveTab={setActiveTab} />
+        
         <NavButton activeTab={activeTab} icon={ClipboardList} id="picking" label="Pick List" setActiveTab={setActiveTab} />
         <NavButton activeTab={activeTab} icon={Navigation} id="logistics" label="Delivery Map" setActiveTab={setActiveTab} />
         <NavButton activeTab={activeTab} icon={Percent} id="gst" label="GST Ledger" setActiveTab={setActiveTab} />
+        
         {sys.currentUser?.role === 'admin' && (
           <div className="mt-8 border-t border-slate-800 pt-4">
             <NavButton activeTab={activeTab} icon={Shield} id="team" label="Team Access" setActiveTab={setActiveTab} />
