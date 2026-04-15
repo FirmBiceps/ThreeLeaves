@@ -17,7 +17,7 @@ export function useEnterpriseSystem() {
   const [invoices, setInvoices] = useState([]);
   const [gstRecords, setGstRecords] = useState([]);
 
-  // 1. Fetch all data from your new individual tables on load
+  // 1. Fetch all data from your individual tables on load
   useEffect(() => {
     const fetchAllData = async () => {
       try {
@@ -55,6 +55,16 @@ export function useEnterpriseSystem() {
     }
   };
 
+  // NEW: Dedicated Delete Function for Supabase
+  const deleteRecord = async (table, id) => {
+    try {
+      const { error } = await supabase.from(table).delete().eq('id', id);
+      if (error) console.error(`Error deleting from ${table}:`, error);
+    } catch (err) {
+      console.error("Supabase delete error:", err);
+    }
+  };
+
   // 3. Handlers to update the UI instantly AND save to the correct cloud table
   const handleSetUsers = (v) => { setUsers(v); syncToSupabase('users', v); };
   const handleSetCustomers = (v) => { setCustomers(v); syncToSupabase('customers', v); };
@@ -80,6 +90,7 @@ export function useEnterpriseSystem() {
     inventory, setInventory: handleSetInventory, 
     invoices, setInvoices: handleSetInvoices,
     gstRecords, setGstRecords: handleSetGstRecords,
-    hasPerm, getApplicablePrice
+    hasPerm, getApplicablePrice,
+    deleteRecord // Expose the new function here
   };
 }
