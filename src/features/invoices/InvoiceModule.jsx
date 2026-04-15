@@ -13,7 +13,8 @@ import {
   BrainCircuit,
   Plus,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Edit
 } from 'lucide-react';
 import { CompanyHeader } from '../../components/shared/CompanyHeader';
 import { UNIT_OPTIONS } from '../../data/company';
@@ -26,7 +27,7 @@ import logo from './three_leaves_logo.png';
 const CJK_FONT = '"Microsoft YaHei", "微软雅黑", "PingFang SC", "SimHei", "黑体", Arial, sans-serif';
 
 // ==========================================
-// SEARCHABLE PRODUCT DROPDOWN
+// 1. SEARCHABLE PRODUCT DROPDOWN
 // ==========================================
 function ProductSearchSelect({ value, inventory, onChange }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -43,10 +44,11 @@ function ProductSearchSelect({ value, inventory, onChange }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const selectedProduct = inventory.find((entry) => entry.id === value);
+  const safeInventory = inventory || [];
+  const selectedProduct = safeInventory.find((entry) => entry.id === value);
   const displayName = selectedProduct ? (selectedProduct.name || selectedProduct.Items) : '';
 
-  const filteredInventory = inventory.filter((item) => {
+  const filteredInventory = safeInventory.filter((item) => {
     const itemName = (item.name || item.Items || '').toLowerCase();
     return itemName.includes(searchTerm.toLowerCase());
   });
@@ -110,7 +112,7 @@ function ProductSearchSelect({ value, inventory, onChange }) {
 }
 
 // ==========================================
-// SEARCHABLE CUSTOMER DROPDOWN (NEW)
+// 2. SEARCHABLE CUSTOMER DROPDOWN
 // ==========================================
 function CustomerSearchSelect({ value, customers, onChange, disabled }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -127,10 +129,11 @@ function CustomerSearchSelect({ value, customers, onChange, disabled }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const selectedCustomer = (customers || []).find((c) => c.id === value);
+  const safeCustomers = customers || [];
+  const selectedCustomer = safeCustomers.find((c) => c.id === value);
   const displayName = selectedCustomer ? selectedCustomer.name : '';
 
-  const filteredCustomers = (customers || []).filter((c) =>
+  const filteredCustomers = safeCustomers.filter((c) =>
     (c.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -191,14 +194,14 @@ function CustomerSearchSelect({ value, customers, onChange, disabled }) {
 }
 
 // ==========================================
-// COMPONENT 1: INVOICE PREVIEW MODAL
+// COMPONENT 3: INVOICE PREVIEW MODAL
 // ==========================================
 function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
   if (!invoice) return null;
 
-  const customerObj = sys.customers.find(c => c.id === invoice.customerId) || {};
+  const customerObj = (sys.customers || []).find(c => c.id === invoice.customerId) || {};
   const customerAddress = customerObj.address || '';
-  const subtotal = invoice.items.reduce((sum, item) => sum + (Number(item.qty) || 0) * (Number(item.unitPrice) || 0), 0);
+  const subtotal = (invoice.items || []).reduce((sum, item) => sum + (Number(item.qty) || 0) * (Number(item.unitPrice) || 0), 0);
   const gst = subtotal * 0.09;
   const total = subtotal + gst;
 
@@ -338,7 +341,7 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
       <div 
         id="printable-invoice"
         lang="zh"
-        className="hidden print:flex w-[210mm] min-h-[297mm] flex-col bg-white p-8 text-black"
+        className="hidden print:flex w-full flex-col bg-white box-border text-black"
         style={{ fontFamily: CJK_FONT }}
       >
         <div className="flex justify-between items-start mb-6">
@@ -384,7 +387,8 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
             <div className="flex items-end w-[35%] pl-4">
               <span className="w-14 shrink-0">DATE:</span>
               <span className="flex-1 text-center border-b border-black pb-0.5">
-                {invoice.date 
+                {/* SAFETY NET: Prevents crash if date string is invalid or empty */}
+                {invoice.date && !isNaN(new Date(invoice.date).getTime()) 
                   ? new Date(invoice.date).toLocaleDateString('en-GB').replace(/\//g, '-') 
                   : new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}
               </span>
@@ -409,7 +413,7 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
             </tr>
           </thead>
           <tbody style={{ fontFamily: CJK_FONT }}>
-            {invoice.items && invoice.items.map((item, idx) => {
+            {(invoice.items || []).map((item, idx) => {
               const productName = item.name || item.Items || '-';
 
               return (
@@ -493,7 +497,7 @@ function InvoicePreview({
   existingInvoice
 }) {
   return (
-    <div className="fixed inset-0 z-[3000] overflow-y-auto bg-slate-950/90 print:bg-white print:p-0">
+    <div className="fixed inset-0 z-[3000] overflow-y-auto bg-slate-950/90 print:static print:inset-auto print:bg-white print:p-0 print:block print:z-auto print:overflow-visible">
       
       {/* THE FIX: Absolute Print Isolation for the Generator Preview */}
       <style type="text/css">
@@ -528,7 +532,7 @@ function InvoicePreview({
       </style>
 
       <div className="flex min-h-full justify-center py-12 print:p-0 print:block">
-        <div className="relative flex min-h-[297mm] w-full max-w-[210mm] flex-col bg-white p-8 shadow-2xl print:w-full print:max-w-none print:min-h-0 print:h-auto print:mx-0 print:box-border print:px-[15mm] print:py-[15mm] print:shadow-none">
+        <div className="relative flex min-h-[297mm] w-full max-w-[210mm] flex-col bg-white p-8 shadow-2xl print:w-full print:max-w-none print:min-h-0 print:h-auto print:mx-0 print:box-border print:shadow-none">
           
           <div className="absolute -top-16 left-0 right-0 flex items-center justify-between px-4 print:hidden">
             <button
@@ -606,7 +610,10 @@ function InvoicePreview({
                 <div className="flex items-end w-[35%] pl-4">
                   <span className="w-14 shrink-0">DATE:</span>
                   <span className="flex-1 text-center border-b border-black pb-0.5">
-                    {new Date(invoiceDate).toLocaleDateString('en-GB').replace(/\//g, '-')}
+                    {/* SAFETY NET: Prevents crash if date string is invalid or empty */}
+                    {invoiceDate && !isNaN(new Date(invoiceDate).getTime()) 
+                      ? new Date(invoiceDate).toLocaleDateString('en-GB').replace(/\//g, '-') 
+                      : new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}
                   </span>
                 </div>
               </div>
@@ -629,23 +636,23 @@ function InvoicePreview({
                 </tr>
               </thead>
               <tbody style={{ fontFamily: CJK_FONT }}>
-                {items.map((item, idx) => {
-                  const foundProduct = sys.inventory.find((entry) => entry.id === item.itemId);
+                {(items || []).map((item, idx) => {
+                  const foundProduct = (sys.inventory || []).find((entry) => entry.id === item.itemId);
                   const productName = foundProduct ? (foundProduct.name || foundProduct.Items) : (item.name || '-');
 
                   return (
                     <tr key={idx} className="h-[32px] align-top" style={{ fontFamily: CJK_FONT }}>
                       <td className="p-1 border-r border-black font-medium text-center">{idx + 1}</td>
                       <td className="p-1 border-r border-black text-left pl-2 font-bold" style={{ fontFamily: CJK_FONT }}>{productName}</td>
-                      <td className="p-1 border-r border-black font-medium text-center" style={{ fontFamily: CJK_FONT }}>{item.qty} {item.unit}</td>
+                      <td className="p-1 border-r border-black font-medium text-center" style={{ fontFamily: CJK_FONT }}>{item.qty || item.quantity} {item.unit}</td>
                       <td className="p-1 border-r border-black text-center">${formatMoney(item.unitPrice)}</td>
                       <td className="p-1 text-center font-bold">
-                        ${formatMoney((Number(item.qty) || 0) * (Number(item.unitPrice) || 0))}
+                        ${formatMoney((Number(item.qty || item.quantity) || 0) * (Number(item.unitPrice) || 0))}
                       </td>
                     </tr>
                   );
                 })}
-                {items.length < 15 && Array.from({ length: 15 - items.length }).map((_, i) => (
+                {items && items.length < 15 && Array.from({ length: 15 - items.length }).map((_, i) => (
                   <tr key={`blank-${i}`} className="h-[32px]">
                     <td className="border-r border-black"></td>
                     <td className="border-r border-black"></td>
@@ -711,7 +718,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
     const mm = String(date.getMonth() + 1).padStart(2, '0'); 
     const prefix = `${yy}${mm}`;
 
-    const monthlyInvoices = sys.invoices.filter(inv => String(inv.number).startsWith(prefix));
+    const monthlyInvoices = (sys.invoices || []).filter(inv => String(inv.number).startsWith(prefix));
     let maxSequence = 0;
     
     monthlyInvoices.forEach(inv => {
@@ -739,16 +746,16 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
   const [previewMode, setPreviewMode] = useState(false);
   const [autoFillNotif, setAutoFillNotif] = useState(false);
   
-  const customer = sys.customers.find((entry) => entry.id === customerId);
+  const customer = (sys.customers || []).find((entry) => entry.id === customerId);
 
   const isDuplicateNumber = useMemo(() => {
-    return sys.invoices.some(inv => 
+    return (sys.invoices || []).some(inv => 
       String(inv.number) === String(invoiceNumber) && 
       inv.id !== (existingInvoice ? existingInvoice.id : null)
     );
   }, [invoiceNumber, sys.invoices, existingInvoice]);
 
-  const subtotal = items.reduce(
+  const subtotal = (items || []).reduce(
     (sum, item) => sum + (Number(item.qty) || 0) * (Number(item.unitPrice) || 0),
     0,
   );
@@ -781,7 +788,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
       return;
     }
 
-    const history = sys.invoices.filter((invoice) => invoice.customerId === customerId);
+    const history = (sys.invoices || []).filter((invoice) => invoice.customerId === customerId);
     if (history.length === 0) {
       setItems([]);
       setAutoFillNotif(false);
@@ -802,7 +809,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
     const autoFilled = [];
     Object.entries(itemStats).forEach(([itemId, stats]) => {
       if (stats.count / history.length >= 0.9) {
-        const product = sys.inventory.find((entry) => entry.id === itemId);
+        const product = (sys.inventory || []).find((entry) => entry.id === itemId);
         if (product) {
           const determinedUnit = stats.unit || product.unit || product.Unit || '箱';
           autoFilled.push({
@@ -829,7 +836,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
 
   const suggestions = useMemo(() => {
     if (!customerId) return [];
-    const history = sys.invoices.filter((invoice) => invoice.customerId === customerId);
+    const history = (sys.invoices || []).filter((invoice) => invoice.customerId === customerId);
     if (history.length === 0) return [];
 
     const counts = {};
@@ -844,8 +851,8 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
         const confidence = count / history.length;
         return confidence >= 0.3 && confidence < 0.9;
       })
-      .map(([itemId]) => sys.inventory.find((entry) => entry.id === itemId))
-      .filter((item) => item && !items.find((draftItem) => draftItem.itemId === item.id));
+      .map(([itemId]) => (sys.inventory || []).find((entry) => entry.id === itemId))
+      .filter((item) => item && !(items || []).find((draftItem) => draftItem.itemId === item.id));
   }, [customerId, items, sys.invoices, sys.inventory]);
 
   const handleSmartExtract = () => {
@@ -862,7 +869,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
       let bestMatch = null;
       let highestScore = 0;
 
-      sys.inventory.forEach((inventoryItem) => {
+      (sys.inventory || []).forEach((inventoryItem) => {
         const itemName = (inventoryItem.name || inventoryItem.Items || '').toLowerCase();
         let score = 0;
 
@@ -926,7 +933,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
       paymentTerms,
     };
 
-    const nextInventory = [...sys.inventory];
+    const nextInventory = [...(sys.inventory || [])];
 
     items.forEach((item) => {
       if (!existingInvoice && item.itemId) {
@@ -964,9 +971,9 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
     sys.setInventory(nextInventory);
 
     if (existingInvoice) {
-      sys.setInvoices(sys.invoices.map(inv => inv.id === existingInvoice.id ? invoice : inv));
+      sys.setInvoices((sys.invoices || []).map(inv => inv.id === existingInvoice.id ? invoice : inv));
     } else {
-      sys.setInvoices([...sys.invoices, invoice]);
+      sys.setInvoices([...(sys.invoices || []), invoice]);
     }
 
     if (printAfter) {
@@ -1186,7 +1193,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                             value={item.itemId}
                             inventory={sys.inventory}
                             onChange={(selectedId) => {
-                              const product = sys.inventory.find((entry) => entry.id === selectedId);
+                              const product = (sys.inventory || []).find((entry) => entry.id === selectedId);
                               if (!product) return;
                               
                               const nextItems = [...items];
@@ -1217,7 +1224,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                             const newUnit = event.target.value;
                             nextItems[index].unit = newUnit;
                             
-                            const product = sys.inventory.find(p => p.id === nextItems[index].itemId);
+                            const product = (sys.inventory || []).find(p => p.id === nextItems[index].itemId);
                             if (product) {
                               nextItems[index].unitPrice = getSafePrice(product, newUnit);
                             }
@@ -1358,7 +1365,7 @@ export function InvoiceModule({ sys }) {
     const confirmDelete = window.confirm("Are you sure you want to permanently delete this invoice? This cannot be undone.");
     
     if (confirmDelete) {
-      const updatedInvoices = sys.invoices.filter(inv => inv.id !== invoiceId);
+      const updatedInvoices = (sys.invoices || []).filter(inv => inv.id !== invoiceId);
       sys.setInvoices(updatedInvoices);
     }
   };
@@ -1380,9 +1387,12 @@ export function InvoiceModule({ sys }) {
 
     result = result.filter(inv => {
       if (filter === 'All') return true;
+      
       const [year, month, day] = (inv.date || '').split('-').map(Number);
       if (!year || !month || !day) return false;
       const invDate = new Date(year, month - 1, day);
+      if (isNaN(invDate.getTime())) return false; // Safety Net
+
       invDate.setHours(0,0,0,0);
       
       if (filter === 'Today') return invDate.getTime() === today.getTime();
