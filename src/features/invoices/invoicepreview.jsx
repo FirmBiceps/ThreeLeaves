@@ -8,9 +8,12 @@ const CJK_FONT = '"Microsoft YaHei", "微软雅黑", "PingFang SC", "Hiragino Sa
 function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
   if (!invoice) return null;
 
-  const customerObj = sys.customers.find(c => c.id === invoice.customerId) || {};
+  // SAFETY NET 1: Prevent crash if sys.customers is undefined
+  const customerObj = (sys?.customers || []).find(c => c.id === invoice.customerId) || {};
   const customerAddress = customerObj.address || '';
-  const subtotal = invoice.items.reduce((sum, item) => sum + (Number(item.qty) || 0) * (Number(item.unitPrice) || 0), 0);
+  
+  // SAFETY NET 2: Prevent crash if invoice.items is missing or empty, and handle both qty/quantity keys
+  const subtotal = (invoice?.items || []).reduce((sum, item) => sum + (Number(item.qty || item.quantity) || 0) * (Number(item.unitPrice) || 0), 0);
   const gst = subtotal * 0.09;
   const total = subtotal + gst;
 
@@ -57,7 +60,99 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
 
       {/* ===== SCREEN VIEW (unchanged, hidden when printing) ===== */}
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh] print:hidden">
-        {/* ... screen view unchanged ... */}
+        <div className="bg-slate-900 px-8 py-5 flex justify-between items-center text-white shrink-0">
+          <div className="flex items-center">
+            <FileText size={22} className="mr-3 text-blue-400" />
+            <div>
+              <h2 className="text-lg font-semibold">Invoice #{invoice.number || invoice.id}</h2>
+              <p className="text-sm text-slate-400 mt-0.5">{invoice.customer || 'Unknown Customer'}</p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-3">
+            <button 
+              onClick={() => window.print()} 
+              className="flex items-center text-sm font-bold bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-xl transition-colors"
+            >
+              <Printer size={16} className="mr-2" /> Print
+            </button>
+            <button 
+              onClick={() => onEdit(invoice)} 
+              className="flex items-center text-sm font-bold bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-xl transition-colors"
+            >
+              <Edit size={16} className="mr-2" /> Edit
+            </button>
+            <button onClick={onClose} className="hover:bg-slate-800 p-2 rounded-full transition-colors">
+              <X size={20} />
+            </button>
+          </div>
+        </div>
+
+        <div className="p-8 overflow-y-auto bg-slate-50 flex-grow">
+          <div className="grid grid-cols-3 gap-6 mb-8">
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Date</p>
+              <p className="text-base font-semibold text-slate-800">{invoice.date || '-'}</p>
+            </div>
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Terms</p>
+              <p className="text-base font-semibold text-slate-800">
+                {invoice.paymentTerms === 'cod' ? 'Cash on Delivery' : '30 Days'}
+              </p>
+            </div>
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Delivery Status</p>
+              <p className="text-base font-semibold text-blue-600">{invoice.deliveryStatus || 'Pending'}</p>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-6">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-xs uppercase tracking-widest text-slate-500 font-semibold">
+                  <th className="p-4 pl-6">Item Description</th>
+                  <th className="p-4 text-center">Qty</th>
+                  <th className="p-4 text-right">Unit Price</th>
+                  <th className="p-4 pr-6 text-right">Amount</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {invoice.items && invoice.items.length > 0 ? (
+                  invoice.items.map((item, idx) => (
+                    <tr key={idx}>
+                      <td className="p-4 pl-6 text-sm text-slate-800">{item.name || item.Items || 'Unknown Item'}</td>
+                      <td className="p-4 text-center text-sm text-slate-600">{item.quantity || item.qty || 1}</td>
+                      <td className="p-4 text-right text-sm text-slate-600">${formatMoney(item.unitPrice || 0)}</td>
+                      <td className="p-4 pr-6 text-right text-sm font-medium text-slate-800">
+                        ${formatMoney((item.quantity || item.qty || 1) * (item.unitPrice || 0))}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="4" className="p-8 text-center text-slate-400 text-sm">No items found on this invoice.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex justify-end">
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm w-72">
+              <div className="flex justify-between items-center mb-3 text-sm text-slate-500">
+                <span>Subtotal</span>
+                <span>${formatMoney(subtotal)}</span>
+              </div>
+              <div className="flex justify-between items-center mb-4 text-sm text-slate-500">
+                <span>GST (9%)</span>
+                <span>${formatMoney(gst)}</span>
+              </div>
+              <div className="flex justify-between items-center pt-4 border-t border-slate-100">
+                <span className="font-semibold text-slate-900">Total</span>
+                <span className="text-xl font-bold text-blue-600">${formatMoney(total)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* ===== PRINT VIEW (with font‑forced container) ===== */}
@@ -108,7 +203,8 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
             <div className="flex items-end w-[35%] pl-4">
               <span className="w-14 shrink-0">DATE:</span>
               <span className="flex-1 text-center border-b border-black pb-0.5">
-                {invoice.date 
+                {/* SAFETY NET 3: Prevent crash on invalid date strings */}
+                {invoice.date && !isNaN(new Date(invoice.date).getTime()) 
                   ? new Date(invoice.date).toLocaleDateString('en-GB').replace(/\//g, '-') 
                   : new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}
               </span>
@@ -136,7 +232,8 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
             </tr>
           </thead>
           <tbody style={{ fontFamily: CJK_FONT }}>
-            {invoice.items && invoice.items.map((item, idx) => {
+            {/* SAFETY NET 4: Ensure items map doesn't crash if undefined */}
+            {(invoice.items || []).map((item, idx) => {
               const productName = item.name || item.Items || '-';
 
               return (
@@ -203,6 +300,7 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
             </div>
           </div>
         </div>
+
       </div>
     </div>
   );
