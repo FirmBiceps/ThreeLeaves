@@ -194,21 +194,21 @@ function CustomerSearchSelect({ value, customers, onChange, disabled }) {
 }
 
 // ==========================================
-// COMPONENT 3: INVOICE PREVIEW MODAL
+// COMPONENT 3: INVOICE PREVIEW MODAL (HISTORY)
 // ==========================================
 function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
   if (!invoice) return null;
 
-  const customerObj = (sys.customers || []).find(c => c.id === invoice.customerId) || {};
+  const customerObj = (sys?.customers || []).find(c => c.id === invoice.customerId) || {};
   const customerAddress = customerObj.address || '';
-  const subtotal = (invoice.items || []).reduce((sum, item) => sum + (Number(item.qty) || 0) * (Number(item.unitPrice) || 0), 0);
+  const subtotal = (invoice?.items || []).reduce((sum, item) => sum + (Number(item.qty || item.quantity) || 0) * (Number(item.unitPrice) || 0), 0);
   const gst = subtotal * 0.09;
   const total = subtotal + gst;
 
   return (
-    <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm print:static print:inset-auto print:bg-white print:p-0 print:block print:z-auto">
+    <div id="history-print-wrapper" className="fixed inset-0 z-[5000] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
       
-      {/* THE FIX: Absolute Print Isolation. Hides all background elements. */}
+      {/* THE FIX: Extreme Print Isolation to prevent blank pages caused by backdrop-blur */}
       <style type="text/css">
         {`
           @media print {
@@ -220,22 +220,28 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
             }
-            body * { visibility: hidden; }
-            #printable-invoice, #printable-invoice * { visibility: visible; }
-            #printable-invoice {
+            /* Hide EVERYTHING in the background app */
+            body * { visibility: hidden !important; }
+            
+            /* Unhide ONLY our modal wrapper */
+            #history-print-wrapper, #history-print-wrapper * { 
+              visibility: visible !important; 
+            }
+            
+            /* Break the wrapper out of the blur context and force it to top-left */
+            #history-print-wrapper {
               position: absolute !important;
               left: 0 !important;
               top: 0 !important;
               width: 210mm !important;
-              height: 297mm !important;
-              padding: 15mm !important;
               margin: 0 !important;
+              padding: 0 !important;
               background: white !important;
-              box-sizing: border-box !important;
+              backdrop-filter: none !important; /* CRITICAL FIX for blank pages */
             }
-            *, html, body, div, p, span, h1, h2, h3, table, th, td {
-              font-family: ${CJK_FONT} !important;
-            }
+            
+            /* Ensure utility hide classes still work inside the wrapper */
+            .print\\:hidden { display: none !important; }
           }
         `}
       </style>
@@ -322,15 +328,15 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm w-72">
               <div className="flex justify-between items-center mb-3 text-sm text-slate-500">
                 <span>Subtotal</span>
-                <span>${formatMoney(invoice.subtotal || invoice.total - (invoice.total * 0.09)) }</span>
+                <span>${formatMoney(subtotal)}</span>
               </div>
               <div className="flex justify-between items-center mb-4 text-sm text-slate-500">
                 <span>GST (9%)</span>
-                <span>${formatMoney(invoice.gst || invoice.total * 0.09)}</span>
+                <span>${formatMoney(gst)}</span>
               </div>
               <div className="flex justify-between items-center pt-4 border-t border-slate-100">
                 <span className="font-semibold text-slate-900">Total</span>
-                <span className="text-xl font-bold text-blue-600">${formatMoney(invoice.total)}</span>
+                <span className="text-xl font-bold text-blue-600">${formatMoney(total)}</span>
               </div>
             </div>
           </div>
@@ -339,9 +345,7 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
 
       {/* PRINT VIEW (EXACT MATCH PDF LAYOUT) */}
       <div 
-        id="printable-invoice"
-        lang="zh"
-        className="hidden print:flex w-full flex-col bg-white box-border text-black"
+        className="hidden print:flex w-[210mm] min-h-[297mm] flex-col bg-white p-[15mm] text-black box-border"
         style={{ fontFamily: CJK_FONT }}
       >
         <div className="flex justify-between items-start mb-6">
@@ -497,9 +501,9 @@ function InvoicePreview({
   existingInvoice
 }) {
   return (
-    <div className="fixed inset-0 z-[3000] overflow-y-auto bg-slate-950/90 print:static print:inset-auto print:bg-white print:p-0 print:block print:z-auto print:overflow-visible">
+    <div id="generator-print-wrapper" className="fixed inset-0 z-[3000] overflow-y-auto bg-slate-950/90 print:bg-white print:p-0">
       
-      {/* THE FIX: Absolute Print Isolation for the Generator Preview */}
+      {/* THE FIX: Extreme Print Isolation to prevent blank pages caused by backgrounds */}
       <style type="text/css">
         {`
           @media print {
@@ -511,19 +515,20 @@ function InvoicePreview({
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
             }
-            body * { visibility: hidden; }
-            #printable-invoice, #printable-invoice * { visibility: visible; }
-            #printable-invoice {
+            body * { visibility: hidden !important; }
+            #generator-print-wrapper, #generator-print-wrapper * { visibility: visible !important; }
+            #generator-print-wrapper {
               position: absolute !important;
               left: 0 !important;
               top: 0 !important;
               width: 210mm !important;
-              height: 297mm !important;
-              padding: 15mm !important;
               margin: 0 !important;
+              padding: 0 !important;
               background: white !important;
-              box-sizing: border-box !important;
+              backdrop-filter: none !important;
+              overflow: visible !important;
             }
+            .print\\:hidden { display: none !important; }
             *, html, body, div, p, span, h1, h2, h3, table, th, td {
               font-family: ${CJK_FONT} !important;
             }
@@ -532,7 +537,7 @@ function InvoicePreview({
       </style>
 
       <div className="flex min-h-full justify-center py-12 print:p-0 print:block">
-        <div className="relative flex min-h-[297mm] w-full max-w-[210mm] flex-col bg-white p-8 shadow-2xl print:w-full print:max-w-none print:min-h-0 print:h-auto print:mx-0 print:box-border print:shadow-none">
+        <div className="relative flex min-h-[297mm] w-full max-w-[210mm] flex-col bg-white p-8 shadow-2xl print:w-full print:max-w-none print:min-h-0 print:h-auto print:mx-0 print:box-border print:px-[15mm] print:py-[15mm] print:shadow-none">
           
           <div className="absolute -top-16 left-0 right-0 flex items-center justify-between px-4 print:hidden">
             <button
@@ -610,7 +615,7 @@ function InvoicePreview({
                 <div className="flex items-end w-[35%] pl-4">
                   <span className="w-14 shrink-0">DATE:</span>
                   <span className="flex-1 text-center border-b border-black pb-0.5">
-                    {/* SAFETY NET: Prevents crash if date string is invalid or empty */}
+                    {/* SAFETY NET */}
                     {invoiceDate && !isNaN(new Date(invoiceDate).getTime()) 
                       ? new Date(invoiceDate).toLocaleDateString('en-GB').replace(/\//g, '-') 
                       : new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}
@@ -1359,7 +1364,7 @@ export function InvoiceModule({ sys }) {
   const [previewInvoice, setPreviewInvoice] = useState(null);
   const [editingInvoice, setEditingInvoice] = useState(null);
 
-  const handleDeleteInvoice = (e, invoiceId) => {
+  const handleDeleteInvoice = async (e, invoiceId) => {
     e.stopPropagation(); 
     
     const confirmDelete = window.confirm("Are you sure you want to permanently delete this invoice? This cannot be undone.");
@@ -1367,6 +1372,11 @@ export function InvoiceModule({ sys }) {
     if (confirmDelete) {
       const updatedInvoices = (sys.invoices || []).filter(inv => inv.id !== invoiceId);
       sys.setInvoices(updatedInvoices);
+      
+      // Permanently remove it from the backend if the hook supports it
+      if (sys.deleteRecord) {
+        await sys.deleteRecord('invoices', invoiceId);
+      }
     }
   };
 
@@ -1391,7 +1401,7 @@ export function InvoiceModule({ sys }) {
       const [year, month, day] = (inv.date || '').split('-').map(Number);
       if (!year || !month || !day) return false;
       const invDate = new Date(year, month - 1, day);
-      if (isNaN(invDate.getTime())) return false; // Safety Net
+      if (isNaN(invDate.getTime())) return false; 
 
       invDate.setHours(0,0,0,0);
       
