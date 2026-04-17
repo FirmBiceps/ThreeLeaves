@@ -20,8 +20,9 @@ import { CompanyHeader } from '../../components/shared/CompanyHeader';
 import { UNIT_OPTIONS } from '../../data/company';
 import { formatMoney } from '../../utils/format';
 
-// 1. IMPORT YOUR LOGO DIRECTLY HERE
+// 1. IMPORT YOUR IMAGES DIRECTLY HERE
 import logo from './three_leaves_logo.png';
+import paynowQr from './paynow_qr.jpg';
 
 // The ultimate font stack variable to force the browser's hand
 const CJK_FONT = '"Microsoft YaHei", "微软雅黑", "PingFang SC", "Hiragino Sans GB", "SimHei", "黑体", "SimSun", "宋体", serif';
@@ -220,6 +221,26 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
             }
+            
+            /* Hide EVERYTHING in the background app to prevent blank pages */
+            body * { visibility: hidden !important; }
+            
+            /* Unhide ONLY the print invoice */
+            #printable-invoice-history, #printable-invoice-history * { 
+              visibility: visible !important; 
+            }
+            
+            #printable-invoice-history {
+              position: absolute !important;
+              left: 0 !important;
+              top: 0 !important;
+              width: 100% !important; /* CRITICAL: Use 100% to fix margin cut-offs */
+              padding: 15mm !important; /* Safe padding inside the page */
+              box-sizing: border-box !important;
+              background: white !important;
+              backdrop-filter: none !important; /* Removes blur that causes blank prints */
+            }
+
             *, html, body, div, p, span, h1, h2, h3, table, th, td {
               font-family: ${CJK_FONT} !important;
             }
@@ -264,63 +285,68 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
 
         {/* ACTUAL A4 PAPER */}
         <div 
+          id="printable-invoice-history"
           className="flex w-full max-w-[210mm] min-h-[297mm] flex-col bg-white p-[15mm] text-black shadow-2xl rounded-b-2xl print:w-full print:max-w-none print:min-h-0 print:h-auto print:rounded-none print:shadow-none box-border shrink-0"
           style={{ fontFamily: CJK_FONT }}
         >
-          <div className="flex justify-between items-start mb-6">
-            <div className="w-[25%]">
-              <img src={logo} alt="Three Leaves Logo" className="w-[110px] h-auto object-contain" />
+          {/* ROW 1: LOGO AND COMPANY INFO */}
+          <div className="flex items-center justify-between mb-6">
+            <div className="w-[140px] shrink-0 mr-4">
+              <img src={logo} alt="Three Leaves Logo" className="w-full h-auto object-contain" />
             </div>
 
-            <div className="w-[50%] text-center leading-tight pt-2">
-              <h1 className="font-bold text-[14px]" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
-              <h2 className="font-bold text-[13px] mb-1" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
-              <p className="font-bold text-[10px] mb-0.5">CO.REG NO.53033969B &nbsp;&nbsp;&nbsp; GST REG NO. M90355440L</p>
-              <p className="text-[10px] mb-0.5">280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
-              <p className="text-[10px]">HP: 97578869 (Mr Ye) &nbsp; HP: 91113505 (Min) &nbsp; Email: 3leaves.sg@gmail.com</p>
+            <div className="flex-1 text-center leading-snug pt-2">
+              <h1 className="font-bold text-[22px]" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
+              <h2 className="font-bold text-[18px] mb-2" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
+              <p className="font-bold text-[12px] mb-0.5">CO.REG NO.53033969B &nbsp;&nbsp;&nbsp; GST REG NO. M90355440L</p>
+              <p className="text-[12px] mb-0.5">280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
+              <p className="text-[12px]">HP: 97578869 (Mr Ye) &nbsp;&nbsp; HP: 91113505 (Min) &nbsp;&nbsp; Email: 3leaves.sg@gmail.com</p>
             </div>
-
-            <div className="w-[25%] flex flex-col items-end pt-1">
-              <div className="text-center w-full mb-2">
-                <h2 className="text-[18px] font-bold tracking-[0.2em] leading-none mb-0.5" style={{ fontFamily: CJK_FONT }}>發票</h2>
-                <h3 className="text-[14px] font-bold tracking-widest uppercase">TAX INVOICE</h3>
-              </div>
-              
-              <div className="w-full text-[16px] text-left mt-1 pl-4 flex flex-col leading-tight gap-1">
-                <div className="flex items-center">
-                  <span className="font-bold w-14 shrink-0">No.</span>
-                  <span className="text-red-600 font-bold tracking-wider">{invoice.number}</span>
-                </div>
-                <div className="flex items-center">
-                  <span className="font-bold w-14 shrink-0">Term:</span>
-                  <span className="font-bold">{invoice.paymentTerms === 'cod' ? 'COD' : '30 Days'}</span>
-                </div>
-              </div>
-            </div>
+            
+            {/* Invisible spacer to perfectly center the text block relative to the page */}
+            <div className="w-[140px] shrink-0"></div>
           </div>
 
-          <div className="mb-4 text-[15px] font-bold flex flex-col w-full">
-            <div className="flex justify-between w-full mb-2">
-              <div className="flex items-end w-[65%] pr-4">
+          {/* ROW 2: TAX INVOICE HEADER */}
+          <div className="text-center w-full mb-6">
+            <h2 className="text-[22px] font-bold tracking-[0.4em] leading-none mb-1" style={{ fontFamily: CJK_FONT }}>發票</h2>
+            <h3 className="text-[16px] font-bold tracking-widest uppercase">TAX INVOICE</h3>
+          </div>
+
+          {/* ROW 3: META DATA */}
+          <div className="flex justify-between items-start mb-6 text-[15px] font-bold w-full">
+            <div className="flex flex-col w-[60%] pr-4">
+              <div className="flex items-end w-full mb-2">
                 <span className="w-12 shrink-0">TO:</span>
                 <span className="flex-1 uppercase border-b border-black pb-0.5" style={{ fontFamily: CJK_FONT }}>
                   {invoice.customer || ''}
                 </span>
               </div>
-              <div className="flex items-end w-[35%] pl-4">
-                <span className="w-14 shrink-0">DATE:</span>
-                <span className="flex-1 text-center border-b border-black pb-0.5">
+              <div className="flex items-end w-full mt-2">
+                <span className="w-24 shrink-0">ADDRESS:</span>
+                <span className="flex-1 uppercase leading-tight border-b border-black pb-0.5 break-words whitespace-pre-wrap" style={{ fontFamily: CJK_FONT }}>
+                  {customerAddress}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex flex-col w-[35%] pl-4 items-end">
+              <div className="flex items-end w-full mb-2">
+                <span className="w-16 shrink-0 mr-2 text-right">NO:</span>
+                <span className="flex-1 text-red-600 font-bold tracking-wider border-b border-black pb-0.5 text-center">{invoice.number}</span>
+              </div>
+              <div className="flex items-end w-full mb-2">
+                <span className="w-16 shrink-0 mr-2 text-right">DATE:</span>
+                <span className="flex-1 border-b border-black pb-0.5 text-center">
                   {invoice.date && !isNaN(new Date(invoice.date).getTime()) 
                     ? new Date(invoice.date).toLocaleDateString('en-GB').replace(/\//g, '-') 
                     : new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}
                 </span>
               </div>
-            </div>
-            <div className="flex items-end w-full mt-1">
-              <span className="w-24 shrink-0">ADDRESS:</span>
-              <span className="flex-1 uppercase leading-tight border-b border-black pb-0.5 break-words whitespace-pre-wrap" style={{ fontFamily: CJK_FONT }}>
-                {customerAddress}
-              </span>
+              <div className="flex items-end w-full mt-2">
+                <span className="w-16 shrink-0 mr-2 text-right">TERM:</span>
+                <span className="flex-1 border-b border-black pb-0.5 text-center">{invoice.paymentTerms === 'cod' ? 'COD' : '30 Days'}</span>
+              </div>
             </div>
           </div>
 
@@ -367,12 +393,20 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
               <div style={{ fontFamily: CJK_FONT }}>
                 <p>请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
                 <p>Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
-                <div className="mt-4">
-                  <p>UEN: 53033969B</p>
-                  <p>A/C Name: Three Leaves (Singapore) Trading Enterprise</p>
-                  <p>A/C Number: 535-846562-001</p>
-                  <p>Bank Name: OCBC</p>
+                
+                {/* NEW FOOTER LAYOUT: Bank Details + QR Code */}
+                <div className="mt-4 flex items-center">
+                  <div className="mr-8">
+                    <p>UEN: 53033969B</p>
+                    <p>A/C Name: Three Leaves (Singapore) Trading Enterprise</p>
+                    <p>A/C Number: 535-846562-001</p>
+                    <p>Bank Name: OCBC</p>
+                  </div>
+                  <div className="w-[80px] h-[80px] shrink-0 flex flex-col items-center justify-center bg-white">
+                    <img src={paynowQr} alt="PayNow QR Code" className="w-full h-full object-contain" />
+                  </div>
                 </div>
+
                 <p className="mt-4 font-normal">All payments mode have to be made payable to Three Leaves (Singapore) Trading Enterprise.</p>
               </div>
               <div className="mt-6 mb-1">
@@ -419,6 +453,8 @@ function InvoicePreview({
   total,
   existingInvoice
 }) {
+  const customerAddress = customer?.address || existingInvoice?.address || '';
+
   return (
     <div className="fixed inset-0 z-[3000] overflow-y-auto bg-slate-950/90 print:static print:block print:bg-white print:p-0 print:backdrop-filter-none">
       
@@ -433,6 +469,21 @@ function InvoicePreview({
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
             }
+            body * { visibility: hidden !important; }
+            #printable-invoice-generator, #printable-invoice-generator * { visibility: visible !important; }
+            
+            #printable-invoice-generator {
+              position: absolute !important;
+              left: 0 !important;
+              top: 0 !important;
+              width: 100% !important; /* CRITICAL: Use 100% to fix margin cut-offs */
+              padding: 15mm !important;
+              margin: 0 !important;
+              background: white !important;
+              backdrop-filter: none !important; /* Removes blur that causes blank prints */
+              box-sizing: border-box !important;
+            }
+            
             *, html, body, div, p, span, h1, h2, h3, table, th, td {
               font-family: ${CJK_FONT} !important;
             }
@@ -450,9 +501,9 @@ function InvoicePreview({
         {/* ACTION BAR */}
         <div className="w-full max-w-[210mm] shrink-0 bg-slate-900 px-8 py-4 flex justify-between items-center text-white rounded-t-2xl shadow-2xl print:hidden border-b-4 border-blue-600">
           <div className="flex items-center">
-            <FileText size={24} className="mr-3 text-blue-400" />
+            <Eye size={24} className="mr-3 text-blue-400" />
             <div>
-              <h2 className="text-sm font-black tracking-widest uppercase text-slate-200">A4 Print Preview</h2>
+              <h2 className="text-sm font-black tracking-widest uppercase text-slate-200">Invoice Layout Check</h2>
               <p className="text-lg font-bold text-white leading-none mt-0.5">#{invoiceNumber}</p>
             </div>
           </div>
@@ -469,79 +520,78 @@ function InvoicePreview({
               onClick={() => onRegister(false)}
               type="button"
             >
-              <Save className="mr-2" size={16} /> Save
-            </button>
-            <button
-              className="flex items-center rounded bg-blue-600 px-6 py-2.5 font-bold text-white shadow-xl transition-all hover:bg-blue-500 text-sm"
-              onClick={() => onRegister(true)}
-              type="button"
-            >
-              <Printer className="mr-2" size={18} /> Print Document
+              <Save className="mr-2" size={16} /> Save Invoice
             </button>
           </div>
         </div>
 
         {/* ACTUAL A4 PAPER */}
         <div 
+          id="printable-invoice-generator"
           lang="zh" 
           className="flex w-full max-w-[210mm] min-h-[297mm] flex-col bg-white p-[15mm] text-black shadow-2xl rounded-b-2xl print:w-full print:max-w-none print:min-h-0 print:h-auto print:rounded-none print:shadow-none box-border shrink-0"
           style={{ fontFamily: CJK_FONT }}
         >
           
-          <div className="flex justify-between items-start mb-6">
-            <div className="w-[25%]">
-              <img src={logo} alt="Three Leaves Logo" className="w-[110px] h-auto object-contain" />
+          {/* ROW 1: LOGO AND COMPANY INFO */}
+          <div className="flex items-center justify-between mb-6">
+            <div className="w-[140px] shrink-0 mr-4">
+              <img src={logo} alt="Three Leaves Logo" className="w-full h-auto object-contain" />
             </div>
 
-            <div className="w-[50%] text-center leading-tight pt-2">
-              <h1 className="font-bold text-[14px]" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
-              <h2 className="font-bold text-[13px] mb-1" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
-              <p className="font-bold text-[10px] mb-0.5">CO.REG NO.53033969B &nbsp;&nbsp;&nbsp; GST REG NO. M90355440L</p>
-              <p className="text-[10px] mb-0.5">280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
-              <p className="text-[10px]">HP: 97578869 (Mr Ye) &nbsp; HP: 91113505 (Min) &nbsp; Email: 3leaves.sg@gmail.com</p>
+            <div className="flex-1 text-center leading-snug pt-2">
+              <h1 className="font-bold text-[22px]" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
+              <h2 className="font-bold text-[18px] mb-2" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
+              <p className="font-bold text-[12px] mb-0.5">CO.REG NO.53033969B &nbsp;&nbsp;&nbsp; GST REG NO. M90355440L</p>
+              <p className="text-[12px] mb-0.5">280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
+              <p className="text-[12px]">HP: 97578869 (Mr Ye) &nbsp;&nbsp; HP: 91113505 (Min) &nbsp;&nbsp; Email: 3leaves.sg@gmail.com</p>
             </div>
-
-            <div className="w-[25%] flex flex-col items-end pt-1">
-              <div className="text-center w-full mb-2">
-                <h2 className="text-[18px] font-bold tracking-[0.2em] leading-none mb-0.5" style={{ fontFamily: CJK_FONT }}>發票</h2>
-                <h3 className="text-[14px] font-bold tracking-widest uppercase">TAX INVOICE</h3>
-              </div>
-              
-              <div className="w-full text-[16px] text-left mt-1 pl-4 flex flex-col leading-tight gap-1">
-                <div className="flex items-center">
-                  <span className="font-bold w-14 shrink-0">No.</span>
-                  <span className="text-red-600 font-bold tracking-wider">{invoiceNumber}</span>
-                </div>
-                <div className="flex items-center">
-                  <span className="font-bold w-14 shrink-0">Term:</span>
-                  <span className="font-bold">{paymentTerms === 'cod' ? 'COD' : '30 Days'}</span>
-                </div>
-              </div>
-            </div>
+            
+            {/* Invisible spacer to perfectly center the text block relative to the page */}
+            <div className="w-[140px] shrink-0"></div>
           </div>
 
-          <div className="mb-4 text-[15px] font-bold flex flex-col w-full">
-            <div className="flex justify-between w-full mb-2">
-              <div className="flex items-end w-[65%] pr-4">
+          {/* ROW 2: TAX INVOICE HEADER */}
+          <div className="text-center w-full mb-6">
+            <h2 className="text-[22px] font-bold tracking-[0.4em] leading-none mb-1" style={{ fontFamily: CJK_FONT }}>發票</h2>
+            <h3 className="text-[16px] font-bold tracking-widest uppercase">TAX INVOICE</h3>
+          </div>
+
+          {/* ROW 3: META DATA */}
+          <div className="flex justify-between items-start mb-6 text-[15px] font-bold w-full">
+            <div className="flex flex-col w-[60%] pr-4">
+              <div className="flex items-end w-full mb-2">
                 <span className="w-12 shrink-0">TO:</span>
                 <span className="flex-1 uppercase border-b border-black pb-0.5" style={{ fontFamily: CJK_FONT }}>
                   {customer?.name || existingInvoice?.customer || ''}
                 </span>
               </div>
-              <div className="flex items-end w-[35%] pl-4">
-                <span className="w-14 shrink-0">DATE:</span>
-                <span className="flex-1 text-center border-b border-black pb-0.5">
+              <div className="flex items-end w-full mt-2">
+                <span className="w-24 shrink-0">ADDRESS:</span>
+                <span className="flex-1 uppercase leading-tight border-b border-black pb-0.5 break-words whitespace-pre-wrap" style={{ fontFamily: CJK_FONT }}>
+                  {customerAddress}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex flex-col w-[35%] pl-4 items-end">
+              <div className="flex items-end w-full mb-2">
+                <span className="w-16 shrink-0 mr-2 text-right">NO:</span>
+                <span className="flex-1 text-red-600 font-bold tracking-wider border-b border-black pb-0.5 text-center">{invoiceNumber}</span>
+              </div>
+              <div className="flex items-end w-full mb-2">
+                <span className="w-16 shrink-0 mr-2 text-right">DATE:</span>
+                <span className="flex-1 border-b border-black pb-0.5 text-center">
+                  {/* SAFETY NET: Prevents crash if date string is invalid */}
                   {invoiceDate && !isNaN(new Date(invoiceDate).getTime()) 
                     ? new Date(invoiceDate).toLocaleDateString('en-GB').replace(/\//g, '-') 
                     : new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}
                 </span>
               </div>
-            </div>
-            <div className="flex items-end w-full mt-1">
-              <span className="w-24 shrink-0">ADDRESS:</span>
-              <span className="flex-1 uppercase leading-tight border-b border-black pb-0.5 break-words whitespace-pre-wrap" style={{ fontFamily: CJK_FONT }}>
-                {customer?.address || ''}
-              </span>
+              <div className="flex items-end w-full mt-2">
+                <span className="w-16 shrink-0 mr-2 text-right">TERM:</span>
+                <span className="flex-1 border-b border-black pb-0.5 text-center">{paymentTerms === 'cod' ? 'COD' : '30 Days'}</span>
+              </div>
             </div>
           </div>
 
@@ -589,12 +639,20 @@ function InvoicePreview({
               <div style={{ fontFamily: CJK_FONT }}>
                 <p>请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
                 <p>Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
-                <div className="mt-4">
-                  <p>UEN: 53033969B</p>
-                  <p>A/C Name: Three Leaves (Singapore) Trading Enterprise</p>
-                  <p>A/C Number: 535-846562-001</p>
-                  <p>Bank Name: OCBC</p>
+                
+                {/* NEW FOOTER LAYOUT: Bank Details + QR Code */}
+                <div className="mt-4 flex items-center">
+                  <div className="mr-8">
+                    <p>UEN: 53033969B</p>
+                    <p>A/C Name: Three Leaves (Singapore) Trading Enterprise</p>
+                    <p>A/C Number: 535-846562-001</p>
+                    <p>Bank Name: OCBC</p>
+                  </div>
+                  <div className="w-[80px] h-[80px] shrink-0 flex flex-col items-center justify-center bg-white">
+                    <img src={paynowQr} alt="PayNow QR Code" className="w-full h-full object-contain" />
+                  </div>
                 </div>
+
                 <p className="mt-4 font-normal">All payments mode have to be made payable to Three Leaves (Singapore) Trading Enterprise.</p>
               </div>
               <div className="mt-6 mb-1">
@@ -1287,7 +1345,6 @@ export function InvoiceModule({ sys }) {
       const updatedInvoices = (sys.invoices || []).filter(inv => inv.id !== invoiceId);
       sys.setInvoices(updatedInvoices);
       
-      // Permanently remove it from the backend if the hook supports it
       if (sys.deleteRecord) {
         await sys.deleteRecord('invoices', invoiceId);
       }
@@ -1336,12 +1393,6 @@ export function InvoiceModule({ sys }) {
   return (
     <div className="p-8 h-full overflow-y-auto relative print:p-0 print:overflow-visible">
       
-      {/* CRITICAL PRINT FIX: 
-        This div wraps the entire dashboard background. 
-        When either the History modal or the Generator modal is open, 
-        this entire dashboard becomes `display: none` during printing.
-        This forces the browser to print ONLY the open invoice! 
-      */}
       <div className={(previewInvoice || isGeneratorOpen) ? "print:hidden" : "block"}>
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-2xl font-semibold text-slate-900 flex items-center">
