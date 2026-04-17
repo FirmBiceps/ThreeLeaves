@@ -24,7 +24,7 @@ import { formatMoney } from '../../utils/format';
 import logo from './three_leaves_logo.png';
 
 // The ultimate font stack variable to force the browser's hand
-const CJK_FONT = '"Microsoft YaHei", "微软雅黑", "PingFang SC", "SimHei", "黑体", Arial, sans-serif';
+const CJK_FONT = '"Microsoft YaHei", "微软雅黑", "PingFang SC", "Hiragino Sans GB", "SimHei", "黑体", "SimSun", "宋体", serif';
 
 // ==========================================
 // 1. SEARCHABLE PRODUCT DROPDOWN
@@ -445,7 +445,6 @@ function InvoicePreview({
   return (
     <div className="fixed inset-0 z-[3000] overflow-y-auto bg-slate-950/90 print:static print:block print:bg-white print:p-0 print:backdrop-filter-none">
       
-      {/* THE FIX: Absolute Print Isolation for the Generator Preview */}
       <style type="text/css">
         {`
           @media print {
@@ -489,9 +488,9 @@ function InvoicePreview({
         {/* ACTION BAR */}
         <div className="w-full max-w-[210mm] shrink-0 bg-slate-900 px-8 py-4 flex justify-between items-center text-white rounded-t-2xl shadow-2xl print:hidden border-b-4 border-blue-600">
           <div className="flex items-center">
-            <FileText size={24} className="mr-3 text-blue-400" />
+            <Eye size={24} className="mr-3 text-blue-400" />
             <div>
-              <h2 className="text-sm font-black tracking-widest uppercase text-slate-200">A4 Print Preview</h2>
+              <h2 className="text-sm font-black tracking-widest uppercase text-slate-200">Invoice Layout Check</h2>
               <p className="text-lg font-bold text-white leading-none mt-0.5">#{invoiceNumber}</p>
             </div>
           </div>
@@ -504,18 +503,11 @@ function InvoicePreview({
               <ChevronLeft size={16} className="mr-1" /> Edit Draft
             </button>
             <button
-              className="flex items-center rounded bg-white px-5 py-2.5 font-bold text-slate-900 shadow-lg transition-all hover:bg-slate-50 text-sm"
+              className="flex items-center rounded bg-blue-600 px-8 py-2.5 font-bold text-white shadow-xl transition-all hover:bg-blue-500 text-sm"
               onClick={() => onRegister(false)}
               type="button"
             >
-              <Save className="mr-2" size={16} /> Save
-            </button>
-            <button
-              className="flex items-center rounded bg-blue-600 px-6 py-2.5 font-bold text-white shadow-xl transition-all hover:bg-blue-500 text-sm"
-              onClick={() => onRegister(true)}
-              type="button"
-            >
-              <Printer className="mr-2" size={18} /> Print Document
+              <Save className="mr-2" size={16} /> Save Invoice
             </button>
           </div>
         </div>
