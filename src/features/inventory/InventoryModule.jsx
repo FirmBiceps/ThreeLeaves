@@ -7,15 +7,15 @@ import { supabase } from '../../lib/supabaseClient';
 // COMPONENT 1: INVENTORY ADD/EDIT MODAL
 // ==========================================
 function InventoryFormModal({ item, onClose, onSave, onDelete }) {
+  // Updated state to perfectly match your new Supabase columns
   const [formData, setFormData] = useState({
     id: item?.id || `prod-${Date.now()}`,
-    name: item?.name || item?.Items || '',
-    description: item?.description || item?.Description || item?.Packaging || '',
-    company: item?.company || item?.Company || '',
-    unit: item?.unit || item?.Unit || '箱',
-    costPrice: item?.costPrice || item?.['Unit Price (RMB)'] || 0,
-    unitPrice: item?.unitPrice || item?.['Unit Price (SG)'] || 0,
-    stock: item?.stock ?? 999,
+    sku: item?.sku || '',
+    Name: item?.Name || item?.name || item?.Items || '',
+    Unit: item?.Unit || item?.unit || '箱',
+    Description: item?.Description || item?.description || '',
+    Packing: item?.Packing || item?.packaging || '',
+    Price: item?.Price || item?.unitPrice || item?.['Unit Price (SG)'] || 0,
   });
 
   const handleChange = (e) => {
@@ -43,87 +43,76 @@ function InventoryFormModal({ item, onClose, onSave, onDelete }) {
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div className="grid grid-cols-3 gap-4">
+            <div className="col-span-1">
+              <label className="block text-sm text-slate-500 mb-1">SKU</label>
+              <input 
+                type="text" 
+                name="sku" 
+                value={formData.sku} 
+                onChange={handleChange}
+                placeholder="e.g. TL-001"
+                className="w-full border border-slate-200 rounded-xl p-3 text-base text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none uppercase"
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-sm text-slate-500 mb-1">Product Name</label>
+              <input 
+                required
+                type="text" 
+                name="Name" 
+                value={formData.Name} 
+                onChange={handleChange}
+                className="w-full border border-slate-200 rounded-xl p-3 text-base text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+            </div>
+          </div>
+
           <div>
-            <label className="block text-sm text-slate-500 mb-1">Product Name</label>
+            <label className="block text-sm text-slate-500 mb-1">Description</label>
             <input 
-              required
               type="text" 
-              name="name" 
-              value={formData.name} 
+              name="Description" 
+              value={formData.Description} 
               onChange={handleChange}
               className="w-full border border-slate-200 rounded-xl p-3 text-base text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none"
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm text-slate-500 mb-1">Supplier / Brand</label>
-              <input 
-                type="text" 
-                name="company" 
-                value={formData.company} 
-                onChange={handleChange}
-                className="w-full border border-slate-200 rounded-xl p-3 text-base text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-slate-500 mb-1">Packaging Info</label>
-              <input 
-                type="text" 
-                name="description" 
-                value={formData.description} 
-                onChange={handleChange}
-                placeholder="e.g. 400g x 30"
-                className="w-full border border-slate-200 rounded-xl p-3 text-base text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none"
-              />
-            </div>
-          </div>
-
           <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm text-slate-500 mb-1">Packing</label>
+              <input 
+                type="text" 
+                name="Packing" 
+                value={formData.Packing} 
+                onChange={handleChange}
+                placeholder="e.g. 24 x 300g"
+                className="w-full border border-slate-200 rounded-xl p-3 text-base text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+            </div>
             <div>
               <label className="block text-sm text-slate-500 mb-1">Unit</label>
               <input 
                 type="text" 
-                name="unit" 
-                value={formData.unit} 
+                name="Unit" 
+                value={formData.Unit} 
                 onChange={handleChange}
                 className="w-full border border-slate-200 rounded-xl p-3 text-base text-center text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none"
               />
             </div>
             <div>
-              <label className="block text-sm text-slate-500 mb-1">Cost (RMB)</label>
-              <input 
-                type="number" 
-                step="0.01"
-                name="costPrice" 
-                value={formData.costPrice} 
-                onChange={handleChange}
-                className="w-full border border-slate-200 rounded-xl p-3 text-base text-right text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-blue-600 mb-1">Selling Price (SG)</label>
+              <label className="block text-sm text-blue-600 mb-1">Price</label>
               <input 
                 required
                 type="number" 
                 step="0.01"
-                name="unitPrice" 
-                value={formData.unitPrice} 
+                name="Price" 
+                value={formData.Price} 
                 onChange={handleChange}
                 className="w-full border border-blue-200 bg-blue-50 rounded-xl p-3 text-base text-right text-blue-700 focus:ring-2 focus:ring-blue-500 outline-none"
               />
             </div>
-          </div>
-
-          <div>
-            <label className="block text-sm text-slate-500 mb-1">Current Stock Level</label>
-            <input 
-              type="number" 
-              name="stock" 
-              value={formData.stock} 
-              onChange={handleChange}
-              className="w-full border border-slate-200 rounded-xl p-3 text-base text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none"
-            />
           </div>
 
           <div className="flex justify-between items-center pt-4 mt-2 border-t border-slate-100">
@@ -176,36 +165,37 @@ export function InventoryModule({ sys }) {
     }, 3000);
   };
 
+  // 1. Updated Search Logic to check new fields
   const filteredInventory = sys.inventory.filter((item) => {
-    const itemName = item.name || item.Items || '';
-    const itemDesc = item.description || item.Description || item.Packaging || '';
-    const itemCompany = item.company || item.Company || '';
+    const sku = item.sku || '';
+    const name = item.Name || item.name || item.Items || '';
+    const desc = item.Description || item.description || '';
+    const packing = item.Packing || '';
     
     const searchLower = searchTerm.toLowerCase();
     return (
-      itemName.toLowerCase().includes(searchLower) ||
-      itemDesc.toLowerCase().includes(searchLower) ||
-      itemCompany.toLowerCase().includes(searchLower)
+      sku.toLowerCase().includes(searchLower) ||
+      name.toLowerCase().includes(searchLower) ||
+      desc.toLowerCase().includes(searchLower) ||
+      packing.toLowerCase().includes(searchLower)
     );
   });
 
   const handleSaveProduct = async (formData) => {
     try {
       const isEditing = !!editingItem;
-      
-      const oldCostRMB = isEditing ? (editingItem.costPrice || editingItem['Unit Price (RMB)']) : 0;
-      const oldPriceSG = isEditing ? (editingItem.unitPrice || editingItem['Unit Price (SG)']) : 0;
-      
-      const costChanged = isEditing && Number(oldCostRMB) !== Number(formData.costPrice);
-      const priceChanged = isEditing && Number(oldPriceSG) !== Number(formData.unitPrice);
+      const oldPrice = isEditing ? (editingItem.Price || editingItem.unitPrice || editingItem['Unit Price (SG)']) : 0;
+      const priceChanged = isEditing && Number(oldPrice) !== Number(formData.Price);
 
       let updatedInventory;
       let finalId = formData.id;
 
       if (isEditing) {
         updatedInventory = sys.inventory.map(item => {
+          // Fallback matching logic for legacy items
           const matchById = item.id && item.id === formData.id;
-          const matchByName = !item.id && (item.name === formData.name || item.Items === formData.name);
+          const matchByName = !item.id && (item.Name === formData.Name || item.Items === formData.Name || item.name === formData.Name);
+          
           if (matchById || matchByName) {
             finalId = item.id || formData.id; 
             return { ...item, ...formData, id: finalId };
@@ -218,17 +208,16 @@ export function InventoryModule({ sys }) {
       sys.setInventory(updatedInventory);
 
       // --- PERMANENT SUPABASE SYNC ---
-      // We check if finalId is a real UUID. If not (like "prod-123"), we let Supabase generate one.
       const isUUID = finalId && finalId.length === 36 && finalId.includes('-');
       
+      // Payload perfectly matches your requested Supabase headers
       const payload = {
-        Items: formData.name,
-        Description: formData.description,
-        Company: formData.company,
-        Unit: formData.unit,
-        'Unit Price (RMB)': formData.costPrice,
-        'Unit Price (SG)': formData.unitPrice,
-        stock: formData.stock
+        sku: formData.sku,
+        Name: formData.Name,
+        Unit: formData.Unit,
+        Description: formData.Description,
+        Packing: formData.Packing,
+        Price: formData.Price
       };
 
       if (isEditing && isUUID) {
@@ -243,15 +232,13 @@ export function InventoryModule({ sys }) {
 
       if (saveError) throw saveError;
 
-      // Log the Price History Ledger if margins changed
-      if (costChanged || priceChanged) {
+      // Keep price history if you have that table setup
+      if (priceChanged) {
         await supabase.from('price_history').insert({
           product_id: savedProduct.id,
-          product_name: formData.name,
-          old_cost_rmb: oldCostRMB,
-          new_cost_rmb: formData.costPrice,
-          old_price_sg: oldPriceSG,
-          new_price_sg: formData.unitPrice
+          product_name: formData.Name,
+          old_price_sg: oldPrice,
+          new_price_sg: formData.Price
         });
       }
 
@@ -266,11 +253,12 @@ export function InventoryModule({ sys }) {
   };
 
   const handleDeleteProduct = async (itemToRemove) => {
-    if (window.confirm(`Are you sure you want to delete ${itemToRemove.name || itemToRemove.Items}?`)) {
+    const itemName = itemToRemove.Name || itemToRemove.name || itemToRemove.Items;
+    if (window.confirm(`Are you sure you want to delete ${itemName}?`)) {
       try {
         const updatedInventory = sys.inventory.filter(item => {
           if (itemToRemove.id && item.id) return item.id !== itemToRemove.id;
-          return (item.name || item.Items) !== (itemToRemove.name || itemToRemove.Items);
+          return (item.Name || item.name || item.Items) !== itemName;
         });
         sys.setInventory(updatedInventory);
         
@@ -315,7 +303,7 @@ export function InventoryModule({ sys }) {
             Inventory Catalog
           </h1>
           <p className="text-base text-slate-500 mt-1">
-            Manage your products, suppliers, and pricing tiers.
+            Manage your products, packaging, and pricing details.
           </p>
         </div>
         <button 
@@ -331,7 +319,7 @@ export function InventoryModule({ sys }) {
           <Search className="text-slate-400 mr-3" size={22} />
           <input
             type="text"
-            placeholder="Search by product name, description, or supplier..."
+            placeholder="Search by SKU, Name, Description, or Packing..."
             className="w-full bg-transparent border-none focus:ring-0 text-base placeholder:text-slate-400 outline-none"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -341,66 +329,43 @@ export function InventoryModule({ sys }) {
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-white border-b border-slate-200 text-xs uppercase tracking-widest text-slate-500 font-semibold">
-              <th className="p-5 pl-8">Product / Packaging</th>
-              <th className="p-5">Supplier / Brand</th>
+              <th className="p-5 pl-8">SKU</th>
+              <th className="p-5">Name</th>
               <th className="p-5 text-center">Unit</th>
-              <th className="p-5 text-right">Cost (RMB)</th>
-              <th className="p-5 text-right">Price (SG)</th>
-              <th className="p-5 text-center">Stock</th>
-              <th className="p-5 pr-8 text-right">Action</th>
+              <th className="p-5">Description</th>
+              <th className="p-5">Packing</th>
+              <th className="p-5 text-right">Price</th>
+              <th className="p-5 pr-8 text-center">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {filteredInventory.map((item, idx) => {
-              const name = item.name || item.Items || 'Unknown Product';
-              const description = item.description || item.Description || item.Packaging || '';
-              const company = item.company || item.Company || '-';
-              const unit = item.unit || item.Unit || '-';
-              const priceRMB = item.costPrice || item['Unit Price (RMB)'];
-              const priceSG = item.unitPrice || item['Unit Price (SG)'] || 0;
-              const stock = item.stock ?? 999;
+              // Gracefully handle data mapping to new fields
+              const sku = item.sku || '-';
+              const name = item.Name || item.name || item.Items || 'Unnamed Product';
+              const unit = item.Unit || item.unit || '-';
+              const desc = item.Description || item.description || '-';
+              const packing = item.Packing || item.packaging || '-';
+              const price = item.Price || item.unitPrice || item['Unit Price (SG)'] || 0;
 
               return (
                 <tr key={item.id || `fallback-${idx}`} className="hover:bg-slate-50 transition-colors">
-                  <td className="p-5 pl-8">
-                    <p className="text-base text-slate-800">{name}</p>
-                    {description && (
-                      <p className="text-sm text-slate-500 mt-1 max-w-[280px] truncate">
-                        {description}
-                      </p>
-                    )}
-                  </td>
-                  <td className="p-5">
-                    <span className="text-sm text-slate-600 bg-slate-100 px-3 py-1.5 rounded-lg">
-                      {company}
-                    </span>
-                  </td>
+                  <td className="p-5 pl-8 text-sm font-mono text-slate-500 uppercase">{sku}</td>
+                  <td className="p-5 text-base text-slate-800 font-medium">{name}</td>
                   <td className="p-5 text-center">
-                    <span className="text-sm text-slate-600 border border-slate-200 px-3 py-1 rounded-md">
+                    <span className="text-sm text-slate-600 border border-slate-200 px-3 py-1 rounded-md bg-white">
                       {unit}
                     </span>
                   </td>
-                  <td className="p-5 text-right text-sm text-slate-500">
-                    {priceRMB ? `¥${Number(priceRMB).toFixed(2)}` : '-'}
+                  <td className="p-5 text-sm text-slate-600 max-w-[200px] truncate">{desc}</td>
+                  <td className="p-5 text-sm text-slate-600">{packing}</td>
+                  <td className="p-5 text-right text-base font-bold text-blue-700">
+                    ${formatMoney(price)}
                   </td>
-                  <td className="p-5 text-right text-base text-blue-700">
-                    ${formatMoney(priceSG)}
-                  </td>
-                  <td className="p-5 text-center">
-                    <span
-                      className={`text-xs px-3 py-1.5 rounded-md ${
-                        stock > 10
-                          ? 'bg-emerald-50 text-emerald-700'
-                          : 'bg-red-50 text-red-700'
-                      }`}
-                    >
-                      {stock} {unit}
-                    </span>
-                  </td>
-                  <td className="p-5 pr-8 text-right">
+                  <td className="p-5 pr-8 text-center">
                     <button 
                       onClick={() => openEditModal(item)}
-                      className="text-slate-400 hover:text-blue-600 p-2 transition-colors inline-block bg-white hover:bg-blue-50 rounded-lg border border-transparent hover:border-blue-100"
+                      className="text-slate-400 hover:text-blue-600 p-2 transition-colors inline-block bg-white hover:bg-blue-50 rounded-lg border border-transparent hover:border-blue-100 shadow-sm"
                     >
                       <Edit size={18} />
                     </button>
