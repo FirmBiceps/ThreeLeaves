@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
 import { FileText, Printer, Search, Calendar } from 'lucide-react';
 import { formatMoney } from '../../utils/format';
 
@@ -35,19 +35,11 @@ export function BillingModule({ sys }) {
           customerName: customerObj?.name || inv.customer || 'Unknown Customer',
           invoices: [],
           totalBilled: 0,
-          totalPaid: 0,
-          totalOutstanding: 0,
         };
       }
 
       data[inv.customerId].invoices.push(inv);
       data[inv.customerId].totalBilled += (inv.total || 0);
-
-      if (inv.status === 'Paid') {
-        data[inv.customerId].totalPaid += (inv.total || 0);
-      } else {
-        data[inv.customerId].totalOutstanding += (inv.total || 0);
-      }
     });
 
     // Convert object to array and sort alphabetically
@@ -175,9 +167,7 @@ export function BillingModule({ sys }) {
               <tr className="bg-white border-b border-slate-200 text-xs uppercase tracking-widest text-slate-500 font-semibold">
                 <th className="p-5 pl-8">Customer Entity</th>
                 <th className="p-5 text-center">Invoices</th>
-                <th className="p-5 text-right">Total Billed</th>
-                <th className="p-5 text-right">Total Paid</th>
-                <th className="p-5 text-right text-red-600">Outstanding</th>
+                <th className="p-5 text-right text-red-600">Total Amount</th>
                 <th className="p-5 pr-8 text-right">Action</th>
               </tr>
             </thead>
@@ -188,9 +178,7 @@ export function BillingModule({ sys }) {
                     {row.customerName}
                   </td>
                   <td className="p-5 text-center text-slate-500">{row.invoices.length}</td>
-                  <td className="p-5 text-right text-slate-600">${formatMoney(row.totalBilled)}</td>
-                  <td className="p-5 text-right text-emerald-600">${formatMoney(row.totalPaid)}</td>
-                  <td className="p-5 text-right font-black text-red-600">${formatMoney(row.totalOutstanding)}</td>
+                  <td className="p-5 text-right font-black text-red-600">${formatMoney(row.totalBilled)}</td>
                   <td className="p-5 pr-8 text-right">
                     <button
                       onClick={() => handlePrint(row.customer?.id)}
@@ -203,7 +191,7 @@ export function BillingModule({ sys }) {
               ))}
               {statementData.length === 0 && (
                 <tr>
-                  <td className="p-12 text-center text-sm font-bold text-slate-400" colSpan="6">
+                  <td className="p-12 text-center text-sm font-bold text-slate-400" colSpan="4">
                     No transactions found for {displayMonth}.
                   </td>
                 </tr>
@@ -236,7 +224,6 @@ export function BillingModule({ sys }) {
                     <h1 className="font-black text-[17px]" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
                     <h2 className="font-bold text-[16px] mb-1" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
                     
-                    {/* EXACT 3 ROWS GUARANTEED */}
                     <div className="text-[#d55e2d] font-bold text-[10px] leading-tight tracking-tighter">
                       <p>CO.REG NO.53033969B &nbsp;&nbsp; GST REG NO. M90355440L</p>
                       <p>280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
@@ -260,7 +247,6 @@ export function BillingModule({ sys }) {
                   </div>
                 </div>
 
-                {/* ADDRESS: Tighter tracking and smaller font ensures no overflow */}
                 <div className="flex items-end w-full text-[14px] font-bold">
                   <span className="shrink-0 mr-2 text-black">ADDRESS:</span>
                   <span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[12px] tracking-tighter" style={{ fontFamily: CJK_FONT }}>
@@ -280,19 +266,14 @@ export function BillingModule({ sys }) {
             <table className="w-full text-[15px] border-2 border-black text-center mb-0 leading-tight flex-grow" style={{ fontFamily: CJK_FONT }}>
               <thead className="border-b-2 border-black">
                 <tr className="font-bold bg-white text-[14px]">
-                  <th className="py-2 px-2 border-r border-black text-left w-32">DATE</th>
+                  <th className="py-2 px-2 border-r border-black text-left w-40">DATE</th>
                   <th className="py-2 px-2 border-r border-black text-left">INVOICE NO.</th>
-                  <th className="py-2 px-2 border-r border-black text-right w-32">BILLED</th>
-                  <th className="py-2 px-2 border-r border-black text-right w-32">PAID</th>
-                  <th className="py-2 px-2 text-right w-32">BALANCE</th>
+                  <th className="py-2 px-2 text-right w-48">AMOUNT</th>
                 </tr>
               </thead>
               <tbody>
                 {data.invoices.map((inv, idx) => {
                   const billed = inv.total || 0;
-                  const isPaid = inv.status === 'Paid';
-                  const paidAmt = isPaid ? billed : 0;
-                  const balanceAmt = isPaid ? 0 : billed;
 
                   return (
                     <tr key={inv.id} className="h-[32px] align-top" style={{ fontFamily: CJK_FONT }}>
@@ -300,10 +281,8 @@ export function BillingModule({ sys }) {
                         {inv.date ? new Date(inv.date).toLocaleDateString('en-GB').replace(/\//g, '-') : '-'}
                       </td>
                       <td className="p-1 border-r border-black text-left pl-2 font-bold text-blue-600">#{inv.number || inv.id}</td>
-                      <td className="p-1 border-r border-black text-right pr-2">${formatMoney(billed)}</td>
-                      <td className="p-1 border-r border-black text-right pr-2">${formatMoney(paidAmt)}</td>
                       <td className="p-1 text-right pr-2 font-bold text-black">
-                        ${formatMoney(balanceAmt)}
+                        ${formatMoney(billed)}
                       </td>
                     </tr>
                   );
@@ -312,8 +291,6 @@ export function BillingModule({ sys }) {
                 {/* Pad empty rows so the totals sit cleanly at the bottom */}
                 {data.invoices.length < 15 && Array.from({ length: 15 - data.invoices.length }).map((_, i) => (
                   <tr key={`blank-${i}`} className="h-[32px]">
-                    <td className="border-r border-black"></td>
-                    <td className="border-r border-black"></td>
                     <td className="border-r border-black"></td>
                     <td className="border-r border-black"></td>
                     <td></td>
@@ -325,17 +302,9 @@ export function BillingModule({ sys }) {
             {/* STATEMENT TOTALS */}
             <div className="flex w-full mt-2 justify-end" style={{ fontFamily: CJK_FONT }}>
               <div className="flex flex-col font-bold text-[15px] shrink-0 w-[20rem]">
-                <div className="flex">
-                  <div className="w-40 p-1 text-right">TOTAL BILLED</div>
-                  <div className="w-40 p-1 text-right">${formatMoney(data.totalBilled)}</div>
-                </div>
-                <div className="flex">
-                  <div className="w-40 p-1 text-right">TOTAL PAID</div>
-                  <div className="w-40 p-1 text-right">${formatMoney(data.totalPaid)}</div>
-                </div>
                 <div className="flex mt-2 pt-2 border-t-2 border-black text-[17px]">
-                  <div className="w-40 p-1 text-right">AMOUNT DUE</div>
-                  <div className="w-40 p-1 text-right text-red-600">${formatMoney(data.totalOutstanding)}</div>
+                  <div className="w-40 p-1 text-right">TOTAL AMOUNT</div>
+                  <div className="w-40 p-1 text-right text-red-600">${formatMoney(data.totalBilled)}</div>
                 </div>
               </div>
             </div>
