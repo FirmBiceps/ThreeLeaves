@@ -81,9 +81,10 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
           className="flex w-full max-w-[210mm] min-h-[297mm] flex-col bg-white p-[15mm] text-black shadow-2xl rounded-b-2xl print:w-full print:max-w-none print:min-h-0 print:h-auto print:rounded-none print:shadow-none box-border shrink-0"
           style={{ fontFamily: CJK_FONT }}
         >
-          <div className="flex w-full mb-4">
+          <div className="flex w-full mb-4 justify-between">
             
-            <div className="w-[80%] flex flex-col pr-4">
+            {/* LEFT COLUMN: 74% width to give right side more room */}
+            <div className="w-[74%] flex flex-col pr-4">
               <div className="flex items-center mb-5">
                 <div className="w-[110px] shrink-0 mr-4">
                   <img src={logo} alt="Three Leaves Logo" className="w-full h-auto object-contain" />
@@ -103,7 +104,7 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
               <div className="flex justify-between items-end w-full mb-2 text-[14px] font-bold">
                 <div className="flex items-end flex-1 pr-4">
                   <span className="shrink-0 mr-2 text-black">TO:</span>
-                  <span className="flex-1 uppercase border-b border-black pb-0.5" style={{ fontFamily: CJK_FONT }}>
+                  <span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[13px] tracking-tight" style={{ fontFamily: CJK_FONT }}>
                     {invoice.customer || ''}
                   </span>
                 </div>
@@ -117,28 +118,30 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
                 </div>
               </div>
 
-              {/* FIXED: One line address forcing no wrap and slightly smaller font */}
+              {/* ADDRESS: Tighter tracking and smaller font ensures no overflow */}
               <div className="flex items-end w-full text-[14px] font-bold">
                 <span className="shrink-0 mr-2 text-black">ADDRESS:</span>
-                <span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[12.5px] tracking-tight" style={{ fontFamily: CJK_FONT }}>
+                <span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[12px] tracking-tighter" style={{ fontFamily: CJK_FONT }}>
                   {customerAddress}
                 </span>
               </div>
             </div>
 
-            <div className="w-[20%] flex flex-col items-start pl-2 pt-1">
-              <h2 className="text-[22px] font-bold tracking-[0.4em] leading-none mb-1" style={{ fontFamily: CJK_FONT }}>發票</h2>
-              <h3 className="text-[15px] font-black tracking-wide uppercase mb-6 text-black">TAX INVOICE</h3>
-              
-              {/* FIXED: Aligned No. and Term utilizing fixed width labels and baseline alignment */}
-              <div className="w-full flex flex-col gap-3 mt-auto mb-2">
-                <div className="flex items-baseline">
-                  <span className="font-bold w-14 shrink-0 text-black text-[15px]">No.</span>
-                  <span className="text-red-600 font-bold tracking-wider text-[17px] leading-none">{invoice.number}</span>
-                </div>
-                <div className="flex items-baseline">
-                  <span className="font-bold w-14 shrink-0 text-black text-[15px]">Term:</span>
-                  <span className="text-red-600 font-bold text-[16px] leading-none">{invoice.paymentTerms === 'cod' ? 'COD' : '30 Days'}</span>
+            {/* RIGHT COLUMN: Flushed to the far right using items-end */}
+            <div className="w-[26%] flex flex-col items-end pt-1">
+              <div className="w-full max-w-[160px] flex flex-col items-start">
+                <h2 className="text-[22px] font-bold tracking-[0.4em] leading-none mb-1" style={{ fontFamily: CJK_FONT }}>發票</h2>
+                <h3 className="text-[15px] font-black tracking-wide uppercase mb-6 text-black">TAX INVOICE</h3>
+                
+                <div className="w-full flex flex-col gap-3 mt-auto mb-2">
+                  <div className="flex items-baseline">
+                    <span className="font-bold w-12 shrink-0 text-black text-[15px]">No.</span>
+                    <span className="text-red-600 font-bold tracking-wider text-[17px] leading-none">{invoice.number}</span>
+                  </div>
+                  <div className="flex items-baseline">
+                    <span className="font-bold w-12 shrink-0 text-black text-[15px]">Term:</span>
+                    <span className="text-red-600 font-bold text-[16px] leading-none">{invoice.paymentTerms === 'cod' ? 'COD' : '30 Days'}</span>
+                  </div>
                 </div>
               </div>
             </div>
