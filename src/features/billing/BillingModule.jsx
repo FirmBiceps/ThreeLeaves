@@ -5,6 +5,8 @@ import { formatMoney } from '../../utils/format';
 // Re-use the logo from your invoices folder (adjust path if needed)
 import logo from '../invoices/three_leaves_logo.png'; 
 
+const CJK_FONT = '"Microsoft YaHei", "微软雅黑", "PingFang SC", "Hiragino Sans GB", "SimHei", "黑体", "SimSun", "宋体", serif';
+
 export function BillingModule({ sys }) {
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const d = new Date();
@@ -97,8 +99,13 @@ export function BillingModule({ sys }) {
       <style type="text/css">
         {`
           @media print {
-            *, html, body {
-              font-family: Arial, "Helvetica Neue", Helvetica, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "SimHei", sans-serif !important;
+            @page { size: A4; margin: 0 !important; }
+            html, body {
+              margin: 0 !important;
+              padding: 0 !important;
+              background: white !important;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
             }
             .page-break {
               page-break-after: always !important;
@@ -213,59 +220,67 @@ export function BillingModule({ sys }) {
         {statementsToPrint.map((data, index) => (
           <div 
             key={data.customer?.id || index} 
-            className="page-break w-[210mm] min-h-[297mm] bg-white p-8 text-black flex flex-col mx-auto"
+            className="page-break w-[210mm] min-h-[297mm] bg-white p-[15mm] text-black flex flex-col mx-auto box-border"
+            style={{ fontFamily: CJK_FONT }}
           >
-            {/* EXACT MATCH HEADER */}
-            <div className="flex justify-between items-start mb-8">
-              <div className="w-[25%]">
-                <img src={logo} alt="Three Leaves Logo" className="w-[110px] h-auto object-contain" />
-              </div>
-
-              <div className="w-[50%] text-center leading-tight pt-2">
-                <h1 className="font-bold text-[14px]">THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
-                <h2 className="font-bold text-[13px] mb-1">三叶（新加坡） 贸易公司</h2>
-                <p className="font-bold text-[10px] mb-0.5">CO.REG NO.53033969B &nbsp;&nbsp;&nbsp; GST REG NO. M90355440L</p>
-                <p className="text-[10px] mb-0.5">280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
-                <p className="text-[10px]">HP: 97578869 (Mr Ye) &nbsp; HP: 91113505 (Min) &nbsp; Email: 3leaves.sg@gmail.com</p>
-              </div>
-
-              <div className="w-[25%] flex flex-col items-end pt-1">
-                <div className="text-center w-full mb-2">
-                  <h2 className="text-[18px] font-bold tracking-widest leading-none mb-0.5">结账单</h2>
-                  <h3 className="text-[14px] font-bold tracking-widest uppercase">STATEMENT</h3>
+            {/* EXACT MATCH HEADER LAYOUT */}
+            <div className="flex w-full mb-6 justify-between">
+              
+              {/* LEFT COLUMN */}
+              <div className="flex-1 flex flex-col pr-4">
+                <div className="flex items-center mb-5">
+                  <div className="w-[110px] shrink-0 mr-4">
+                    <img src={logo} alt="Three Leaves Logo" className="w-full h-auto object-contain" />
+                  </div>
+                  <div className="flex-1 text-left leading-snug pt-2 whitespace-nowrap overflow-visible">
+                    <h1 className="font-black text-[17px]" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
+                    <h2 className="font-bold text-[16px] mb-1" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
+                    
+                    {/* EXACT 3 ROWS GUARANTEED */}
+                    <div className="text-[#d55e2d] font-bold text-[10px] leading-tight tracking-tighter">
+                      <p>CO.REG NO.53033969B &nbsp;&nbsp; GST REG NO. M90355440L</p>
+                      <p>280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
+                      <p>HP: 97578869 (Mr Ye) &nbsp;&nbsp; HP: 91113505 (Min) &nbsp;&nbsp; Email: 3leaves.sg@gmail.com</p>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
 
-            {/* CUSTOMER DETAILS */}
-            <div className="mb-6 text-[15px] font-bold flex flex-col w-full">
-              <div className="flex justify-between w-full mb-2">
-                <div className="flex items-end w-[60%] pr-4">
-                  <span className="w-12 shrink-0">TO:</span>
-                  <span className="flex-1 uppercase border-b border-black pb-0.5">
-                    {data.customerName}
+                <div className="flex justify-between items-end w-full mb-2 text-[14px] font-bold">
+                  <div className="flex items-end flex-1 pr-4">
+                    <span className="shrink-0 mr-2 text-black">TO:</span>
+                    <span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[13px] tracking-tight" style={{ fontFamily: CJK_FONT }}>
+                      {data.customerName}
+                    </span>
+                  </div>
+                  <div className="flex items-end w-[40%] pl-2">
+                    <span className="shrink-0 mr-2 text-black">STMT MONTH:</span>
+                    <span className="flex-1 text-center border-b border-black pb-0.5 uppercase">
+                      {displayMonth}
+                    </span>
+                  </div>
+                </div>
+
+                {/* ADDRESS: Tighter tracking and smaller font ensures no overflow */}
+                <div className="flex items-end w-full text-[14px] font-bold">
+                  <span className="shrink-0 mr-2 text-black">ADDRESS:</span>
+                  <span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[12px] tracking-tighter" style={{ fontFamily: CJK_FONT }}>
+                    {data.customer?.address || ''}
                   </span>
                 </div>
-                <div className="flex items-end w-[40%] pl-4">
-                  <span className="w-32 shrink-0">STMT MONTH:</span>
-                  <span className="flex-1 text-center border-b border-black pb-0.5 uppercase">
-                    {displayMonth}
-                  </span>
-                </div>
               </div>
-              <div className="flex items-end w-full mt-1">
-                <span className="w-24 shrink-0">ADDRESS:</span>
-                <span className="flex-1 uppercase leading-tight border-b border-black pb-0.5">
-                  {data.customer?.address || ''}
-                </span>
+
+              {/* RIGHT COLUMN */}
+              <div className="w-[180px] shrink-0 flex flex-col items-start pl-4 pt-1">
+                <h2 className="text-[22px] font-bold tracking-[0.4em] leading-none mb-1" style={{ fontFamily: CJK_FONT }}>结账单</h2>
+                <h3 className="text-[15px] font-black tracking-wide uppercase mb-6 text-black">STATEMENT</h3>
               </div>
             </div>
 
             {/* STATEMENT TABLE */}
-            <table className="w-full text-[15px] border-2 border-black text-center mb-0 leading-tight flex-grow">
+            <table className="w-full text-[15px] border-2 border-black text-center mb-0 leading-tight flex-grow" style={{ fontFamily: CJK_FONT }}>
               <thead className="border-b-2 border-black">
                 <tr className="font-bold bg-white text-[14px]">
-                  <th className="py-2 px-2 border-r border-black text-left w-28">DATE</th>
+                  <th className="py-2 px-2 border-r border-black text-left w-32">DATE</th>
                   <th className="py-2 px-2 border-r border-black text-left">INVOICE NO.</th>
                   <th className="py-2 px-2 border-r border-black text-right w-32">BILLED</th>
                   <th className="py-2 px-2 border-r border-black text-right w-32">PAID</th>
@@ -280,11 +295,11 @@ export function BillingModule({ sys }) {
                   const balanceAmt = isPaid ? 0 : billed;
 
                   return (
-                    <tr key={inv.id} className="h-[32px] align-top">
+                    <tr key={inv.id} className="h-[32px] align-top" style={{ fontFamily: CJK_FONT }}>
                       <td className="p-1 border-r border-black text-left pl-2 font-medium">
                         {inv.date ? new Date(inv.date).toLocaleDateString('en-GB').replace(/\//g, '-') : '-'}
                       </td>
-                      <td className="p-1 border-r border-black text-left pl-2 font-bold">#{inv.number}</td>
+                      <td className="p-1 border-r border-black text-left pl-2 font-bold text-blue-600">#{inv.number || inv.id}</td>
                       <td className="p-1 border-r border-black text-right pr-2">${formatMoney(billed)}</td>
                       <td className="p-1 border-r border-black text-right pr-2">${formatMoney(paidAmt)}</td>
                       <td className="p-1 text-right pr-2 font-bold text-black">
@@ -308,7 +323,7 @@ export function BillingModule({ sys }) {
             </table>
 
             {/* STATEMENT TOTALS */}
-            <div className="flex w-full mt-2 justify-end">
+            <div className="flex w-full mt-2 justify-end" style={{ fontFamily: CJK_FONT }}>
               <div className="flex flex-col font-bold text-[15px] shrink-0 w-[20rem]">
                 <div className="flex">
                   <div className="w-40 p-1 text-right">TOTAL BILLED</div>
@@ -320,13 +335,13 @@ export function BillingModule({ sys }) {
                 </div>
                 <div className="flex mt-2 pt-2 border-t-2 border-black text-[17px]">
                   <div className="w-40 p-1 text-right">AMOUNT DUE</div>
-                  <div className="w-40 p-1 text-right">${formatMoney(data.totalOutstanding)}</div>
+                  <div className="w-40 p-1 text-right text-red-600">${formatMoney(data.totalOutstanding)}</div>
                 </div>
               </div>
             </div>
 
             {/* FOOTER MESSAGE */}
-            <div className="mt-8 pt-4 border-t border-gray-300 text-center text-[12px] font-bold">
+            <div className="mt-8 pt-4 border-t border-gray-300 text-center text-[12px] font-bold" style={{ fontFamily: CJK_FONT }}>
               <p>Please make cheques payable to <b>Three Leaves (Singapore) Trading Enterprise</b></p>
               <p className="mt-1">Bank: OCBC &nbsp;&nbsp;|&nbsp;&nbsp; A/C: 535-846562-001 &nbsp;&nbsp;|&nbsp;&nbsp; UEN: 53033969B</p>
             </div>
