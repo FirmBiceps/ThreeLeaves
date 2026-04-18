@@ -2,8 +2,9 @@ import { useMemo, useState } from 'react';
 import { FileText, Printer, Search, Calendar } from 'lucide-react';
 import { formatMoney } from '../../utils/format';
 
-// Re-use the logo from your invoices folder (adjust path if needed)
+// Re-use the logo and QR code from your invoices folder (adjust path if needed)
 import logo from '../invoices/three_leaves_logo.png'; 
+import paynowQr from '../invoices/paynow_qr.jpg';
 
 const CJK_FONT = '"Microsoft YaHei", "微软雅黑", "PingFang SC", "Hiragino Sans GB", "SimHei", "黑体", "SimSun", "宋体", serif';
 
@@ -309,10 +310,20 @@ export function BillingModule({ sys }) {
               </div>
             </div>
 
-            {/* FOOTER MESSAGE */}
-            <div className="mt-8 pt-4 border-t border-gray-300 text-center text-[12px] font-bold" style={{ fontFamily: CJK_FONT }}>
-              <p>Please make cheques payable to <b>Three Leaves (Singapore) Trading Enterprise</b></p>
-              <p className="mt-1">Bank: OCBC &nbsp;&nbsp;|&nbsp;&nbsp; A/C: 535-846562-001 &nbsp;&nbsp;|&nbsp;&nbsp; UEN: 53033969B</p>
+            {/* NEW FOOTER MESSAGE WITH QR CODE & BANK DETAILS */}
+            <div className="mt-8 pt-4 border-t border-black flex" style={{ fontFamily: CJK_FONT }}>
+              <div className="flex items-center">
+                <div className="w-[80px] h-[80px] shrink-0 mr-5">
+                  <img src={paynowQr} alt="PayNow QR Code" className="w-full h-full object-contain" />
+                </div>
+                <div className="flex flex-col text-[12px] font-bold leading-snug">
+                  <p>UEN: 53033969B</p>
+                  <p>A/C Name: Three Leaves (Singapore) Trading Enterprise</p>
+                  <p>A/C Number: 535 - 846562 - 001</p>
+                  <p>Bank Name: OCBC</p>
+                  <p className="mt-1 font-normal">All payments must be made payable to Three Leaves (Singapore) Trading Enterprise.</p>
+                </div>
+              </div>
             </div>
 
           </div>
