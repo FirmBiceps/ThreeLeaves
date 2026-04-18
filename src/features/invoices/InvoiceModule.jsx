@@ -100,7 +100,7 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
                 </div>
               </div>
 
-              <div className="flex justify-between items-end w-full mb-2 text-[15px] font-bold">
+              <div className="flex justify-between items-end w-full mb-2 text-[14px] font-bold">
                 <div className="flex items-end flex-1 pr-4">
                   <span className="shrink-0 mr-2 text-black">TO:</span>
                   <span className="flex-1 uppercase border-b border-black pb-0.5" style={{ fontFamily: CJK_FONT }}>
@@ -117,9 +117,10 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
                 </div>
               </div>
 
-              <div className="flex items-end w-full text-[15px] font-bold">
+              {/* FIXED: One line address forcing no wrap and slightly smaller font */}
+              <div className="flex items-end w-full text-[14px] font-bold">
                 <span className="shrink-0 mr-2 text-black">ADDRESS:</span>
-                <span className="flex-1 uppercase leading-tight border-b border-black pb-0.5 break-words whitespace-pre-wrap" style={{ fontFamily: CJK_FONT }}>
+                <span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[12.5px] tracking-tight" style={{ fontFamily: CJK_FONT }}>
                   {customerAddress}
                 </span>
               </div>
@@ -129,14 +130,15 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
               <h2 className="text-[22px] font-bold tracking-[0.4em] leading-none mb-1" style={{ fontFamily: CJK_FONT }}>發票</h2>
               <h3 className="text-[15px] font-black tracking-wide uppercase mb-6 text-black">TAX INVOICE</h3>
               
-              <div className="w-full flex flex-col text-[15px] gap-3 mt-auto mb-2">
-                <div className="flex items-end">
-                  <span className="font-bold w-10 shrink-0 text-black">No.</span>
+              {/* FIXED: Aligned No. and Term utilizing fixed width labels and baseline alignment */}
+              <div className="w-full flex flex-col gap-3 mt-auto mb-2">
+                <div className="flex items-baseline">
+                  <span className="font-bold w-14 shrink-0 text-black text-[15px]">No.</span>
                   <span className="text-red-600 font-bold tracking-wider text-[17px] leading-none">{invoice.number}</span>
                 </div>
-                <div className="flex items-end">
-                  <span className="font-bold w-10 shrink-0 text-black">Term:</span>
-                  <span className="text-red-600 font-bold leading-none">{invoice.paymentTerms === 'cod' ? 'COD' : '30 Days'}</span>
+                <div className="flex items-baseline">
+                  <span className="font-bold w-14 shrink-0 text-black text-[15px]">Term:</span>
+                  <span className="text-red-600 font-bold text-[16px] leading-none">{invoice.paymentTerms === 'cod' ? 'COD' : '30 Days'}</span>
                 </div>
               </div>
             </div>
