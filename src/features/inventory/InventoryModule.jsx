@@ -7,7 +7,7 @@ import { supabase } from '../../lib/supabaseClient';
 // COMPONENT 1: INVENTORY ADD/EDIT MODAL
 // ==========================================
 function InventoryFormModal({ item, onClose, onSave, onDelete }) {
-  // Updated state to perfectly match your new Supabase columns AND check for uppercase SKU
+  // Added 'stock' back into the formData state
   const [formData, setFormData] = useState({
     id: item?.id || `prod-${Date.now()}`,
     sku: item?.sku || item?.SKU || '',
@@ -16,6 +16,7 @@ function InventoryFormModal({ item, onClose, onSave, onDelete }) {
     Description: item?.Description || item?.description || '',
     Packing: item?.Packing || item?.packaging || '',
     Price: item?.Price || item?.unitPrice || item?.['Unit Price (SG)'] || 0,
+    stock: item?.stock ?? 0,
   });
 
   const handleChange = (e) => {
@@ -30,7 +31,7 @@ function InventoryFormModal({ item, onClose, onSave, onDelete }) {
 
   return (
     <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden">
         
         <div className="bg-slate-900 px-6 py-4 flex justify-between items-center text-white">
           <h2 className="text-base font-semibold flex items-center">
@@ -79,7 +80,7 @@ function InventoryFormModal({ item, onClose, onSave, onDelete }) {
             />
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-4 gap-4">
             <div>
               <label className="block text-sm text-slate-500 mb-1">Packing</label>
               <input 
@@ -111,6 +112,17 @@ function InventoryFormModal({ item, onClose, onSave, onDelete }) {
                 value={formData.Price} 
                 onChange={handleChange}
                 className="w-full border border-blue-200 bg-blue-50 rounded-xl p-3 text-base text-right text-blue-700 focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+            </div>
+            {/* Added Stock Input Field */}
+            <div>
+              <label className="block text-sm text-emerald-600 mb-1">Stock</label>
+              <input 
+                type="number" 
+                name="stock" 
+                value={formData.stock} 
+                onChange={handleChange}
+                className="w-full border border-emerald-200 bg-emerald-50 rounded-xl p-3 text-base text-right text-emerald-700 focus:ring-2 focus:ring-emerald-500 outline-none"
               />
             </div>
           </div>
@@ -165,7 +177,6 @@ export function InventoryModule({ sys }) {
     }, 3000);
   };
 
-  // 1. Updated Search Logic to check new fields and imported CSV uppercase SKU
   const filteredInventory = sys.inventory.filter((item) => {
     const sku = item.sku || item.SKU || '';
     const name = item.Name || item.name || item.Items || '';
@@ -192,7 +203,6 @@ export function InventoryModule({ sys }) {
 
       if (isEditing) {
         updatedInventory = sys.inventory.map(item => {
-          // Fallback matching logic for legacy items
           const matchById = item.id && item.id === formData.id;
           const matchByName = !item.id && (item.Name === formData.Name || item.Items === formData.Name || item.name === formData.Name);
           
@@ -207,17 +217,17 @@ export function InventoryModule({ sys }) {
       }
       sys.setInventory(updatedInventory);
 
-      // --- PERMANENT SUPABASE SYNC ---
       const isUUID = finalId && finalId.length === 36 && finalId.includes('-');
       
-      // Payload perfectly matches your requested Supabase headers
+      // Added stock back to the Supabase sync payload
       const payload = {
         sku: formData.sku,
         Name: formData.Name,
         Unit: formData.Unit,
         Description: formData.Description,
         Packing: formData.Packing,
-        Price: formData.Price
+        Price: formData.Price,
+        stock: formData.stock
       };
 
       if (isEditing && isUUID) {
@@ -232,7 +242,6 @@ export function InventoryModule({ sys }) {
 
       if (saveError) throw saveError;
 
-      // Keep price history if you have that table setup
       if (priceChanged) {
         await supabase.from('price_history').insert({
           product_id: savedProduct.id,
@@ -335,18 +344,19 @@ export function InventoryModule({ sys }) {
               <th className="p-5">Description</th>
               <th className="p-5">Packing</th>
               <th className="p-5 text-right">Price</th>
+              <th className="p-5 text-center">Stock</th> {/* Added Stock Column Header */}
               <th className="p-5 pr-8 text-center">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {filteredInventory.map((item, idx) => {
-              // Gracefully handle data mapping to new fields and handle uppercase SKU
               const sku = item.sku || item.SKU || '-';
               const name = item.Name || item.name || item.Items || 'Unnamed Product';
               const unit = item.Unit || item.unit || '-';
               const desc = item.Description || item.description || '-';
               const packing = item.Packing || item.packaging || '-';
               const price = item.Price || item.unitPrice || item['Unit Price (SG)'] || 0;
+              const stock = item.stock ?? 0; // Grab the stock value
 
               return (
                 <tr key={item.id || `fallback-${idx}`} className="hover:bg-slate-50 transition-colors">
@@ -362,6 +372,18 @@ export function InventoryModule({ sys }) {
                   <td className="p-5 text-right text-base font-bold text-blue-700">
                     ${formatMoney(price)}
                   </td>
+                  {/* Added Stock Cell with Warning Color Logic */}
+                  <td className="p-5 text-center">
+                    <span
+                      className={`text-xs px-3 py-1.5 rounded-md font-bold ${
+                        stock > 10
+                          ? 'bg-emerald-50 text-emerald-700'
+                          : 'bg-red-50 text-red-700'
+                      }`}
+                    >
+                      {stock}
+                    </span>
+                  </td>
                   <td className="p-5 pr-8 text-center">
                     <button 
                       onClick={() => openEditModal(item)}
@@ -376,7 +398,7 @@ export function InventoryModule({ sys }) {
             
             {filteredInventory.length === 0 && (
               <tr>
-                <td colSpan="7" className="p-12 text-center text-base text-slate-500">
+                <td colSpan="8" className="p-12 text-center text-base text-slate-500">
                   No products match your search.
                 </td>
               </tr>
