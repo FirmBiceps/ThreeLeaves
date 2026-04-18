@@ -1,16 +1,32 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
-import { Eye, FileText, MessageSquare, Printer, Save, Sparkles, Trash2, Search, BrainCircuit, ChevronLeft, X } from 'lucide-react';
+import {
+  Eye,
+  FileText,
+  MessageSquare,
+  Printer,
+  Save,
+  Sparkles,
+  Trash2,
+  Search,
+  BrainCircuit,
+  Plus,
+  ChevronLeft,
+  X,
+  Edit
+} from 'lucide-react';
 import { CompanyHeader } from '../../components/shared/CompanyHeader';
 import { UNIT_OPTIONS } from '../../data/company';
 import { formatMoney } from '../../utils/format';
 
+// 1. IMPORT YOUR IMAGES DIRECTLY HERE
 import logo from './three_leaves_logo.png';
 import paynowQr from './paynow_qr.jpg';
 
+// The ultimate font stack variable to force the browser's hand
 const CJK_FONT = '"Microsoft YaHei", "微软雅黑", "PingFang SC", "Hiragino Sans GB", "SimHei", "黑体", "SimSun", "宋体", serif';
 
 // ==========================================
-// COMPONENT: SEARCHABLE PRODUCT DROPDOWN
+// 1. SEARCHABLE PRODUCT DROPDOWN
 // ==========================================
 function ProductSearchSelect({ value, inventory, onChange }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -19,7 +35,9 @@ function ProductSearchSelect({ value, inventory, onChange }) {
 
   useEffect(() => {
     function handleClickOutside(event) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) { setIsOpen(false); }
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -27,9 +45,11 @@ function ProductSearchSelect({ value, inventory, onChange }) {
 
   const safeInventory = inventory || [];
   const selectedProduct = safeInventory.find((entry) => entry.id === value);
+  // NEW: Updated to check for .Name first
   const displayName = selectedProduct ? (selectedProduct.Name || selectedProduct.name || selectedProduct.Items) : '';
 
   const filteredInventory = safeInventory.filter((item) => {
+    // NEW: Updated to check for .Name first
     const itemName = (item.Name || item.name || item.Items || '').toLowerCase();
     return itemName.includes(searchTerm.toLowerCase());
   });
@@ -39,8 +59,13 @@ function ProductSearchSelect({ value, inventory, onChange }) {
       {!isOpen ? (
         <button
           type="button"
-          onClick={() => { setIsOpen(true); setSearchTerm(''); }}
-          className={`w-full text-left text-xs font-bold p-1 border border-transparent rounded hover:bg-slate-200 transition-colors focus:outline-none ${displayName ? 'text-slate-900' : 'text-slate-400'}`}
+          onClick={() => {
+            setIsOpen(true);
+            setSearchTerm(''); 
+          }}
+          className={`w-full text-left text-xs font-bold p-1 border border-transparent rounded hover:bg-slate-200 transition-colors focus:outline-none ${
+            displayName ? 'text-slate-900' : 'text-slate-400'
+          }`}
         >
           {displayName || '- Search Product -'}
         </button>
@@ -48,19 +73,39 @@ function ProductSearchSelect({ value, inventory, onChange }) {
         <div className="absolute z-[5000] top-0 left-0 w-72 bg-white border border-slate-300 rounded shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-100">
           <div className="flex items-center p-2 border-b border-slate-200 bg-slate-50">
             <Search size={14} className="text-slate-400 ml-1 mr-2 shrink-0" />
-            <input autoFocus type="text" className="w-full bg-transparent border-none text-xs font-bold text-slate-800 p-1 focus:ring-0 placeholder:text-slate-400 outline-none" placeholder="Type to search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+            <input
+              autoFocus
+              type="text"
+              className="w-full bg-transparent border-none text-xs font-bold text-slate-800 p-1 focus:ring-0 placeholder:text-slate-400 outline-none"
+              placeholder="Type to search..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
           </div>
           <div className="max-h-52 overflow-y-auto">
             {filteredInventory.length > 0 ? (
               filteredInventory.map((item) => {
+                // NEW: Updated to check for .Name first
                 const itemName = item.Name || item.name || item.Items || 'Unnamed Product';
                 return (
-                  <button key={item.id} type="button" className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 border-b border-slate-100 last:border-0 transition-colors" onClick={() => { onChange(item.id); setIsOpen(false); }}>
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 border-b border-slate-100 last:border-0 transition-colors"
+                    onClick={() => {
+                      onChange(item.id);
+                      setIsOpen(false);
+                    }}
+                  >
                     {itemName}
                   </button>
                 );
               })
-            ) : (<div className="p-3 text-center text-xs text-slate-400 font-medium">No products found.</div>)}
+            ) : (
+              <div className="p-3 text-center text-xs text-slate-400 font-medium">
+                No products found.
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -69,7 +114,7 @@ function ProductSearchSelect({ value, inventory, onChange }) {
 }
 
 // ==========================================
-// COMPONENT: SEARCHABLE CUSTOMER DROPDOWN
+// 2. SEARCHABLE CUSTOMER DROPDOWN
 // ==========================================
 function CustomerSearchSelect({ value, customers, onChange, disabled }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -78,7 +123,9 @@ function CustomerSearchSelect({ value, customers, onChange, disabled }) {
 
   useEffect(() => {
     function handleClickOutside(event) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) { setIsOpen(false); }
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -88,7 +135,9 @@ function CustomerSearchSelect({ value, customers, onChange, disabled }) {
   const selectedCustomer = safeCustomers.find((c) => c.id === value);
   const displayName = selectedCustomer ? selectedCustomer.name : '';
 
-  const filteredCustomers = safeCustomers.filter((c) => (c.name || '').toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredCustomers = safeCustomers.filter((c) =>
+    (c.name || '').toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <div className="relative w-full text-left" ref={dropdownRef}>
@@ -96,8 +145,13 @@ function CustomerSearchSelect({ value, customers, onChange, disabled }) {
         <button
           type="button"
           disabled={disabled}
-          onClick={() => { setIsOpen(true); setSearchTerm(''); }}
-          className={`mt-1 w-full text-left text-[16px] font-black p-0 border border-transparent bg-transparent focus:outline-none transition-colors ${displayName ? 'text-slate-900' : 'text-slate-400'} ${disabled ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:text-blue-600'}`}
+          onClick={() => {
+            setIsOpen(true);
+            setSearchTerm(''); 
+          }}
+          className={`mt-1 w-full text-left text-[16px] font-black p-0 border border-transparent bg-transparent focus:outline-none transition-colors ${
+            displayName ? 'text-slate-900' : 'text-slate-400'
+          } ${disabled ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:text-blue-600'}`}
         >
           {displayName || 'Select Entity...'}
         </button>
@@ -105,16 +159,35 @@ function CustomerSearchSelect({ value, customers, onChange, disabled }) {
         <div className="absolute z-[5000] top-8 left-0 w-80 bg-white border border-slate-300 rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-100">
           <div className="flex items-center p-3 border-b border-slate-200 bg-slate-50">
             <Search size={16} className="text-slate-400 ml-1 mr-2 shrink-0" />
-            <input autoFocus type="text" className="w-full bg-transparent border-none text-sm font-bold text-slate-800 p-1 focus:ring-0 placeholder:text-slate-400 outline-none" placeholder="Search customer..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+            <input
+              autoFocus
+              type="text"
+              className="w-full bg-transparent border-none text-sm font-bold text-slate-800 p-1 focus:ring-0 placeholder:text-slate-400 outline-none"
+              placeholder="Search customer..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
           </div>
           <div className="max-h-60 overflow-y-auto">
             {filteredCustomers.length > 0 ? (
               filteredCustomers.map((c) => (
-                <button key={c.id} type="button" className="w-full text-left px-4 py-3 text-sm font-bold text-slate-700 hover:bg-blue-50 border-b border-slate-100 last:border-0 transition-colors" onClick={() => { onChange(c.id); setIsOpen(false); }}>
+                <button
+                  key={c.id}
+                  type="button"
+                  className="w-full text-left px-4 py-3 text-sm font-bold text-slate-700 hover:bg-blue-50 border-b border-slate-100 last:border-0 transition-colors"
+                  onClick={() => {
+                    onChange(c.id);
+                    setIsOpen(false);
+                  }}
+                >
                   {c.name}
                 </button>
               ))
-            ) : (<div className="p-4 text-center text-sm text-slate-400 font-medium">No customers found.</div>)}
+            ) : (
+              <div className="p-4 text-center text-sm text-slate-400 font-medium">
+                No customers found.
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -123,9 +196,22 @@ function CustomerSearchSelect({ value, customers, onChange, disabled }) {
 }
 
 // ==========================================
-// COMPONENT: LAYOUT CHECK (Generator Preview)
+// COMPONENT 4: EXACT MATCH PDF PREVIEW (For Generator)
 // ==========================================
-function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBack, onRegister, paymentTerms, subtotal, sys, total, existingInvoice }) {
+function InvoicePreview({
+  customer,
+  gst,
+  invoiceNumber,
+  invoiceDate,
+  items,
+  onBack,
+  onRegister,
+  paymentTerms,
+  subtotal,
+  sys,
+  total,
+  existingInvoice
+}) {
   const customerAddress = customer?.address || existingInvoice?.address || '';
 
   return (
@@ -163,8 +249,10 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
         `}
       </style>
 
+      {/* WYSIWYG A4 PAPER PREVIEW SCROLL CONTAINER */}
       <div className="flex min-h-full flex-col items-center py-12 print:block print:py-0 print:m-0">
         
+        {/* ACTION BAR */}
         <div className="w-full max-w-[210mm] shrink-0 bg-slate-900 px-8 py-4 flex justify-between items-center text-white rounded-t-2xl shadow-2xl print:hidden border-b-4 border-blue-600">
           <div className="flex items-center">
             <Eye size={24} className="mr-3 text-blue-400" />
@@ -174,38 +262,49 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
             </div>
           </div>
           <div className="flex items-center space-x-3">
-            <button className="flex items-center rounded bg-slate-800 px-5 py-2.5 font-bold text-white transition-all hover:bg-slate-700 border border-slate-700 text-sm" onClick={onBack} type="button">
+            <button
+              className="flex items-center rounded bg-slate-800 px-5 py-2.5 font-bold text-white transition-all hover:bg-slate-700 border border-slate-700 text-sm"
+              onClick={onBack}
+              type="button"
+            >
               <ChevronLeft size={16} className="mr-1" /> Edit Draft
             </button>
-            <button className="flex items-center rounded bg-white px-5 py-2.5 font-bold text-slate-900 shadow-lg transition-all hover:bg-slate-50 text-sm" onClick={() => onRegister(false)} type="button">
+            <button
+              className="flex items-center rounded bg-white px-5 py-2.5 font-bold text-slate-900 shadow-lg transition-all hover:bg-slate-50 text-sm"
+              onClick={() => onRegister(false)}
+              type="button"
+            >
               <Save className="mr-2" size={16} /> Save Invoice
             </button>
           </div>
         </div>
 
+        {/* ACTUAL A4 PAPER */}
         <div 
           id="printable-invoice-generator"
           lang="zh" 
           className="flex w-full max-w-[210mm] min-h-[297mm] flex-col bg-white p-[15mm] text-black shadow-2xl rounded-b-2xl print:w-full print:max-w-none print:min-h-0 print:h-auto print:rounded-none print:shadow-none box-border shrink-0"
           style={{ fontFamily: CJK_FONT }}
         >
+          
+          {/* MATCHED HEADER LAYOUT */}
           <div className="flex w-full mb-4 justify-between">
             
-            {/* LEFT COLUMN: 74% width to give right side more room */}
-            <div className="w-[74%] flex flex-col pr-4">
+            {/* LEFT COLUMN: flex-1 ensures it takes all available space so text doesn't wrap */}
+            <div className="flex-1 flex flex-col pr-4">
               <div className="flex items-center mb-5">
                 <div className="w-[110px] shrink-0 mr-4">
                   <img src={logo} alt="Three Leaves Logo" className="w-full h-auto object-contain" />
                 </div>
-                <div className="flex-1 text-left leading-snug">
+                <div className="flex-1 text-left leading-snug pt-2 whitespace-nowrap overflow-visible">
                   <h1 className="font-black text-[17px]" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
                   <h2 className="font-bold text-[16px] mb-1" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
                   
-                  {/* APPLIED WHITESPACE-NOWRAP */}
-                  <div className="text-[#d55e2d] font-bold text-[10.5px] leading-tight tracking-tight">
-                    <p className="whitespace-nowrap">CO.REG NO.53033969B &nbsp;&nbsp; GST REG NO. M90355440L</p>
-                    <p className="whitespace-nowrap">280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
-                    <p className="whitespace-nowrap">HP: 97578869 (Mr Ye) &nbsp;&nbsp; HP: 91113505 (Min) &nbsp;&nbsp; Email: 3leaves.sg@gmail.com</p>
+                  {/* EXACT 3 ROWS GUARANTEED */}
+                  <div className="text-[#d55e2d] font-bold text-[10px] leading-tight tracking-tighter">
+                    <p>CO.REG NO.53033969B &nbsp;&nbsp; GST REG NO. M90355440L</p>
+                    <p>280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
+                    <p>HP: 97578869 (Mr Ye) &nbsp;&nbsp; HP: 91113505 (Min) &nbsp;&nbsp; Email: 3leaves.sg@gmail.com</p>
                   </div>
                 </div>
               </div>
@@ -234,21 +333,19 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
               </div>
             </div>
 
-            {/* RIGHT COLUMN: Flushed to the far right using items-end */}
-            <div className="w-[26%] flex flex-col items-end pt-1">
-              <div className="w-full max-w-[160px] flex flex-col items-start">
-                <h2 className="text-[22px] font-bold tracking-[0.4em] leading-none mb-1" style={{ fontFamily: CJK_FONT }}>發票</h2>
-                <h3 className="text-[15px] font-black tracking-wide uppercase mb-6 text-black">TAX INVOICE</h3>
-                
-                <div className="w-full flex flex-col gap-3 mt-auto mb-2">
-                  <div className="flex items-baseline">
-                    <span className="font-bold w-12 shrink-0 text-black text-[15px]">No.</span>
-                    <span className="text-red-600 font-bold tracking-wider text-[17px] leading-none">{invoiceNumber}</span>
-                  </div>
-                  <div className="flex items-baseline">
-                    <span className="font-bold w-12 shrink-0 text-black text-[15px]">Term:</span>
-                    <span className="text-red-600 font-bold text-[16px] leading-none">{paymentTerms === 'cod' ? 'COD' : '30 Days'}</span>
-                  </div>
+            {/* RIGHT COLUMN: Fixed width of 180px ensures it doesn't squish the left side */}
+            <div className="w-[180px] shrink-0 flex flex-col items-start pl-4 pt-1">
+              <h2 className="text-[22px] font-bold tracking-[0.4em] leading-none mb-1" style={{ fontFamily: CJK_FONT }}>發票</h2>
+              <h3 className="text-[15px] font-black tracking-wide uppercase mb-6 text-black">TAX INVOICE</h3>
+              
+              <div className="w-full flex flex-col gap-3 mt-auto mb-2">
+                <div className="flex items-baseline">
+                  <span className="font-bold w-[50px] shrink-0 text-black text-[15px]">No.</span>
+                  <span className="text-red-600 font-bold tracking-wider text-[17px] leading-none">{invoiceNumber}</span>
+                </div>
+                <div className="flex items-baseline">
+                  <span className="font-bold w-[50px] shrink-0 text-black text-[15px]">Term:</span>
+                  <span className="text-red-600 font-bold text-[16px] leading-none">{paymentTerms === 'cod' ? 'COD' : '30 Days'}</span>
                 </div>
               </div>
             </div>
@@ -266,22 +363,29 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
             </thead>
             <tbody style={{ fontFamily: CJK_FONT }}>
               {(items || []).map((item, idx) => {
-                // Check for .Name first
+                // NEW: Updated to check for .Name first
                 const foundProduct = (sys.inventory || []).find((entry) => entry.id === item.itemId);
                 const productName = foundProduct ? (foundProduct.Name || foundProduct.name || foundProduct.Items) : (item.Name || item.name || '-');
+
                 return (
                   <tr key={idx} className="h-[32px] align-top" style={{ fontFamily: CJK_FONT }}>
                     <td className="p-1 border-r border-black font-medium text-center">{idx + 1}</td>
                     <td className="p-1 border-r border-black text-left pl-2 font-bold" style={{ fontFamily: CJK_FONT }}>{productName}</td>
                     <td className="p-1 border-r border-black font-medium text-center" style={{ fontFamily: CJK_FONT }}>{item.qty || item.quantity} {item.unit || item.Unit}</td>
                     <td className="p-1 border-r border-black text-center">${formatMoney(item.unitPrice)}</td>
-                    <td className="p-1 text-center font-bold">${formatMoney((Number(item.qty || item.quantity) || 0) * (Number(item.unitPrice) || 0))}</td>
+                    <td className="p-1 text-center font-bold">
+                      ${formatMoney((Number(item.qty || item.quantity) || 0) * (Number(item.unitPrice) || 0))}
+                    </td>
                   </tr>
                 );
               })}
               {items && items.length < 15 && Array.from({ length: 15 - items.length }).map((_, i) => (
                 <tr key={`blank-${i}`} className="h-[32px]">
-                  <td className="border-r border-black"></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td></td>
+                  <td className="border-r border-black"></td>
+                  <td className="border-r border-black"></td>
+                  <td className="border-r border-black"></td>
+                  <td className="border-r border-black"></td>
+                  <td></td>
                 </tr>
               ))}
             </tbody>
@@ -293,6 +397,7 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
                 <div style={{ fontFamily: CJK_FONT }}>
                   <p>请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
                   <p>Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
+                  
                   <div className="mt-3 flex items-center">
                     <div className="w-[80px] h-[80px] shrink-0 mr-3">
                       <img src={paynowQr} alt="PayNow QR Code" className="w-full h-full object-contain" />
@@ -304,8 +409,10 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
                       <p>Bank Name: OCBC</p>
                     </div>
                   </div>
+
                   <p className="mt-2 font-normal">All payments mode have to be made payable to Three Leaves (Singapore) Trading Enterprise.</p>
                 </div>
+                
                 <div className="mt-12 mb-1">
                   <div className="w-56 border-t border-black text-center pt-1 text-[12px] font-bold">Received By</div>
                 </div>
@@ -354,7 +461,9 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
   }, [sys.invoices, existingInvoice]);
 
   const [invoiceNumber, setInvoiceNumber] = useState(defaultInvoiceNumber);
-  const [invoiceDate, setInvoiceDate] = useState(existingInvoice ? existingInvoice.date : new Date().toISOString().split('T')[0]);
+  const [invoiceDate, setInvoiceDate] = useState(
+    existingInvoice ? existingInvoice.date : new Date().toISOString().split('T')[0]
+  );
   const [customerId, setCustomerId] = useState(existingInvoice ? existingInvoice.customerId : '');
   const [paymentTerms, setPaymentTerms] = useState(existingInvoice ? existingInvoice.paymentTerms : '30_days');
   const [items, setItems] = useState(existingInvoice ? existingInvoice.items : []);
@@ -367,13 +476,20 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
   const customer = (sys.customers || []).find((entry) => entry.id === customerId);
 
   const isDuplicateNumber = useMemo(() => {
-    return (sys.invoices || []).some(inv => String(inv.number) === String(invoiceNumber) && inv.id !== (existingInvoice ? existingInvoice.id : null));
+    return (sys.invoices || []).some(inv => 
+      String(inv.number) === String(invoiceNumber) && 
+      inv.id !== (existingInvoice ? existingInvoice.id : null)
+    );
   }, [invoiceNumber, sys.invoices, existingInvoice]);
 
-  const subtotal = (items || []).reduce((sum, item) => sum + (Number(item.qty) || 0) * (Number(item.unitPrice) || 0), 0);
+  const subtotal = (items || []).reduce(
+    (sum, item) => sum + (Number(item.qty) || 0) * (Number(item.unitPrice) || 0),
+    0,
+  );
   const gst = subtotal * 0.09;
   const total = subtotal + gst;
 
+  // NEW: Updated to check for .Price first
   const getSafePrice = (product, unit = '箱') => {
     const ruleKey = `${product.id}|${unit}`;
     if (customer?.custom_prices && customer.custom_prices[ruleKey] !== undefined) {
@@ -384,23 +500,35 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
   };
 
   useEffect(() => {
-    if (!existingInvoice) setInvoiceNumber(defaultInvoiceNumber);
+    if (!existingInvoice) {
+      setInvoiceNumber(defaultInvoiceNumber);
+    }
   }, [defaultInvoiceNumber, existingInvoice]);
 
   useEffect(() => {
-    if (existingInvoice && customerId === existingInvoice.customerId) return; 
+    if (existingInvoice && customerId === existingInvoice.customerId) {
+      return; 
+    }
 
     if (!customerId) {
-      setItems([]); setAutoFillNotif(false); return;
+      setItems([]);
+      setAutoFillNotif(false);
+      return;
     }
 
     const history = (sys.invoices || []).filter((invoice) => invoice.customerId === customerId);
-    if (history.length === 0) { setItems([]); setAutoFillNotif(false); return; }
+    if (history.length === 0) {
+      setItems([]);
+      setAutoFillNotif(false);
+      return;
+    }
 
     const itemStats = {};
     history.forEach((invoice) => {
       invoice.items?.forEach((item) => {
-        if (!itemStats[item.itemId]) { itemStats[item.itemId] = { count: 0, totalQty: 0, unit: item.unit || item.Unit }; }
+        if (!itemStats[item.itemId]) {
+          itemStats[item.itemId] = { count: 0, totalQty: 0, unit: item.unit || item.Unit };
+        }
         itemStats[item.itemId].count += 1;
         itemStats[item.itemId].totalQty += Number(item.qty || 0);
       });
@@ -411,6 +539,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
       if (stats.count / history.length >= 0.9) {
         const product = (sys.inventory || []).find((entry) => entry.id === itemId);
         if (product) {
+          // NEW: Check for .Unit first
           const determinedUnit = stats.unit || product.Unit || product.unit || '箱';
           autoFilled.push({
             itemId,
@@ -425,9 +554,12 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
     });
 
     if (autoFilled.length > 0) {
-      setItems(autoFilled); setAutoFillNotif(true); setTimeout(() => setAutoFillNotif(false), 4000);
+      setItems(autoFilled);
+      setAutoFillNotif(true);
+      setTimeout(() => setAutoFillNotif(false), 4000);
     } else {
-      setItems([]); setAutoFillNotif(false);
+      setItems([]);
+      setAutoFillNotif(false);
     }
   }, [customerId, sys.invoices, sys.inventory, existingInvoice]);
 
@@ -438,11 +570,16 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
 
     const counts = {};
     history.forEach((invoice) => {
-      invoice.items?.forEach((item) => { counts[item.itemId] = (counts[item.itemId] || 0) + 1; });
+      invoice.items?.forEach((item) => {
+        counts[item.itemId] = (counts[item.itemId] || 0) + 1;
+      });
     });
 
     return Object.entries(counts)
-      .filter(([, count]) => { const confidence = count / history.length; return confidence >= 0.3 && confidence < 0.9; })
+      .filter(([, count]) => {
+        const confidence = count / history.length;
+        return confidence >= 0.3 && confidence < 0.9;
+      })
       .map(([itemId]) => (sys.inventory || []).find((entry) => entry.id === itemId))
       .filter((item) => item && !(items || []).find((draftItem) => draftItem.itemId === item.id));
   }, [customerId, items, sys.invoices, sys.inventory]);
@@ -454,6 +591,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
     lines.forEach((line) => {
       const quantityMatch = line.match(/(\d+)/);
       const qty = quantityMatch ? parseInt(quantityMatch[0], 10) : 1;
+      
       const searchString = line.replace(/(\d+)/g, '').trim().toLowerCase();
       if (!searchString) return;
 
@@ -461,15 +599,26 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
       let highestScore = 0;
 
       (sys.inventory || []).forEach((inventoryItem) => {
+        // NEW: Check for .Name first
         const itemName = (inventoryItem.Name || inventoryItem.name || inventoryItem.Items || '').toLowerCase();
         let score = 0;
-        if (itemName.includes(searchString) || searchString.includes(itemName)) { score += 10; }
-        if (inventoryItem.learned_phrases && inventoryItem.learned_phrases[searchString]) { score += (inventoryItem.learned_phrases[searchString] * 20); }
 
-        if (score > highestScore) { highestScore = score; bestMatch = inventoryItem; }
+        if (itemName.includes(searchString) || searchString.includes(itemName)) {
+          score += 10;
+        }
+
+        if (inventoryItem.learned_phrases && inventoryItem.learned_phrases[searchString]) {
+          score += (inventoryItem.learned_phrases[searchString] * 20); 
+        }
+
+        if (score > highestScore) {
+          highestScore = score;
+          bestMatch = inventoryItem;
+        }
       });
 
       if (bestMatch) {
+        // NEW: Checks for .Unit and .Name
         const determinedUnit = bestMatch.Unit || bestMatch.unit || '箱';
         nextDraftItems.push({
           itemId: bestMatch.id,
@@ -482,7 +631,16 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
           originalPredictedId: bestMatch.id, 
         });
       } else {
-        nextDraftItems.push({ itemId: '', name: '', unit: '箱', qty, unitPrice: 0, picked: false, rawSearchString: searchString, originalPredictedId: null });
+        nextDraftItems.push({
+          itemId: '',
+          name: '',
+          unit: '箱',
+          qty,
+          unitPrice: 0,
+          picked: false,
+          rawSearchString: searchString,
+          originalPredictedId: null, 
+        });
       }
     });
 
@@ -511,22 +669,29 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
     items.forEach((item) => {
       if (!existingInvoice && item.itemId) {
         const stockIndex = nextInventory.findIndex((entry) => entry.id === item.itemId);
-        if (stockIndex > -1) { nextInventory[stockIndex].stock -= Number(item.qty) || 0; }
+        if (stockIndex > -1) {
+          nextInventory[stockIndex].stock -= Number(item.qty) || 0;
+        }
       }
 
       if (item.rawSearchString) {
         if (item.itemId) {
           const correctIndex = nextInventory.findIndex((entry) => entry.id === item.itemId);
           if (correctIndex > -1) {
-            if (!nextInventory[correctIndex].learned_phrases) { nextInventory[correctIndex].learned_phrases = {}; }
+            if (!nextInventory[correctIndex].learned_phrases) {
+              nextInventory[correctIndex].learned_phrases = {};
+            }
             const currentScore = nextInventory[correctIndex].learned_phrases[item.rawSearchString] || 0;
             nextInventory[correctIndex].learned_phrases[item.rawSearchString] = currentScore + 1;
           }
         }
+
         if (item.originalPredictedId && item.originalPredictedId !== item.itemId) {
           const wrongIndex = nextInventory.findIndex((entry) => entry.id === item.originalPredictedId);
           if (wrongIndex > -1) {
-            if (!nextInventory[wrongIndex].learned_phrases) { nextInventory[wrongIndex].learned_phrases = {}; }
+            if (!nextInventory[wrongIndex].learned_phrases) {
+              nextInventory[wrongIndex].learned_phrases = {};
+            }
             const currentScore = nextInventory[wrongIndex].learned_phrases[item.rawSearchString] || 0;
             nextInventory[wrongIndex].learned_phrases[item.rawSearchString] = currentScore - 1;
           }
@@ -542,15 +707,32 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
       sys.setInvoices([...(sys.invoices || []), invoice]);
     }
 
-    if (printAfter) { setTimeout(() => { window.print(); onClose(); }, 500); } else { onClose(); }
+    if (printAfter) {
+      setTimeout(() => {
+        window.print();
+        onClose();
+      }, 500);
+    } else {
+      onClose();
+    }
   };
 
   if (previewMode) {
     return (
       <InvoicePreview
-        customer={customer} gst={gst} invoiceNumber={invoiceNumber} invoiceDate={invoiceDate} items={items}
-        onBack={() => setPreviewMode(false)} onRegister={handleRegister} paymentTerms={paymentTerms} setItems={setItems}
-        subtotal={subtotal} sys={sys} total={total} existingInvoice={existingInvoice}
+        customer={customer}
+        gst={gst}
+        invoiceNumber={invoiceNumber}
+        invoiceDate={invoiceDate}
+        items={items}
+        onBack={() => setPreviewMode(false)}
+        onRegister={handleRegister}
+        paymentTerms={paymentTerms}
+        setItems={setItems}
+        subtotal={subtotal}
+        sys={sys}
+        total={total}
+        existingInvoice={existingInvoice}
       />
     );
   }
@@ -561,13 +743,23 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
         <div className="flex shrink-0 items-center justify-between bg-slate-900 p-4 px-8 text-white">
           <div className="flex items-center space-x-3">
             <FileText className="text-blue-500" />
-            <h2 className="text-sm font-black uppercase tracking-widest">{existingInvoice ? 'Edit Existing Invoice' : 'Draft Invoice Workspace'}</h2>
+            <h2 className="text-sm font-black uppercase tracking-widest">
+              {existingInvoice ? 'Edit Existing Invoice' : 'Draft Invoice Workspace'}
+            </h2>
           </div>
           <div className="flex space-x-3">
-            <button className="flex items-center rounded-xl bg-blue-600 px-4 py-1.5 text-xs font-black shadow-lg shadow-blue-500/20 transition-all hover:bg-blue-500" onClick={() => setIsParsing(true)} type="button">
+            <button
+              className="flex items-center rounded-xl bg-blue-600 px-4 py-1.5 text-xs font-black shadow-lg shadow-blue-500/20 transition-all hover:bg-blue-500"
+              onClick={() => setIsParsing(true)}
+              type="button"
+            >
               <MessageSquare className="mr-2" size={14} /> Paste Order Message
             </button>
-            <button className="rounded-full p-1.5 transition-colors hover:bg-slate-800" onClick={onClose} type="button">
+            <button
+              className="rounded-full p-1.5 transition-colors hover:bg-slate-800"
+              onClick={onClose}
+              type="button"
+            >
               <X size={20} />
             </button>
           </div>
@@ -576,12 +768,29 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
         <div className="flex-1 overflow-y-auto bg-slate-100 p-8">
           {isParsing && (
             <div className="mb-8 rounded-2xl bg-blue-600 p-8 text-white shadow-2xl">
-              <h3 className="mb-2 flex items-center text-lg font-black"><BrainCircuit className="mr-3" size={24} /> AI Order Extractor</h3>
-              <p className="mb-4 text-xs font-medium text-blue-200">Paste your messy text below. The system will auto-predict the items and will automatically unlearn any mistakes when you correct them.</p>
-              <textarea className="mb-4 h-32 w-full rounded border border-blue-400 bg-blue-700/50 p-4 text-sm font-medium outline-none placeholder:text-blue-300" onChange={(event) => setParseText(event.target.value)} placeholder="Paste order details here..." value={parseText} />
+              <h3 className="mb-2 flex items-center text-lg font-black">
+                <BrainCircuit className="mr-3" size={24} /> AI Order Extractor
+              </h3>
+              <p className="mb-4 text-xs font-medium text-blue-200">
+                Paste your messy text below. The system will auto-predict the items and will automatically unlearn any mistakes when you correct them.
+              </p>
+              <textarea
+                className="mb-4 h-32 w-full rounded border border-blue-400 bg-blue-700/50 p-4 text-sm font-medium outline-none placeholder:text-blue-300"
+                onChange={(event) => setParseText(event.target.value)}
+                placeholder="Paste order details here..."
+                value={parseText}
+              />
               <div className="flex justify-end space-x-3">
-                <button className="px-6 py-2 text-xs font-bold text-blue-200" onClick={() => setIsParsing(false)} type="button">Cancel</button>
-                <button className="rounded bg-white px-8 py-2 text-xs font-black text-blue-600" onClick={handleSmartExtract} type="button">Extract Order</button>
+                <button className="px-6 py-2 text-xs font-bold text-blue-200" onClick={() => setIsParsing(false)} type="button">
+                  Cancel
+                </button>
+                <button
+                  className="rounded bg-white px-8 py-2 text-xs font-black text-blue-600"
+                  onClick={handleSmartExtract}
+                  type="button"
+                >
+                  Extract Order
+                </button>
               </div>
             </div>
           )}
@@ -590,20 +799,39 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
             <CompanyHeader />
 
             <div className="mb-12 flex justify-between">
+              
               <div className="w-[30%] border-r border-slate-100 pr-6">
                 <label className="text-[10px] font-black uppercase text-gray-400">Customer Account:</label>
-                <CustomerSearchSelect value={customerId} customers={sys.customers} onChange={setCustomerId} disabled={!!existingInvoice} />
-                {autoFillNotif && (<p className="mt-2 flex items-center text-[10px] font-black uppercase tracking-widest text-emerald-500"><Sparkles className="mr-1" size={12} /> Predictively Prefilled</p>)}
+                <CustomerSearchSelect 
+                  value={customerId} 
+                  customers={sys.customers} 
+                  onChange={setCustomerId} 
+                  disabled={!!existingInvoice} 
+                />
+                {autoFillNotif && (
+                  <p className="mt-2 flex items-center text-[10px] font-black uppercase tracking-widest text-emerald-500">
+                    <Sparkles className="mr-1" size={12} /> Predictively Prefilled
+                  </p>
+                )}
               </div>
 
               <div className="w-[20%] border-r border-slate-100 px-6">
                 <label className="text-[10px] font-black uppercase text-gray-400">Invoice Date:</label>
-                <input type="date" className="mt-1 w-full cursor-pointer border-none bg-transparent p-0 text-[16px] font-black text-slate-800 focus:ring-0 outline-none" value={invoiceDate} onChange={(event) => setInvoiceDate(event.target.value)} />
+                <input
+                  type="date"
+                  className="mt-1 w-full cursor-pointer border-none bg-transparent p-0 text-[16px] font-black text-slate-800 focus:ring-0 outline-none"
+                  value={invoiceDate}
+                  onChange={(event) => setInvoiceDate(event.target.value)}
+                />
               </div>
 
               <div className="w-[20%] border-r border-slate-100 px-6">
                 <label className="text-[10px] font-black uppercase text-gray-400">Terms:</label>
-                <select className="mt-1 w-full cursor-pointer border-none bg-transparent p-0 text-lg font-black text-slate-800 focus:ring-0" onChange={(event) => setPaymentTerms(event.target.value)} value={paymentTerms}>
+                <select
+                  className="mt-1 w-full cursor-pointer border-none bg-transparent p-0 text-lg font-black text-slate-800 focus:ring-0"
+                  onChange={(event) => setPaymentTerms(event.target.value)}
+                  value={paymentTerms}
+                >
                   <option value="30_days">30 Days</option>
                   <option value="cod">C.O.D</option>
                 </select>
@@ -613,22 +841,45 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                 <label className="text-[10px] font-black uppercase text-gray-400">Serial No.</label>
                 <div className="flex items-center justify-end text-3xl font-black tracking-tighter text-red-600 mt-1">
                   <span className="mr-1">#</span>
-                  <input type="text" value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} className={`w-full max-w-[140px] bg-transparent border-b-2 outline-none text-right focus:ring-0 p-0 m-0 ${isDuplicateNumber ? 'border-red-500 text-red-600' : 'border-transparent hover:border-red-200 focus:border-red-600'}`} />
+                  <input 
+                    type="text" 
+                    value={invoiceNumber} 
+                    onChange={(e) => setInvoiceNumber(e.target.value)}
+                    className={`w-full max-w-[140px] bg-transparent border-b-2 outline-none text-right focus:ring-0 p-0 m-0 ${isDuplicateNumber ? 'border-red-500 text-red-600' : 'border-transparent hover:border-red-200 focus:border-red-600'}`}
+                  />
                 </div>
-                {isDuplicateNumber && (<p className="text-[10px] font-black text-red-500 uppercase mt-1">Number Already Exists!</p>)}
+                {isDuplicateNumber && (
+                  <p className="text-[10px] font-black text-red-500 uppercase mt-1">Number Already Exists!</p>
+                )}
               </div>
             </div>
 
             {suggestions.length > 0 && !existingInvoice && (
               <div className="mb-6 rounded border border-dashed border-blue-200 bg-blue-50/50 p-4">
-                <p className="mb-2 text-[9px] font-black uppercase tracking-widest text-blue-400">Secondary Recommendations</p>
+                <p className="mb-2 text-[9px] font-black uppercase tracking-widest text-blue-400">
+                  Secondary Recommendations (Occasional Buys)
+                </p>
                 <div className="flex flex-wrap gap-2">
                   {suggestions.map((item) => (
-                    <button key={item.id} className="rounded border border-blue-100 bg-white px-3 py-1.5 text-[10px] font-bold text-blue-700 shadow-sm"
+                    <button
+                      className="rounded border border-blue-100 bg-white px-3 py-1.5 text-[10px] font-bold text-blue-700 shadow-sm"
+                      key={item.id}
                       onClick={() => {
                         const determinedUnit = item.Unit || item.unit || '箱';
-                        setItems([...items, { itemId: item.id, name: item.Name || item.name || item.Items, unit: determinedUnit, qty: 1, unitPrice: getSafePrice(item, determinedUnit), picked: false }])
-                      }} type="button">
+                        setItems([
+                          ...items,
+                          {
+                            itemId: item.id,
+                            name: item.Name || item.name || item.Items,
+                            unit: determinedUnit,
+                            qty: 1,
+                            unitPrice: getSafePrice(item, determinedUnit), 
+                            picked: false,
+                          },
+                        ])
+                      }}
+                      type="button"
+                    >
                       + {item.Name || item.name || item.Items}
                     </button>
                   ))}
@@ -639,8 +890,13 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
             <table className="w-full text-left relative z-10">
               <thead className="border-y-2 border-slate-900 bg-slate-50">
                 <tr className="text-[10px] font-black uppercase tracking-widest text-gray-500">
-                  <th className="w-12 p-4 text-center">No.</th><th className="p-4 w-72">Description</th><th className="w-24 p-4 text-center">Unit</th>
-                  <th className="w-20 p-4 text-center">Qty</th><th className="w-28 p-4 text-right">Cost</th><th className="w-28 p-4 text-right">Total</th><th className="w-8 p-4"></th>
+                  <th className="w-12 p-4 text-center">No.</th>
+                  <th className="p-4 w-72">Description</th>
+                  <th className="w-24 p-4 text-center">Unit</th>
+                  <th className="w-20 p-4 text-center">Qty</th>
+                  <th className="w-28 p-4 text-right">Cost</th>
+                  <th className="w-28 p-4 text-right">Total</th>
+                  <th className="w-8 p-4"></th>
                 </tr>
               </thead>
               <tbody>
@@ -651,26 +907,113 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                   return (
                     <tr className="border-b border-gray-100 font-bold" key={`${item.itemId}-${index}`}>
                       <td className="p-4 text-center font-mono text-xs text-slate-300">{index + 1}</td>
+                      
                       <td className="p-2 relative">
                         <div className="flex items-center space-x-2">
-                          <input checked={item.picked || false} className="h-4 w-4 cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500 shrink-0" onChange={(event) => { const nextItems = [...items]; nextItems[index].picked = event.target.checked; setItems(nextItems); }} type="checkbox" />
-                          <ProductSearchSelect value={item.itemId} inventory={sys.inventory} onChange={(selectedId) => { const product = (sys.inventory || []).find((entry) => entry.id === selectedId); if (!product) return; const nextItems = [...items]; const determinedUnit = product.Unit || product.unit || '箱'; nextItems[index] = { ...nextItems[index], itemId: selectedId, name: product.Name || product.name || product.Items, unit: determinedUnit, unitPrice: getSafePrice(product, determinedUnit) }; setItems(nextItems); }} />
+                          <input
+                            checked={item.picked || false}
+                            className="h-4 w-4 cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500 shrink-0"
+                            onChange={(event) => {
+                              const nextItems = [...items];
+                              nextItems[index].picked = event.target.checked;
+                              setItems(nextItems);
+                            }}
+                            type="checkbox"
+                          />
+                          <ProductSearchSelect
+                            value={item.itemId}
+                            inventory={sys.inventory}
+                            onChange={(selectedId) => {
+                              const product = (sys.inventory || []).find((entry) => entry.id === selectedId);
+                              if (!product) return;
+                              
+                              const nextItems = [...items];
+                              const determinedUnit = product.Unit || product.unit || '箱';
+                              nextItems[index] = {
+                                ...nextItems[index],
+                                itemId: selectedId,
+                                name: product.Name || product.name || product.Items,
+                                unit: determinedUnit,
+                                unitPrice: getSafePrice(product, determinedUnit),
+                              };
+                              setItems(nextItems);
+                            }}
+                          />
                         </div>
+                        {item.rawSearchString && (
+                          <p className="text-[9px] text-blue-400 font-medium ml-6 mt-1 flex items-center">
+                            <BrainCircuit size={10} className="mr-1" /> Predicted from: "{item.rawSearchString}"
+                          </p>
+                        )}
                       </td>
+
                       <td className="p-2 align-top pt-3">
-                        <select className="w-full border-none text-center text-xs font-bold focus:ring-0 bg-transparent m-0" onChange={(event) => { const nextItems = [...items]; const newUnit = event.target.value; nextItems[index].unit = newUnit; const product = (sys.inventory || []).find(p => p.id === nextItems[index].itemId); if (product) { nextItems[index].unitPrice = getSafePrice(product, newUnit); } setItems(nextItems); }} value={item.unit}>
-                          {UNIT_OPTIONS.map((option) => (<option key={option.value} value={option.value}>{option.label}</option>))}
+                        <select
+                          className="w-full border-none text-center text-xs font-bold focus:ring-0 bg-transparent m-0"
+                          onChange={(event) => {
+                            const nextItems = [...items];
+                            const newUnit = event.target.value;
+                            nextItems[index].unit = newUnit;
+                            
+                            const product = (sys.inventory || []).find(p => p.id === nextItems[index].itemId);
+                            if (product) {
+                              nextItems[index].unitPrice = getSafePrice(product, newUnit);
+                            }
+
+                            setItems(nextItems);
+                          }}
+                          value={item.unit}
+                        >
+                          {UNIT_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
                         </select>
                       </td>
                       <td className="p-2 align-top pt-2">
-                        <input className="w-full border-none bg-transparent p-1 text-center font-black text-blue-600 focus:ring-0 m-0" onChange={(event) => { const nextItems = [...items]; nextItems[index].qty = event.target.value; setItems(nextItems); }} type="number" value={item.qty} />
+                        <input
+                          className="w-full border-none bg-transparent p-1 text-center font-black text-blue-600 focus:ring-0 m-0"
+                          onChange={(event) => {
+                            const nextItems = [...items];
+                            nextItems[index].qty = event.target.value;
+                            setItems(nextItems);
+                          }}
+                          type="number"
+                          value={item.qty}
+                        />
                       </td>
                       <td className="p-2 align-top pt-2">
-                        <input className="w-full border-none bg-transparent p-1 text-right font-black focus:ring-0 m-0 leading-none" onChange={(event) => { const nextItems = [...items]; nextItems[index].unitPrice = event.target.value; setItems(nextItems); }} step="0.01" type="number" value={item.unitPrice} />
+                        <input
+                          className="w-full border-none bg-transparent p-1 text-right font-black focus:ring-0 m-0 leading-none"
+                          onChange={(event) => {
+                            const nextItems = [...items];
+                            nextItems[index].unitPrice = event.target.value;
+                            setItems(nextItems);
+                          }}
+                          step="0.01"
+                          type="number"
+                          value={item.unitPrice}
+                        />
+                        {item.itemId && customer && (
+                          <p className={`text-[9px] text-right uppercase tracking-widest mt-0.5 ${
+                            hasCustomPrice ? 'text-emerald-500 font-black' : 'text-slate-400 font-semibold'
+                          }`}>
+                            {hasCustomPrice ? '★ Custom' : 'Default'}
+                          </p>
+                        )}
                       </td>
-                      <td className="p-4 text-right font-mono text-lg font-black tracking-tighter text-slate-900 align-top">${formatMoney((Number(item.qty) || 0) * (Number(item.unitPrice) || 0))}</td>
+                      <td className="p-4 text-right font-mono text-lg font-black tracking-tighter text-slate-900 align-top">
+                        ${formatMoney((Number(item.qty) || 0) * (Number(item.unitPrice) || 0))}
+                      </td>
                       <td className="w-8 p-0 align-top pt-4">
-                        <button className="ml-2 text-red-200 hover:text-red-500" onClick={() => setItems(items.filter((_, itemIndex) => itemIndex !== index))} type="button"><Trash2 size={18} /></button>
+                        <button
+                          className="ml-2 text-red-200 hover:text-red-500"
+                          onClick={() => setItems(items.filter((_, itemIndex) => itemIndex !== index))}
+                          type="button"
+                        >
+                          <Trash2 size={18} />
+                        </button>
                       </td>
                     </tr>
                   );
@@ -678,15 +1021,33 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
               </tbody>
             </table>
 
-            <button className="mt-8 rounded bg-blue-50 px-5 py-2 text-[10px] font-bold uppercase text-blue-600 shadow-sm transition-all" onClick={() => setItems([...items, { itemId: '', name: '', unit: '箱', qty: 1, unitPrice: 0, picked: false }])} type="button">
+            <button
+              className="mt-8 rounded bg-blue-50 px-5 py-2 text-[10px] font-bold uppercase text-blue-600 shadow-sm transition-all"
+              onClick={() =>
+                setItems([
+                  ...items,
+                  { itemId: '', name: '', unit: '箱', qty: 1, unitPrice: 0, picked: false },
+                ])
+              }
+              type="button"
+            >
               + Add Row Manually
             </button>
 
             <div className="mt-12 flex justify-end border-t-2 border-slate-900 pt-6">
               <div className="w-72 space-y-1">
-                <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-gray-400"><span>Sub-Total ($)</span><span className="text-slate-900">${formatMoney(subtotal)}</span></div>
-                <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-gray-400"><span>GST 9% Included</span><span className="text-slate-900">${formatMoney(gst)}</span></div>
-                <div className="flex items-center justify-between pt-2"><span className="text-sm font-black uppercase">Total Due</span><span className="text-3xl font-black tracking-tighter">${formatMoney(total)}</span></div>
+                <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-gray-400">
+                  <span>Sub-Total ($)</span>
+                  <span className="text-slate-900">${formatMoney(subtotal)}</span>
+                </div>
+                <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-gray-400">
+                  <span>GST 9% Included</span>
+                  <span className="text-slate-900">${formatMoney(gst)}</span>
+                </div>
+                <div className="flex items-center justify-between pt-2">
+                  <span className="text-sm font-black uppercase">Total Due</span>
+                  <span className="text-3xl font-black tracking-tighter">${formatMoney(total)}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -694,8 +1055,19 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
 
         <div className="shrink-0 rounded-b-3xl border-t bg-white p-8 shadow-inner">
           <div className="flex justify-end space-x-4">
-            <button className="px-8 py-3 text-sm font-black uppercase tracking-widest text-gray-400" onClick={onClose} type="button">Discard</button>
-            <button className="flex items-center rounded bg-indigo-600 px-10 py-3 text-xs font-black uppercase tracking-widest text-white shadow-xl transition-all hover:scale-105 active:scale-95 disabled:opacity-50" disabled={!customerId || items.length === 0 || isDuplicateNumber} onClick={() => setPreviewMode(true)} type="button">
+            <button
+              className="px-8 py-3 text-sm font-black uppercase tracking-widest text-gray-400"
+              onClick={onClose}
+              type="button"
+            >
+              Discard
+            </button>
+            <button
+              className="flex items-center rounded bg-indigo-600 px-10 py-3 text-xs font-black uppercase tracking-widest text-white shadow-xl transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+              disabled={!customerId || items.length === 0 || isDuplicateNumber}
+              onClick={() => setPreviewMode(true)}
+              type="button"
+            >
               <Eye className="mr-2" size={18} /> Preview Document
             </button>
           </div>
