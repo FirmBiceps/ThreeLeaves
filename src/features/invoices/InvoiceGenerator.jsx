@@ -7,21 +7,20 @@ import {
   Save,
   Sparkles,
   Trash2,
-  Wand2,
-  X,
   Search,
   BrainCircuit,
   Plus,
   ChevronLeft,
-  ChevronRight,
+  X,
   Edit
 } from 'lucide-react';
 import { CompanyHeader } from '../../components/shared/CompanyHeader';
 import { UNIT_OPTIONS } from '../../data/company';
 import { formatMoney } from '../../utils/format';
 
-// 1. IMPORT YOUR LOGO DIRECTLY HERE
+// 1. IMPORT YOUR IMAGES DIRECTLY HERE
 import logo from './three_leaves_logo.png';
+import paynowQr from './paynow_qr.jpg';
 
 // The ultimate font stack variable to force the browser's hand
 const CJK_FONT = '"Microsoft YaHei", "微软雅黑", "PingFang SC", "Hiragino Sans GB", "SimHei", "黑体", "SimSun", "宋体", serif';
@@ -46,10 +45,12 @@ function ProductSearchSelect({ value, inventory, onChange }) {
 
   const safeInventory = inventory || [];
   const selectedProduct = safeInventory.find((entry) => entry.id === value);
-  const displayName = selectedProduct ? (selectedProduct.name || selectedProduct.Items) : '';
+  // NEW: Updated to check for .Name first
+  const displayName = selectedProduct ? (selectedProduct.Name || selectedProduct.name || selectedProduct.Items) : '';
 
   const filteredInventory = safeInventory.filter((item) => {
-    const itemName = (item.name || item.Items || '').toLowerCase();
+    // NEW: Updated to check for .Name first
+    const itemName = (item.Name || item.name || item.Items || '').toLowerCase();
     return itemName.includes(searchTerm.toLowerCase());
   });
 
@@ -84,7 +85,8 @@ function ProductSearchSelect({ value, inventory, onChange }) {
           <div className="max-h-52 overflow-y-auto">
             {filteredInventory.length > 0 ? (
               filteredInventory.map((item) => {
-                const itemName = item.name || item.Items || 'Unnamed Product';
+                // NEW: Updated to check for .Name first
+                const itemName = item.Name || item.name || item.Items || 'Unnamed Product';
                 return (
                   <button
                     key={item.id}
@@ -208,7 +210,6 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
   return (
     <div className="fixed inset-0 z-[5000] overflow-y-auto bg-slate-950/90 print:static print:block print:bg-white print:p-0 print:backdrop-filter-none">
       
-      {/* THE FIX: Natural Flow CSS - Strips backgrounds without messy absolute positioning */}
       <style type="text/css">
         {`
           @media print {
@@ -220,33 +221,22 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
             }
-            
-            /* Hide EVERYTHING in the background app to prevent blank pages */
             body * { visibility: hidden !important; }
-            
-            /* Unhide ONLY the print invoice */
-            #printable-invoice-history, #printable-invoice-history * { 
-              visibility: visible !important; 
-            }
+            #printable-invoice-history, #printable-invoice-history * { visibility: visible !important; }
             
             #printable-invoice-history {
               position: absolute !important;
               left: 0 !important;
               top: 0 !important;
-              width: 100% !important; /* CRITICAL: Use 100% to fix margin cut-offs */
-              padding: 15mm !important; /* Safe padding inside the page */
+              width: 100% !important; 
+              padding: 15mm !important; 
               box-sizing: border-box !important;
               background: white !important;
-              backdrop-filter: none !important; /* Removes blur that causes blank prints */
+              backdrop-filter: none !important;
             }
 
-            *, html, body, div, p, span, h1, h2, h3, table, th, td {
-              font-family: ${CJK_FONT} !important;
-            }
-            tr, td, th {
-              page-break-inside: avoid;
-              break-inside: avoid;
-            }
+            *, html, body, div, p, span, h1, h2, h3, table, th, td { font-family: ${CJK_FONT} !important; }
+            tr, td, th { page-break-inside: avoid; break-inside: avoid; }
           }
         `}
       </style>
@@ -288,64 +278,66 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
           className="flex w-full max-w-[210mm] min-h-[297mm] flex-col bg-white p-[15mm] text-black shadow-2xl rounded-b-2xl print:w-full print:max-w-none print:min-h-0 print:h-auto print:rounded-none print:shadow-none box-border shrink-0"
           style={{ fontFamily: CJK_FONT }}
         >
-          <div className="flex justify-between items-start mb-6">
-            <div className="w-[25%]">
-              <img src={logo} alt="Three Leaves Logo" className="w-[110px] h-auto object-contain" />
-            </div>
-
-            <div className="w-[50%] text-center leading-tight pt-2">
-              <h1 className="font-bold text-[14px]" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
-              <h2 className="font-bold text-[13px] mb-1" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
-              <p className="font-bold text-[10px] mb-0.5">CO.REG NO.53033969B &nbsp;&nbsp;&nbsp; GST REG NO. M90355440L</p>
-              <p className="text-[10px] mb-0.5">280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
-              <p className="text-[10px]">HP: 97578869 (Mr Ye) &nbsp; HP: 91113505 (Min) &nbsp; Email: 3leaves.sg@gmail.com</p>
-            </div>
-
-            <div className="w-[25%] flex flex-col items-end pt-1">
-              <div className="text-center w-full mb-2">
-                <h2 className="text-[18px] font-bold tracking-[0.2em] leading-none mb-0.5" style={{ fontFamily: CJK_FONT }}>發票</h2>
-                <h3 className="text-[14px] font-bold tracking-widest uppercase">TAX INVOICE</h3>
+          <div className="flex w-full mb-4">
+            <div className="w-[75%] flex flex-col pr-4">
+              <div className="flex items-center mb-5">
+                <div className="w-[110px] shrink-0 mr-4">
+                  <img src={logo} alt="Three Leaves Logo" className="w-full h-auto object-contain" />
+                </div>
+                <div className="flex-1 text-left leading-snug">
+                  <h1 className="font-black text-[17px]" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
+                  <h2 className="font-bold text-[16px] mb-1" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
+                  <div className="text-[#d55e2d] font-bold text-[11px] leading-tight tracking-tight">
+                    <p>CO.REG NO.53033969B &nbsp;&nbsp; GST REG NO. M90355440L</p>
+                    <p>280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
+                    <p>HP: 97578869 (Mr Ye) &nbsp;&nbsp; HP: 91113505 (Min) &nbsp;&nbsp; Email: 3leaves.sg@gmail.com</p>
+                  </div>
+                </div>
               </div>
+
+              <div className="flex justify-between items-end w-full mb-2 text-[15px] font-bold">
+                <div className="flex items-end flex-1 pr-4">
+                  <span className="shrink-0 mr-2 text-black">TO:</span>
+                  <span className="flex-1 uppercase border-b border-black pb-0.5" style={{ fontFamily: CJK_FONT }}>
+                    {invoice.customer || ''}
+                  </span>
+                </div>
+                <div className="flex items-end w-[35%] pl-2">
+                  <span className="shrink-0 mr-2 text-black">DATE:</span>
+                  <span className="flex-1 text-center border-b border-black pb-0.5">
+                    {invoice.date && !isNaN(new Date(invoice.date).getTime()) 
+                      ? new Date(invoice.date).toLocaleDateString('en-GB').replace(/\//g, '-') 
+                      : new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-end w-full text-[15px] font-bold">
+                <span className="shrink-0 mr-2 text-black">ADDRESS:</span>
+                <span className="flex-1 uppercase leading-tight border-b border-black pb-0.5 break-words whitespace-pre-wrap" style={{ fontFamily: CJK_FONT }}>
+                  {customerAddress}
+                </span>
+              </div>
+            </div>
+
+            <div className="w-[25%] flex flex-col items-start pl-6 pt-1">
+              <h2 className="text-[22px] font-bold tracking-[0.4em] leading-none mb-1" style={{ fontFamily: CJK_FONT }}>發票</h2>
+              <h3 className="text-[15px] font-black tracking-wide uppercase mb-6 text-black">TAX INVOICE</h3>
               
-              <div className="w-full text-[16px] text-left mt-1 pl-4 flex flex-col leading-tight gap-1">
-                <div className="flex items-center">
-                  <span className="font-bold w-14 shrink-0">No.</span>
-                  <span className="text-red-600 font-bold tracking-wider">{invoice.number}</span>
+              <div className="w-full flex flex-col text-[15px] gap-3 mt-auto mb-2">
+                <div className="flex items-end">
+                  <span className="font-bold w-12 shrink-0 text-black">No.</span>
+                  <span className="text-red-600 font-bold tracking-wider text-[17px] leading-none">{invoice.number}</span>
                 </div>
-                <div className="flex items-center">
-                  <span className="font-bold w-14 shrink-0">Term:</span>
-                  <span className="font-bold">{invoice.paymentTerms === 'cod' ? 'COD' : '30 Days'}</span>
+                <div className="flex items-end">
+                  <span className="font-bold w-12 shrink-0 text-black">Term:</span>
+                  <span className="text-red-600 font-bold leading-none">{invoice.paymentTerms === 'cod' ? 'COD' : '30 Days'}</span>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="mb-4 text-[15px] font-bold flex flex-col w-full">
-            <div className="flex justify-between w-full mb-2">
-              <div className="flex items-end w-[65%] pr-4">
-                <span className="w-12 shrink-0">TO:</span>
-                <span className="flex-1 uppercase border-b border-black pb-0.5" style={{ fontFamily: CJK_FONT }}>
-                  {invoice.customer || ''}
-                </span>
-              </div>
-              <div className="flex items-end w-[35%] pl-4">
-                <span className="w-14 shrink-0">DATE:</span>
-                <span className="flex-1 text-center border-b border-black pb-0.5">
-                  {invoice.date && !isNaN(new Date(invoice.date).getTime()) 
-                    ? new Date(invoice.date).toLocaleDateString('en-GB').replace(/\//g, '-') 
-                    : new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}
-                </span>
-              </div>
-            </div>
-            <div className="flex items-end w-full mt-1">
-              <span className="w-24 shrink-0">ADDRESS:</span>
-              <span className="flex-1 uppercase leading-tight border-b border-black pb-0.5 break-words whitespace-pre-wrap" style={{ fontFamily: CJK_FONT }}>
-                {customerAddress}
-              </span>
-            </div>
-          </div>
-
-          <table className="w-full text-[15px] border-2 border-black text-center mb-0 leading-tight flex-grow" style={{ fontFamily: CJK_FONT }}>
+          <table className="w-full text-[15px] border-2 border-black text-center mb-0 leading-tight flex-grow mt-2" style={{ fontFamily: CJK_FONT }}>
             <thead className="border-b-2 border-black">
               <tr className="font-bold bg-white text-[14px]">
                 <th className="py-2 px-1 border-r border-black w-10">NO.</th>
@@ -384,20 +376,30 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
           </table>
 
           <div className="flex w-full mt-2">
-            <div className="flex-1 pr-4 text-[12px] font-bold leading-snug flex flex-col justify-between">
-              <div style={{ fontFamily: CJK_FONT }}>
-                <p>请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
-                <p>Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
-                <div className="mt-4">
-                  <p>UEN: 53033969B</p>
-                  <p>A/C Name: Three Leaves (Singapore) Trading Enterprise</p>
-                  <p>A/C Number: 535-846562-001</p>
-                  <p>Bank Name: OCBC</p>
+            <div className="flex-1 flex pr-4">
+              <div className="flex-1 text-[12px] font-bold leading-snug flex flex-col justify-between">
+                <div style={{ fontFamily: CJK_FONT }}>
+                  <p>请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
+                  <p>Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
+                  
+                  <div className="mt-3 flex items-center">
+                    <div className="w-[80px] h-[80px] shrink-0 mr-3">
+                      <img src={paynowQr} alt="PayNow QR Code" className="w-full h-full object-contain" />
+                    </div>
+                    <div className="flex flex-col justify-center pt-1">
+                      <p>UEN: 53033969B</p>
+                      <p>A/C Name: Three Leaves (Singapore) Trading Enterprise</p>
+                      <p>A/C Number: 535-846562-001</p>
+                      <p>Bank Name: OCBC</p>
+                    </div>
+                  </div>
+
+                  <p className="mt-2 font-normal">All payments mode have to be made payable to Three Leaves (Singapore) Trading Enterprise.</p>
                 </div>
-                <p className="mt-4 font-normal">All payments mode have to be made payable to Three Leaves (Singapore) Trading Enterprise.</p>
-              </div>
-              <div className="mt-6 mb-1">
-                <div className="w-48 border-t border-black text-center pt-1 text-[12px]">Received By</div>
+                
+                <div className="mt-12 mb-1">
+                  <div className="w-56 border-t border-black text-center pt-1 text-[12px] font-bold">Received By</div>
+                </div>
               </div>
             </div>
 
@@ -463,21 +465,16 @@ function InvoicePreview({
               position: absolute !important;
               left: 0 !important;
               top: 0 !important;
-              width: 100% !important; /* CRITICAL: Use 100% to fix margin cut-offs */
+              width: 100% !important; 
               padding: 15mm !important;
               margin: 0 !important;
               background: white !important;
-              backdrop-filter: none !important; /* Removes blur that causes blank prints */
+              backdrop-filter: none !important; 
               box-sizing: border-box !important;
             }
             
-            *, html, body, div, p, span, h1, h2, h3, table, th, td {
-              font-family: ${CJK_FONT} !important;
-            }
-            tr, td, th {
-              page-break-inside: avoid;
-              break-inside: avoid;
-            }
+            *, html, body, div, p, span, h1, h2, h3, table, th, td { font-family: ${CJK_FONT} !important; }
+            tr, td, th { page-break-inside: avoid; break-inside: avoid; }
           }
         `}
       </style>
@@ -503,7 +500,7 @@ function InvoicePreview({
               <ChevronLeft size={16} className="mr-1" /> Edit Draft
             </button>
             <button
-              className="flex items-center rounded bg-blue-600 px-8 py-2.5 font-bold text-white shadow-xl transition-all hover:bg-blue-500 text-sm"
+              className="flex items-center rounded bg-white px-5 py-2.5 font-bold text-slate-900 shadow-lg transition-all hover:bg-slate-50 text-sm"
               onClick={() => onRegister(false)}
               type="button"
             >
@@ -520,64 +517,66 @@ function InvoicePreview({
           style={{ fontFamily: CJK_FONT }}
         >
           
-          <div className="flex justify-between items-start mb-6">
-            <div className="w-[25%]">
-              <img src={logo} alt="Three Leaves Logo" className="w-[110px] h-auto object-contain" />
-            </div>
-
-            <div className="w-[50%] text-center leading-tight pt-2">
-              <h1 className="font-bold text-[14px]" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
-              <h2 className="font-bold text-[13px] mb-1" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
-              <p className="font-bold text-[10px] mb-0.5">CO.REG NO.53033969B &nbsp;&nbsp;&nbsp; GST REG NO. M90355440L</p>
-              <p className="text-[10px] mb-0.5">280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
-              <p className="text-[10px]">HP: 97578869 (Mr Ye) &nbsp; HP: 91113505 (Min) &nbsp; Email: 3leaves.sg@gmail.com</p>
-            </div>
-
-            <div className="w-[25%] flex flex-col items-end pt-1">
-              <div className="text-center w-full mb-2">
-                <h2 className="text-[18px] font-bold tracking-[0.2em] leading-none mb-0.5" style={{ fontFamily: CJK_FONT }}>發票</h2>
-                <h3 className="text-[14px] font-bold tracking-widest uppercase">TAX INVOICE</h3>
+          <div className="flex w-full mb-4">
+            <div className="w-[75%] flex flex-col pr-4">
+              <div className="flex items-center mb-5">
+                <div className="w-[110px] shrink-0 mr-4">
+                  <img src={logo} alt="Three Leaves Logo" className="w-full h-auto object-contain" />
+                </div>
+                <div className="flex-1 text-left leading-snug">
+                  <h1 className="font-black text-[17px]" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
+                  <h2 className="font-bold text-[16px] mb-1" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
+                  <div className="text-[#d55e2d] font-bold text-[11px] leading-tight tracking-tight">
+                    <p>CO.REG NO.53033969B &nbsp;&nbsp; GST REG NO. M90355440L</p>
+                    <p>280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
+                    <p>HP: 97578869 (Mr Ye) &nbsp;&nbsp; HP: 91113505 (Min) &nbsp;&nbsp; Email: 3leaves.sg@gmail.com</p>
+                  </div>
+                </div>
               </div>
+
+              <div className="flex justify-between items-end w-full mb-2 text-[15px] font-bold">
+                <div className="flex items-end flex-1 pr-4">
+                  <span className="shrink-0 mr-2 text-black">TO:</span>
+                  <span className="flex-1 uppercase border-b border-black pb-0.5" style={{ fontFamily: CJK_FONT }}>
+                    {customer?.name || existingInvoice?.customer || ''}
+                  </span>
+                </div>
+                <div className="flex items-end w-[35%] pl-2">
+                  <span className="shrink-0 mr-2 text-black">DATE:</span>
+                  <span className="flex-1 text-center border-b border-black pb-0.5">
+                    {invoiceDate && !isNaN(new Date(invoiceDate).getTime()) 
+                      ? new Date(invoiceDate).toLocaleDateString('en-GB').replace(/\//g, '-') 
+                      : new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-end w-full text-[15px] font-bold">
+                <span className="shrink-0 mr-2 text-black">ADDRESS:</span>
+                <span className="flex-1 uppercase leading-tight border-b border-black pb-0.5 break-words whitespace-pre-wrap" style={{ fontFamily: CJK_FONT }}>
+                  {customerAddress}
+                </span>
+              </div>
+            </div>
+
+            <div className="w-[25%] flex flex-col items-start pl-6 pt-1">
+              <h2 className="text-[22px] font-bold tracking-[0.4em] leading-none mb-1" style={{ fontFamily: CJK_FONT }}>發票</h2>
+              <h3 className="text-[15px] font-black tracking-wide uppercase mb-6 text-black">TAX INVOICE</h3>
               
-              <div className="w-full text-[16px] text-left mt-1 pl-4 flex flex-col leading-tight gap-1">
-                <div className="flex items-center">
-                  <span className="font-bold w-14 shrink-0">No.</span>
-                  <span className="text-red-600 font-bold tracking-wider">{invoiceNumber}</span>
+              <div className="w-full flex flex-col text-[15px] gap-3 mt-auto mb-2">
+                <div className="flex items-end">
+                  <span className="font-bold w-12 shrink-0 text-black">No.</span>
+                  <span className="text-red-600 font-bold tracking-wider text-[17px] leading-none">{invoiceNumber}</span>
                 </div>
-                <div className="flex items-center">
-                  <span className="font-bold w-14 shrink-0">Term:</span>
-                  <span className="font-bold">{paymentTerms === 'cod' ? 'COD' : '30 Days'}</span>
+                <div className="flex items-end">
+                  <span className="font-bold w-12 shrink-0 text-black">Term:</span>
+                  <span className="text-red-600 font-bold leading-none">{paymentTerms === 'cod' ? 'COD' : '30 Days'}</span>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="mb-4 text-[15px] font-bold flex flex-col w-full">
-            <div className="flex justify-between w-full mb-2">
-              <div className="flex items-end w-[65%] pr-4">
-                <span className="w-12 shrink-0">TO:</span>
-                <span className="flex-1 uppercase border-b border-black pb-0.5" style={{ fontFamily: CJK_FONT }}>
-                  {customer?.name || existingInvoice?.customer || ''}
-                </span>
-              </div>
-              <div className="flex items-end w-[35%] pl-4">
-                <span className="w-14 shrink-0">DATE:</span>
-                <span className="flex-1 text-center border-b border-black pb-0.5">
-                  {invoiceDate && !isNaN(new Date(invoiceDate).getTime()) 
-                    ? new Date(invoiceDate).toLocaleDateString('en-GB').replace(/\//g, '-') 
-                    : new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}
-                </span>
-              </div>
-            </div>
-            <div className="flex items-end w-full mt-1">
-              <span className="w-24 shrink-0">ADDRESS:</span>
-              <span className="flex-1 uppercase leading-tight border-b border-black pb-0.5 break-words whitespace-pre-wrap" style={{ fontFamily: CJK_FONT }}>
-                {customerAddress}
-              </span>
-            </div>
-          </div>
-
-          <table className="w-full text-[15px] border-2 border-black text-center mb-0 leading-tight flex-grow" style={{ fontFamily: CJK_FONT }}>
+          <table className="w-full text-[15px] border-2 border-black text-center mb-0 leading-tight flex-grow mt-2" style={{ fontFamily: CJK_FONT }}>
             <thead className="border-b-2 border-black">
               <tr className="font-bold bg-white text-[14px]">
                 <th className="py-2 px-1 border-r border-black w-10">NO.</th>
@@ -589,14 +588,15 @@ function InvoicePreview({
             </thead>
             <tbody style={{ fontFamily: CJK_FONT }}>
               {(items || []).map((item, idx) => {
+                // NEW: Updated to check for .Name first
                 const foundProduct = (sys.inventory || []).find((entry) => entry.id === item.itemId);
-                const productName = foundProduct ? (foundProduct.name || foundProduct.Items) : (item.name || '-');
+                const productName = foundProduct ? (foundProduct.Name || foundProduct.name || foundProduct.Items) : (item.Name || item.name || '-');
 
                 return (
                   <tr key={idx} className="h-[32px] align-top" style={{ fontFamily: CJK_FONT }}>
                     <td className="p-1 border-r border-black font-medium text-center">{idx + 1}</td>
                     <td className="p-1 border-r border-black text-left pl-2 font-bold" style={{ fontFamily: CJK_FONT }}>{productName}</td>
-                    <td className="p-1 border-r border-black font-medium text-center" style={{ fontFamily: CJK_FONT }}>{item.qty || item.quantity} {item.unit}</td>
+                    <td className="p-1 border-r border-black font-medium text-center" style={{ fontFamily: CJK_FONT }}>{item.qty || item.quantity} {item.unit || item.Unit}</td>
                     <td className="p-1 border-r border-black text-center">${formatMoney(item.unitPrice)}</td>
                     <td className="p-1 text-center font-bold">
                       ${formatMoney((Number(item.qty || item.quantity) || 0) * (Number(item.unitPrice) || 0))}
@@ -617,20 +617,30 @@ function InvoicePreview({
           </table>
 
           <div className="flex w-full mt-2">
-            <div className="flex-1 pr-4 text-[12px] font-bold leading-snug flex flex-col justify-between">
-              <div style={{ fontFamily: CJK_FONT }}>
-                <p>请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
-                <p>Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
-                <div className="mt-4">
-                  <p>UEN: 53033969B</p>
-                  <p>A/C Name: Three Leaves (Singapore) Trading Enterprise</p>
-                  <p>A/C Number: 535-846562-001</p>
-                  <p>Bank Name: OCBC</p>
+            <div className="flex-1 flex pr-4">
+              <div className="flex-1 text-[12px] font-bold leading-snug flex flex-col justify-between">
+                <div style={{ fontFamily: CJK_FONT }}>
+                  <p>请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
+                  <p>Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
+                  
+                  <div className="mt-3 flex items-center">
+                    <div className="w-[80px] h-[80px] shrink-0 mr-3">
+                      <img src={paynowQr} alt="PayNow QR Code" className="w-full h-full object-contain" />
+                    </div>
+                    <div className="flex flex-col justify-center pt-1">
+                      <p>UEN: 53033969B</p>
+                      <p>A/C Name: Three Leaves (Singapore) Trading Enterprise</p>
+                      <p>A/C Number: 535-846562-001</p>
+                      <p>Bank Name: OCBC</p>
+                    </div>
+                  </div>
+
+                  <p className="mt-2 font-normal">All payments mode have to be made payable to Three Leaves (Singapore) Trading Enterprise.</p>
                 </div>
-                <p className="mt-4 font-normal">All payments mode have to be made payable to Three Leaves (Singapore) Trading Enterprise.</p>
-              </div>
-              <div className="mt-6 mb-1">
-                <div className="w-48 border-t border-black text-center pt-1 text-[12px]">Received By</div>
+                
+                <div className="mt-12 mb-1">
+                  <div className="w-56 border-t border-black text-center pt-1 text-[12px] font-bold">Received By</div>
+                </div>
               </div>
             </div>
 
@@ -713,12 +723,13 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
   const gst = subtotal * 0.09;
   const total = subtotal + gst;
 
+  // NEW: Updated to check for .Price first
   const getSafePrice = (product, unit = '箱') => {
     const ruleKey = `${product.id}|${unit}`;
     if (customer?.custom_prices && customer.custom_prices[ruleKey] !== undefined) {
       return Number(customer.custom_prices[ruleKey]);
     }
-    let price = product.unitPrice || product['Unit Price (SG)'] || 0;
+    let price = product.Price || product.unitPrice || product['Unit Price (SG)'] || 0;
     return Number(price);
   };
 
@@ -750,7 +761,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
     history.forEach((invoice) => {
       invoice.items?.forEach((item) => {
         if (!itemStats[item.itemId]) {
-          itemStats[item.itemId] = { count: 0, totalQty: 0, unit: item.unit };
+          itemStats[item.itemId] = { count: 0, totalQty: 0, unit: item.unit || item.Unit };
         }
         itemStats[item.itemId].count += 1;
         itemStats[item.itemId].totalQty += Number(item.qty || 0);
@@ -762,10 +773,11 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
       if (stats.count / history.length >= 0.9) {
         const product = (sys.inventory || []).find((entry) => entry.id === itemId);
         if (product) {
-          const determinedUnit = stats.unit || product.unit || product.Unit || '箱';
+          // NEW: Check for .Unit first
+          const determinedUnit = stats.unit || product.Unit || product.unit || '箱';
           autoFilled.push({
             itemId,
-            name: product.name || product.Items,
+            name: product.Name || product.name || product.Items,
             unit: determinedUnit,
             qty: Math.max(1, Math.round(stats.totalQty / stats.count)),
             unitPrice: getSafePrice(product, determinedUnit), 
@@ -821,7 +833,8 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
       let highestScore = 0;
 
       (sys.inventory || []).forEach((inventoryItem) => {
-        const itemName = (inventoryItem.name || inventoryItem.Items || '').toLowerCase();
+        // NEW: Check for .Name first
+        const itemName = (inventoryItem.Name || inventoryItem.name || inventoryItem.Items || '').toLowerCase();
         let score = 0;
 
         if (itemName.includes(searchString) || searchString.includes(itemName)) {
@@ -839,10 +852,11 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
       });
 
       if (bestMatch) {
-        const determinedUnit = bestMatch.unit || bestMatch.Unit || '箱';
+        // NEW: Checks for .Unit and .Name
+        const determinedUnit = bestMatch.Unit || bestMatch.unit || '箱';
         nextDraftItems.push({
           itemId: bestMatch.id,
-          name: bestMatch.name || bestMatch.Items,
+          name: bestMatch.Name || bestMatch.name || bestMatch.Items,
           unit: determinedUnit,
           qty,
           unitPrice: getSafePrice(bestMatch, determinedUnit),
@@ -1085,12 +1099,12 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                       className="rounded border border-blue-100 bg-white px-3 py-1.5 text-[10px] font-bold text-blue-700 shadow-sm"
                       key={item.id}
                       onClick={() => {
-                        const determinedUnit = item.unit || item.Unit || '箱';
+                        const determinedUnit = item.Unit || item.unit || '箱';
                         setItems([
                           ...items,
                           {
                             itemId: item.id,
-                            name: item.name || item.Items,
+                            name: item.Name || item.name || item.Items,
                             unit: determinedUnit,
                             qty: 1,
                             unitPrice: getSafePrice(item, determinedUnit), 
@@ -1100,7 +1114,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                       }}
                       type="button"
                     >
-                      + {item.name || item.Items}
+                      + {item.Name || item.name || item.Items}
                     </button>
                   ))}
                 </div>
@@ -1148,11 +1162,11 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                               if (!product) return;
                               
                               const nextItems = [...items];
-                              const determinedUnit = product.unit || product.Unit || '箱';
+                              const determinedUnit = product.Unit || product.unit || '箱';
                               nextItems[index] = {
                                 ...nextItems[index],
                                 itemId: selectedId,
-                                name: product.name || product.Items,
+                                name: product.Name || product.name || product.Items,
                                 unit: determinedUnit,
                                 unitPrice: getSafePrice(product, determinedUnit),
                               };
@@ -1319,7 +1333,6 @@ export function InvoiceModule({ sys }) {
       const updatedInvoices = (sys.invoices || []).filter(inv => inv.id !== invoiceId);
       sys.setInvoices(updatedInvoices);
       
-      // Permanently remove it from the backend if the hook supports it
       if (sys.deleteRecord) {
         await sys.deleteRecord('invoices', invoiceId);
       }
