@@ -7,10 +7,10 @@ import { supabase } from '../../lib/supabaseClient';
 // COMPONENT 1: INVENTORY ADD/EDIT MODAL
 // ==========================================
 function InventoryFormModal({ item, onClose, onSave, onDelete }) {
-  // Updated state to perfectly match your new Supabase columns
+  // Updated state to perfectly match your new Supabase columns AND check for uppercase SKU
   const [formData, setFormData] = useState({
     id: item?.id || `prod-${Date.now()}`,
-    sku: item?.sku || '',
+    sku: item?.sku || item?.SKU || '',
     Name: item?.Name || item?.name || item?.Items || '',
     Unit: item?.Unit || item?.unit || '箱',
     Description: item?.Description || item?.description || '',
@@ -165,9 +165,9 @@ export function InventoryModule({ sys }) {
     }, 3000);
   };
 
-  // 1. Updated Search Logic to check new fields
+  // 1. Updated Search Logic to check new fields and imported CSV uppercase SKU
   const filteredInventory = sys.inventory.filter((item) => {
-    const sku = item.sku || '';
+    const sku = item.sku || item.SKU || '';
     const name = item.Name || item.name || item.Items || '';
     const desc = item.Description || item.description || '';
     const packing = item.Packing || '';
@@ -340,8 +340,8 @@ export function InventoryModule({ sys }) {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {filteredInventory.map((item, idx) => {
-              // Gracefully handle data mapping to new fields
-              const sku = item.sku || '-';
+              // Gracefully handle data mapping to new fields and handle uppercase SKU
+              const sku = item.sku || item.SKU || '-';
               const name = item.Name || item.name || item.Items || 'Unnamed Product';
               const unit = item.Unit || item.unit || '-';
               const desc = item.Description || item.description || '-';
