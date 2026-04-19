@@ -143,6 +143,7 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
             </div>
           </div>
 
+          {/* FIXED: Compressed table rows to allow 20 items to fit in A4 height safely */}
           <table className="w-full text-[15px] border-2 border-black text-center mb-0 leading-tight flex-none mt-2" style={{ fontFamily: CJK_FONT }}>
             <thead className="border-b-2 border-black">
               <tr className="font-bold bg-white text-[14px]">
@@ -158,67 +159,68 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
                 const productName = item.name || item.Items || '-';
 
                 return (
-                  <tr key={idx} className="h-[32px] align-top" style={{ fontFamily: CJK_FONT }}>
-                    <td className="p-1 border-r border-black font-medium text-center">{idx + 1}</td>
-                    <td className="p-1 border-r border-black text-left pl-2 font-bold" style={{ fontFamily: CJK_FONT }}>{productName}</td>
-                    <td className="p-1 border-r border-black font-medium text-center" style={{ fontFamily: CJK_FONT }}>{item.qty || item.quantity} {item.unit}</td>
-                    <td className="p-1 border-r border-black text-center">${formatMoney(item.unitPrice)}</td>
-                    <td className="p-1 text-center font-bold">
+                  <tr key={idx} className="h-[25px] align-top" style={{ fontFamily: CJK_FONT }}>
+                    <td className="px-1 py-0.5 border-r border-black font-medium text-center">{idx + 1}</td>
+                    <td className="px-1 py-0.5 border-r border-black text-left pl-2 font-bold leading-none pt-1" style={{ fontFamily: CJK_FONT }}>{productName}</td>
+                    <td className="px-1 py-0.5 border-r border-black font-medium text-center" style={{ fontFamily: CJK_FONT }}>{item.qty || item.quantity} {item.unit}</td>
+                    <td className="px-1 py-0.5 border-r border-black text-center">${formatMoney(item.unitPrice)}</td>
+                    <td className="px-1 py-0.5 text-center font-bold">
                       ${formatMoney((Number(item.qty || item.quantity) || 0) * (Number(item.unitPrice) || 0))}
                     </td>
                   </tr>
                 );
               })}
               
-              {/* STRICT A4 FIT: Limited to 13 empty rows */}
-              {invoice.items && invoice.items.length < 13 && Array.from({ length: 13 - invoice.items.length }).map((_, i) => (
-                <tr key={`blank-${i}`} className="h-[32px]">
+              {/* FIXED: Capacity expanded to 20 items exactly */}
+              {invoice.items && invoice.items.length < 20 && Array.from({ length: 20 - invoice.items.length }).map((_, i) => (
+                <tr key={`blank-${i}`} className="h-[25px]">
                   <td className="border-r border-black"></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td></td>
                 </tr>
               ))}
 
-              <tr className="border-t-2 border-black font-bold h-[28px]" style={{ fontFamily: CJK_FONT }}>
+              <tr className="border-t-2 border-black font-bold h-[26px]" style={{ fontFamily: CJK_FONT }}>
                 <td colSpan="3" rowSpan="3" className="border-r border-black bg-white"></td>
                 <td className="p-1 border-r border-black border-b border-black text-center text-[14px]">SUBTOTAL</td>
                 <td className="p-1 text-center border-b border-black text-[15px]">${formatMoney(subtotal)}</td>
               </tr>
-              <tr className="font-bold h-[28px]" style={{ fontFamily: CJK_FONT }}>
+              <tr className="font-bold h-[26px]" style={{ fontFamily: CJK_FONT }}>
                 <td className="p-1 border-r border-black border-b border-black text-center text-[14px]">9% GST</td>
                 <td className="p-1 text-center border-b border-black text-[15px]">${formatMoney(gst)}</td>
               </tr>
-              <tr className="font-bold h-[32px]" style={{ fontFamily: CJK_FONT }}>
+              <tr className="font-bold h-[30px]" style={{ fontFamily: CJK_FONT }}>
                 <td className="p-1 border-r border-black text-center text-[16px]">TOTAL</td>
                 <td className="p-1 text-center text-[17px]">${formatMoney(total)}</td>
               </tr>
             </tbody>
           </table>
 
-          {/* ANCHORED FOOTER: mt-auto guarantees it locks to the bottom edge of the page */}
-          <div className="flex w-full mt-auto pt-4 justify-between items-end shrink-0">
-            <div className="flex-1 text-[12px] font-bold leading-snug pr-4">
+          {/* FIXED: 70/30 Split Layout for Footer ensures text is wide, signature is right-aligned */}
+          <div className="flex w-full mt-auto pt-2 items-end shrink-0">
+            {/* 70% Width - Payment Details */}
+            <div className="w-[70%] text-[12px] font-bold leading-snug pr-4">
               <div style={{ fontFamily: CJK_FONT }}>
-                <p className="text-[13px]">请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
-                <p className="whitespace-nowrap text-[11px]">Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
+                <p className="text-[12px]">请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
+                <p className="text-[10px] whitespace-nowrap text-slate-800">Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
                 
-                <div className="mt-4 flex items-center">
-                  <div className="w-[75px] h-[75px] shrink-0 mr-4">
+                <div className="mt-2 flex items-center">
+                  <div className="w-[65px] h-[65px] shrink-0 mr-3">
                     <img src={paynowQr} alt="PayNow QR Code" className="w-full h-full object-contain" />
                   </div>
-                  <div className="flex flex-col justify-center">
+                  <div className="flex flex-col justify-center text-[11px]">
                     <p>UEN: 53033969B</p>
                     <p>A/C Name: Three Leaves (Singapore) Trading Enterprise</p>
                     <p>A/C Number: 535-846562-001</p>
                     <p>Bank Name: OCBC</p>
-                    <p className="mt-1 font-normal">All payments must be made payable to Three Leaves (Singapore) Trading Enterprise.</p>
+                    <p className="mt-0.5 font-normal text-[10px] text-slate-800">All payments must be made payable to Three Leaves (Singapore) Trading Enterprise.</p>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* DEDICATED SIGNATURE BOX: Fixed proportions to prevent overflow */}
-            <div className="w-56 shrink-0 flex flex-col justify-end pb-2">
-              <div className="h-16"></div> {/* Transparent gap exactly sized for signing */}
-              <div className="border-t-2 border-black text-center pt-2 text-[13px] font-bold uppercase tracking-widest">Received By</div>
+            {/* 30% Width - Signature */}
+            <div className="w-[30%] shrink-0 flex flex-col justify-end pb-1 pl-2">
+              <div className="h-12"></div> {/* Signature gap */}
+              <div className="border-t-2 border-black text-center pt-1.5 text-[12px] font-bold uppercase tracking-widest">Received By</div>
             </div>
           </div>
 
