@@ -150,7 +150,8 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
               position: absolute !important;
               left: 0 !important;
               top: 0 !important;
-              width: 100% !important; 
+              width: 210mm !important; 
+              height: 297mm !important; 
               padding: 15mm !important;
               margin: 0 !important;
               background: white !important;
@@ -187,7 +188,7 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
         <div 
           id="printable-invoice-generator"
           lang="zh" 
-          className="flex w-full max-w-[210mm] min-h-[297mm] flex-col bg-white p-[15mm] text-black shadow-2xl rounded-b-2xl print:w-full print:max-w-none print:min-h-0 print:h-auto print:rounded-none print:shadow-none box-border shrink-0"
+          className="flex w-full max-w-[210mm] h-[297mm] flex-col bg-white p-[15mm] text-black shadow-2xl rounded-b-2xl print:w-[210mm] print:h-[297mm] print:max-w-none print:rounded-none print:shadow-none box-border shrink-0"
           style={{ fontFamily: CJK_FONT }}
         >
           <div className="flex w-full mb-4 justify-between">
@@ -248,7 +249,7 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
             </div>
           </div>
 
-          <table className="w-full text-[15px] border-2 border-black text-center mb-0 leading-tight flex-grow mt-2" style={{ fontFamily: CJK_FONT }}>
+          <table className="w-full text-[15px] border-2 border-black text-center mb-0 leading-tight flex-none mt-2" style={{ fontFamily: CJK_FONT }}>
             <thead className="border-b-2 border-black">
               <tr className="font-bold bg-white text-[14px]">
                 <th className="py-2 px-1 border-r border-black w-10">NO.</th>
@@ -263,52 +264,62 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
                 const foundProduct = (sys.inventory || []).find((entry) => entry.id === item.itemId);
                 const productName = foundProduct ? (foundProduct.Name || foundProduct.name || foundProduct.Items) : (item.Name || item.name || '-');
                 return (
-                  <tr key={idx} className="h-[32px] align-top" style={{ fontFamily: CJK_FONT }}>
-                    <td className="p-1 border-r border-black font-medium text-center">{idx + 1}</td>
-                    <td className="p-1 border-r border-black text-left pl-2 font-bold" style={{ fontFamily: CJK_FONT }}>{productName}</td>
-                    <td className="p-1 border-r border-black font-medium text-center" style={{ fontFamily: CJK_FONT }}>{item.qty || item.quantity} {item.unit || item.Unit}</td>
-                    <td className="p-1 border-r border-black text-center">${formatMoney(item.unitPrice)}</td>
-                    <td className="p-1 text-center font-bold">${formatMoney((Number(item.qty || item.quantity) || 0) * (Number(item.unitPrice) || 0))}</td>
+                  <tr key={idx} className="h-[25px] align-top" style={{ fontFamily: CJK_FONT }}>
+                    <td className="px-1 py-0.5 border-r border-black font-medium text-center">{idx + 1}</td>
+                    <td className="px-1 py-0.5 border-r border-black text-left pl-2 font-bold leading-none pt-1" style={{ fontFamily: CJK_FONT }}>{productName}</td>
+                    <td className="px-1 py-0.5 border-r border-black font-medium text-center" style={{ fontFamily: CJK_FONT }}>{item.qty || item.quantity} {item.unit || item.Unit}</td>
+                    <td className="px-1 py-0.5 border-r border-black text-center">${formatMoney(item.unitPrice)}</td>
+                    <td className="px-1 py-0.5 text-center font-bold">${formatMoney((Number(item.qty || item.quantity) || 0) * (Number(item.unitPrice) || 0))}</td>
                   </tr>
                 );
               })}
-              {items && items.length < 15 && Array.from({ length: 15 - items.length }).map((_, i) => (
-                <tr key={`blank-${i}`} className="h-[32px]">
+              
+              {items && items.length < 20 && Array.from({ length: 20 - items.length }).map((_, i) => (
+                <tr key={`blank-${i}`} className="h-[25px]">
                   <td className="border-r border-black"></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td></td>
                 </tr>
               ))}
+
+              <tr className="border-t-2 border-black font-bold h-[26px]" style={{ fontFamily: CJK_FONT }}>
+                <td colSpan="3" rowSpan="3" className="border-r border-black bg-white"></td>
+                <td className="p-1 border-r border-black border-b border-black text-center text-[14px]">SUBTOTAL</td>
+                <td className="p-1 text-center border-b border-black text-[15px]">${formatMoney(subtotal)}</td>
+              </tr>
+              <tr className="font-bold h-[26px]" style={{ fontFamily: CJK_FONT }}>
+                <td className="p-1 border-r border-black border-b border-black text-center text-[14px]">9% GST</td>
+                <td className="p-1 text-center border-b border-black text-[15px]">${formatMoney(gst)}</td>
+              </tr>
+              <tr className="font-bold h-[30px]" style={{ fontFamily: CJK_FONT }}>
+                <td className="p-1 border-r border-black text-center text-[16px]">TOTAL</td>
+                <td className="p-1 text-center text-[17px]">${formatMoney(total)}</td>
+              </tr>
             </tbody>
           </table>
 
-          <div className="flex w-full mt-2">
-            <div className="flex-1 flex pr-4">
-              <div className="flex-1 text-[12px] font-bold leading-snug flex flex-col justify-between">
-                <div style={{ fontFamily: CJK_FONT }}>
-                  <p>请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
-                  <p>Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
-                  <div className="mt-3 flex items-center">
-                    <div className="w-[80px] h-[80px] shrink-0 mr-3">
-                      <img src={paynowQr} alt="PayNow QR Code" className="w-full h-full object-contain" />
-                    </div>
-                    <div className="flex flex-col justify-center pt-1">
-                      <p>UEN: 53033969B</p>
-                      <p>A/C Name: Three Leaves (Singapore) Trading Enterprise</p>
-                      <p>A/C Number: 535-846562-001</p>
-                      <p>Bank Name: OCBC</p>
-                    </div>
+          <div className="flex w-full mt-auto pt-2 items-end shrink-0">
+            <div className="w-[70%] text-[12px] font-bold leading-snug pr-4">
+              <div style={{ fontFamily: CJK_FONT }}>
+                <p className="text-[12px]">请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
+                <p className="text-[10px] whitespace-nowrap text-slate-800">Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
+                
+                <div className="mt-2 flex items-center">
+                  <div className="w-[65px] h-[65px] shrink-0 mr-3">
+                    <img src={paynowQr} alt="PayNow QR Code" className="w-full h-full object-contain" />
                   </div>
-                  <p className="mt-2 font-normal">All payments mode have to be made payable to Three Leaves (Singapore) Trading Enterprise.</p>
-                </div>
-                <div className="mt-12 mb-1">
-                  <div className="w-56 border-t border-black text-center pt-1 text-[12px] font-bold">Received By</div>
+                  <div className="flex flex-col justify-center text-[11px]">
+                    <p>UEN: 53033969B</p>
+                    <p>A/C Name: Three Leaves (Singapore) Trading Enterprise</p>
+                    <p>A/C Number: 535-846562-001</p>
+                    <p>Bank Name: OCBC</p>
+                    <p className="mt-0.5 font-normal text-[10px] text-slate-800">All payments must be made payable to Three Leaves (Singapore) Trading Enterprise.</p>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div className="flex flex-col font-bold text-[15px] shrink-0 w-[16rem]">
-              <div className="flex"><div className="w-32 p-1 text-center">SUBTOTAL</div><div className="w-32 p-1 text-center">${formatMoney(subtotal)}</div></div>
-              <div className="flex"><div className="w-32 p-1 text-center">9% GST</div><div className="w-32 p-1 text-center">${formatMoney(gst)}</div></div>
-              <div className="flex mt-2 pt-2 border-t-2 border-black text-[17px]"><div className="w-32 p-1 text-center">TOTAL</div><div className="w-32 p-1 text-center">${formatMoney(total)}</div></div>
+            <div className="w-[30%] shrink-0 flex flex-col justify-end pb-1 pl-2">
+              <div className="h-12"></div> 
+              <div className="border-t-2 border-black text-center pt-1.5 text-[12px] font-bold uppercase tracking-widest">Received By</div>
             </div>
           </div>
 
@@ -461,9 +472,6 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
       .filter((item) => item && !(items || []).find((draftItem) => draftItem.itemId === item.id));
   }, [customerId, items, sys.invoices, sys.inventory]);
 
-  // ==========================================
-  // UPDATED: AI SMART EXTRACT WITH FUZZY MATCH
-  // ==========================================
   const handleSmartExtract = () => {
     const lines = parseText.split('\n').filter(l => l.trim() !== '');
     const nextDraftItems = [...items];
@@ -471,40 +479,30 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
     lines.forEach((line) => {
       const quantityMatch = line.match(/(\d+)/);
       const qty = quantityMatch ? parseInt(quantityMatch[0], 10) : 1;
-      
-      // Strip numbers out of the string so we only fuzzy-match the text/characters
       const searchString = line.replace(/(\d+)/g, '').trim().toLowerCase();
       if (!searchString) return;
 
-      // Score all items based on exact match, AI learned phrases, and partial fuzzy char overlap
       const scoredItems = (sys.inventory || []).map((inventoryItem) => {
         const itemName = (inventoryItem.Name || inventoryItem.name || inventoryItem.Items || '').toLowerCase();
         let score = 0;
 
-        // 1. Exact match gets highest priority
         if (itemName === searchString) {
           score += 50;
-        } 
-        // 2. Exact substring inclusion gets strong priority
-        else if (itemName.includes(searchString) || searchString.includes(itemName)) {
+        } else if (itemName.includes(searchString) || searchString.includes(itemName)) {
           score += 10;
-        } 
-        // 3. Fallback to Fuzzy Character Overlap (great for mixed English/Chinese typos)
-        else {
+        } else {
           const searchChars = new Set(searchString.replace(/\s/g, '').split(''));
           if (searchChars.size > 0) {
             let matchCount = 0;
             searchChars.forEach(char => {
               if (itemName.includes(char)) matchCount++;
             });
-            // Only award points if at least half the characters match, to prevent pure junk suggestions
             if (matchCount / searchChars.size >= 0.5) {
                score += (matchCount / searchChars.size) * 5; 
             }
           }
         }
 
-        // Add historical learned phrases score
         if (inventoryItem.learned_phrases && inventoryItem.learned_phrases[searchString]) { 
           score += (inventoryItem.learned_phrases[searchString] * 20); 
         }
@@ -512,11 +510,9 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
         return { item: inventoryItem, score };
       });
 
-      // Sort by best score descending
       scoredItems.sort((a, b) => b.score - a.score);
       const bestMatch = scoredItems[0];
 
-      // If the score is strong enough (>= 10), auto-lock the item
       if (bestMatch && bestMatch.score >= 10) {
         const determinedUnit = bestMatch.item.Unit || bestMatch.item.unit || '箱';
         nextDraftItems.push({
@@ -528,10 +524,9 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
           picked: false,
           rawSearchString: searchString, 
           originalPredictedId: bestMatch.item.id, 
-          suggestions: [] // Strong match, no suggestions needed
+          suggestions: [] 
         });
       } else {
-        // Weak match! Prefill qty/unit, but leave product blank and provide top 3 fuzzy suggestions
         const topSuggestions = scoredItems
           .filter(si => si.score > 0)
           .slice(0, 3)
@@ -792,7 +787,6 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                           </p>
                         )}
 
-                        {/* NEW: FUZZY SUGGESTIONS BLOCK */}
                         {!item.itemId && item.suggestions && item.suggestions.length > 0 && (
                           <div className="ml-6 mt-2 mb-1 p-2.5 bg-amber-50 border border-amber-200 rounded-lg shadow-sm">
                             <p className="text-[9px] font-black uppercase tracking-widest text-amber-700 mb-2 flex items-center">
