@@ -15,7 +15,7 @@ function InventoryFormModal({ item, onClose, onSave, onDelete }) {
     Description: item?.Description || item?.description || '',
     Packing: item?.Packing || item?.packaging || '',
     Price: item?.Price || item?.unitPrice || item?.['Unit Price (SG)'] || 0,
-    stock: item?.stock ?? 0,
+    stock: item?.stock ?? item?.Stock ?? 0,
   });
 
   const handleChange = (e) => {
@@ -170,9 +170,10 @@ export function InventoryModule({ sys }) {
 
   const showNotification = (message, type = 'success') => {
     setNotification({ message, type });
+    // Extended timeout so you have time to read the error message
     setTimeout(() => {
       setNotification(null);
-    }, 3000);
+    }, 6000); 
   };
 
   const filteredInventory = sys.inventory.filter((item) => {
@@ -196,7 +197,9 @@ export function InventoryModule({ sys }) {
       const oldPrice = isEditing ? (editingItem.Price || editingItem.unitPrice || editingItem['Unit Price (SG)']) : 0;
       const priceChanged = isEditing && Number(oldPrice) !== Number(formData.Price);
 
-      // Exact payload math parsing
+      let finalId = formData.id;
+
+      // Ensure exact parsing of the payload structure
       const payload = {
         sku: formData.sku,
         Name: formData.Name,
@@ -209,13 +212,12 @@ export function InventoryModule({ sys }) {
 
       let savedProduct;
 
-      // EXPLICIT DATABASE LOGIC: Update vs Insert
+      // EXPLICIT DATABASE LOGIC
       if (isEditing) {
-        const finalId = editingItem.id || formData.id;
+        finalId = editingItem.id || formData.id;
         const isUUID = finalId && finalId.length === 36 && finalId.includes('-');
         
         if (isUUID) {
-          // It's a verified UUID, update by ID
           const { data, error } = await supabase
             .from('product_list')
             .update(payload)
@@ -226,7 +228,7 @@ export function InventoryModule({ sys }) {
           if (error) throw error;
           savedProduct = data;
         } else {
-          // Fallback for legacy items without a proper UUID yet (Update by Name)
+          // Fallback if the database doesn't use UUIDs (finds by Name instead)
           const legacyName = editingItem.Name || editingItem.name || editingItem.Items;
           const { data, error } = await supabase
             .from('product_list')
@@ -239,7 +241,7 @@ export function InventoryModule({ sys }) {
           savedProduct = data;
         }
       } else {
-        // NEW PRODUCT: Strictly .insert() instead of .upsert() to avoid primary key conflicts
+        // NEW PRODUCT - Just insert the raw payload without forcing an ID
         const { data, error } = await supabase
           .from('product_list')
           .insert([payload])
@@ -250,7 +252,7 @@ export function InventoryModule({ sys }) {
         savedProduct = data;
       }
 
-      // SAFE LOCAL STATE UPDATE (Only runs if the database successfully saves!)
+      // ONLY update the local table IF the database sync was successful
       if (isEditing) {
         const updatedInventory = sys.inventory.map(item => {
           const matchById = item.id && item.id === (editingItem.id || formData.id);
@@ -263,11 +265,10 @@ export function InventoryModule({ sys }) {
         });
         sys.setInventory(updatedInventory);
       } else {
-        // Attach the freshly generated database UUID to your local table view instantly
         sys.setInventory([savedProduct, ...sys.inventory]);
       }
 
-      // Keep price history if you have that table setup
+      // Log Price History
       if (priceChanged && savedProduct?.id) {
         await supabase.from('price_history').insert({
           product_id: savedProduct.id,
@@ -283,7 +284,8 @@ export function InventoryModule({ sys }) {
 
     } catch (error) {
       console.error("Save error: ", error);
-      showNotification('Error saving product to database. Check console.', 'error');
+      // DISPLAYS THE EXACT SUPABASE ERROR MESSAGE ON SCREEN
+      showNotification(`DB Error: ${error.message || 'Failed to save product'}`, 'error');
     }
   };
 
@@ -313,7 +315,7 @@ export function InventoryModule({ sys }) {
         
       } catch (error) {
         console.error("Delete error: ", error);
-        showNotification('Error deleting product.', 'error');
+        showNotification(`Delete Error: ${error.message || 'Failed to delete product'}`, 'error');
       }
     }
   };
@@ -382,7 +384,7 @@ export function InventoryModule({ sys }) {
               const desc = item.Description || item.description || '-';
               const packing = item.Packing || item.packaging || '-';
               const price = item.Price || item.unitPrice || item['Unit Price (SG)'] || 0;
-              const stock = item.stock ?? 0; 
+              const stock = item.stock ?? item.Stock ?? 0; 
 
               return (
                 <tr key={item.id || `fallback-${idx}`} className="hover:bg-slate-50 transition-colors">
@@ -451,9 +453,9 @@ export function InventoryModule({ sys }) {
           }`}
         >
           {notification.type === 'error' ? (
-            <Trash2 size={18} className="mr-3" />
+            <Trash2 size={18} className="mr-3 shrink-0" />
           ) : (
-            <CheckCircle size={18} className="mr-3" />
+            <CheckCircle size={18} className="mr-3 shrink-0" />
           )}
           {notification.message}
         </div>
