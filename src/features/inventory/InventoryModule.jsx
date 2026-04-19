@@ -196,51 +196,79 @@ export function InventoryModule({ sys }) {
       const oldPrice = isEditing ? (editingItem.Price || editingItem.unitPrice || editingItem['Unit Price (SG)']) : 0;
       const priceChanged = isEditing && Number(oldPrice) !== Number(formData.Price);
 
-      let updatedInventory;
-      let finalId = formData.id;
-
-      if (isEditing) {
-        updatedInventory = sys.inventory.map(item => {
-          const matchById = item.id && item.id === formData.id;
-          const matchByName = !item.id && (item.Name === formData.Name || item.Items === formData.Name || item.name === formData.Name);
-          
-          if (matchById || matchByName) {
-            finalId = item.id || formData.id; 
-            return { ...item, ...formData, id: finalId };
-          }
-          return item;
-        });
-      } else {
-        updatedInventory = [{ ...formData }, ...sys.inventory];
-      }
-      sys.setInventory(updatedInventory);
-
-      const isUUID = finalId && finalId.length === 36 && finalId.includes('-');
-      
-      // FIX: Force React strings into pure mathematical numbers before sending to Supabase
+      // Exact payload math parsing
       const payload = {
         sku: formData.sku,
         Name: formData.Name,
         Unit: formData.Unit,
         Description: formData.Description,
         Packing: formData.Packing,
-        Price: Number(formData.Price) || 0,        // Forces decimals (e.g., 15.50)
-        stock: parseInt(formData.stock, 10) || 0   // Forces strict integers (e.g., 15)
+        Price: Number(formData.Price) || 0,
+        stock: parseInt(formData.stock, 10) || 0
       };
 
-      if (isEditing && isUUID) {
-        payload.id = finalId;
+      let savedProduct;
+
+      // EXPLICIT DATABASE LOGIC: Update vs Insert
+      if (isEditing) {
+        const finalId = editingItem.id || formData.id;
+        const isUUID = finalId && finalId.length === 36 && finalId.includes('-');
+        
+        if (isUUID) {
+          // It's a verified UUID, update by ID
+          const { data, error } = await supabase
+            .from('product_list')
+            .update(payload)
+            .eq('id', finalId)
+            .select()
+            .single();
+            
+          if (error) throw error;
+          savedProduct = data;
+        } else {
+          // Fallback for legacy items without a proper UUID yet (Update by Name)
+          const legacyName = editingItem.Name || editingItem.name || editingItem.Items;
+          const { data, error } = await supabase
+            .from('product_list')
+            .update(payload)
+            .eq('Name', legacyName)
+            .select()
+            .single();
+            
+          if (error) throw error;
+          savedProduct = data;
+        }
+      } else {
+        // NEW PRODUCT: Strictly .insert() instead of .upsert() to avoid primary key conflicts
+        const { data, error } = await supabase
+          .from('product_list')
+          .insert([payload])
+          .select()
+          .single();
+
+        if (error) throw error;
+        savedProduct = data;
       }
 
-      const { data: savedProduct, error: saveError } = await supabase
-        .from('product_list')
-        .upsert(payload)
-        .select()
-        .single();
+      // SAFE LOCAL STATE UPDATE (Only runs if the database successfully saves!)
+      if (isEditing) {
+        const updatedInventory = sys.inventory.map(item => {
+          const matchById = item.id && item.id === (editingItem.id || formData.id);
+          const matchByName = !item.id && (item.Name === editingItem.Name || item.name === editingItem.Name || item.Items === editingItem.Name);
+          
+          if (matchById || matchByName) {
+            return { ...item, ...savedProduct, ...formData }; 
+          }
+          return item;
+        });
+        sys.setInventory(updatedInventory);
+      } else {
+        // Attach the freshly generated database UUID to your local table view instantly
+        sys.setInventory([savedProduct, ...sys.inventory]);
+      }
 
-      if (saveError) throw saveError;
-
-      if (priceChanged) {
+      // Keep price history if you have that table setup
+      if (priceChanged && savedProduct?.id) {
         await supabase.from('price_history').insert({
           product_id: savedProduct.id,
           product_name: formData.Name,
@@ -255,7 +283,7 @@ export function InventoryModule({ sys }) {
 
     } catch (error) {
       console.error("Save error: ", error);
-      showNotification('Error saving product to database.', 'error');
+      showNotification('Error saving product to database. Check console.', 'error');
     }
   };
 
