@@ -168,14 +168,13 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
                 );
               })}
               
-              {/* UPDATED: Increased capacity to 18 rows */}
-              {invoice.items && invoice.items.length < 18 && Array.from({ length: 18 - invoice.items.length }).map((_, i) => (
+              {/* FIXED: Reduced to 15 rows to prevent A4 vertical overflow */}
+              {invoice.items && invoice.items.length < 15 && Array.from({ length: 15 - invoice.items.length }).map((_, i) => (
                 <tr key={`blank-${i}`} className="h-[32px]">
                   <td className="border-r border-black"></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td></td>
                 </tr>
               ))}
 
-              {/* UPDATED: Subtotal, GST, and Total integrated directly into the table */}
               <tr className="border-t-2 border-black font-bold h-[28px]" style={{ fontFamily: CJK_FONT }}>
                 <td colSpan="3" rowSpan="3" className="border-r border-black bg-white"></td>
                 <td className="p-1 border-r border-black border-b border-black text-center text-[14px]">SUBTOTAL</td>
@@ -192,15 +191,15 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
             </tbody>
           </table>
 
-          {/* UPDATED: Full Width Footer Layout */}
-          <div className="flex w-full mt-4 justify-between items-end">
+          {/* FIXED: mt-auto and shrink-0 force it to stay anchored at the bottom inside A4 bounds */}
+          <div className="flex w-full mt-auto pt-4 justify-between items-end shrink-0">
             <div className="flex-1 text-[12px] font-bold leading-snug pr-4">
               <div style={{ fontFamily: CJK_FONT }}>
                 <p>请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
                 <p className="whitespace-nowrap">Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
                 
                 <div className="mt-3 flex items-center">
-                  <div className="w-[80px] h-[80px] shrink-0 mr-3">
+                  <div className="w-[70px] h-[70px] shrink-0 mr-3">
                     <img src={paynowQr} alt="PayNow QR Code" className="w-full h-full object-contain" />
                   </div>
                   <div className="flex flex-col justify-center pt-1">
@@ -214,8 +213,7 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
               </div>
             </div>
 
-            {/* Received By Anchor - Flushed to the far right */}
-            <div className="w-56 shrink-0 pb-2">
+            <div className="w-48 shrink-0 pb-1">
               <div className="border-t border-black text-center pt-1 text-[12px] font-bold">Received By</div>
             </div>
           </div>
