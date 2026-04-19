@@ -199,9 +199,9 @@ export function InventoryModule({ sys }) {
 
       let finalId = formData.id;
 
-      // Ensure exact parsing of the payload structure
+      // FIX: Changed "sku" to "SKU" to match your Database strictly!
       const payload = {
-        sku: formData.sku,
+        SKU: formData.sku,      // <--- This was the fix!
         Name: formData.Name,
         Unit: formData.Unit,
         Description: formData.Description,
