@@ -40,7 +40,8 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
               position: absolute !important;
               left: 0 !important;
               top: 0 !important;
-              width: 100% !important; 
+              width: 210mm !important; 
+              height: 297mm !important; 
               padding: 15mm !important; 
               box-sizing: border-box !important;
               background: white !important;
@@ -78,7 +79,8 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
 
         <div 
           id="printable-invoice-history"
-          className="flex w-full max-w-[210mm] min-h-[297mm] flex-col bg-white p-[15mm] text-black shadow-2xl rounded-b-2xl print:w-full print:max-w-none print:min-h-0 print:h-auto print:rounded-none print:shadow-none box-border shrink-0"
+          lang="zh" 
+          className="flex w-full max-w-[210mm] h-[297mm] flex-col bg-white p-[15mm] text-black shadow-2xl rounded-b-2xl print:w-[210mm] print:h-[297mm] print:max-w-none print:rounded-none print:shadow-none box-border shrink-0"
           style={{ fontFamily: CJK_FONT }}
         >
           <div className="flex w-full mb-4 justify-between">
@@ -141,7 +143,7 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
             </div>
           </div>
 
-          <table className="w-full text-[15px] border-2 border-black text-center mb-0 leading-tight flex-grow mt-2" style={{ fontFamily: CJK_FONT }}>
+          <table className="w-full text-[15px] border-2 border-black text-center mb-0 leading-tight flex-none mt-2" style={{ fontFamily: CJK_FONT }}>
             <thead className="border-b-2 border-black">
               <tr className="font-bold bg-white text-[14px]">
                 <th className="py-2 px-1 border-r border-black w-10">NO.</th>
@@ -168,8 +170,8 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
                 );
               })}
               
-              {/* FIXED: Reduced to 15 rows to prevent A4 vertical overflow */}
-              {invoice.items && invoice.items.length < 15 && Array.from({ length: 15 - invoice.items.length }).map((_, i) => (
+              {/* STRICT A4 FIT: Limited to 13 empty rows */}
+              {invoice.items && invoice.items.length < 13 && Array.from({ length: 13 - invoice.items.length }).map((_, i) => (
                 <tr key={`blank-${i}`} className="h-[32px]">
                   <td className="border-r border-black"></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td></td>
                 </tr>
@@ -191,18 +193,18 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
             </tbody>
           </table>
 
-          {/* FIXED: mt-auto and shrink-0 force it to stay anchored at the bottom inside A4 bounds */}
+          {/* ANCHORED FOOTER: mt-auto guarantees it locks to the bottom edge of the page */}
           <div className="flex w-full mt-auto pt-4 justify-between items-end shrink-0">
             <div className="flex-1 text-[12px] font-bold leading-snug pr-4">
               <div style={{ fontFamily: CJK_FONT }}>
-                <p>请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
-                <p className="whitespace-nowrap">Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
+                <p className="text-[13px]">请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
+                <p className="whitespace-nowrap text-[11px]">Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
                 
-                <div className="mt-3 flex items-center">
-                  <div className="w-[70px] h-[70px] shrink-0 mr-3">
+                <div className="mt-4 flex items-center">
+                  <div className="w-[75px] h-[75px] shrink-0 mr-4">
                     <img src={paynowQr} alt="PayNow QR Code" className="w-full h-full object-contain" />
                   </div>
-                  <div className="flex flex-col justify-center pt-1">
+                  <div className="flex flex-col justify-center">
                     <p>UEN: 53033969B</p>
                     <p>A/C Name: Three Leaves (Singapore) Trading Enterprise</p>
                     <p>A/C Number: 535-846562-001</p>
@@ -213,8 +215,10 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
               </div>
             </div>
 
-            <div className="w-48 shrink-0 pb-1">
-              <div className="border-t border-black text-center pt-1 text-[12px] font-bold">Received By</div>
+            {/* DEDICATED SIGNATURE BOX: Fixed proportions to prevent overflow */}
+            <div className="w-56 shrink-0 flex flex-col justify-end pb-2">
+              <div className="h-16"></div> {/* Transparent gap exactly sized for signing */}
+              <div className="border-t-2 border-black text-center pt-2 text-[13px] font-bold uppercase tracking-widest">Received By</div>
             </div>
           </div>
 
