@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
-import { Eye, FileText, MessageSquare, Printer, Save, Sparkles, Trash2, Search, BrainCircuit, ChevronLeft, X } from 'lucide-react';
+import { Eye, FileText, MessageSquare, Printer, Save, Sparkles, Trash2, Search, BrainCircuit, ChevronLeft, X, Settings } from 'lucide-react';
 import { CompanyHeader } from '../../components/shared/CompanyHeader';
 import { UNIT_OPTIONS } from '../../data/company';
 import { formatMoney } from '../../utils/format';
+import { supabase } from '../../lib/supabaseClient';
 
 import logo from './three_leaves_logo.png';
 import paynowQr from './paynow_qr.jpg';
@@ -190,8 +191,7 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
           style={{ fontFamily: CJK_FONT }}
         >
           <div className="flex w-full mb-4 justify-between">
-            
-            <div className="w-[74%] flex flex-col pr-4">
+            <div className="flex-1 flex flex-col pr-4">
               <div className="flex items-center mb-5">
                 <div className="w-[110px] shrink-0 mr-4">
                   <img src={logo} alt="Three Leaves Logo" className="w-full h-auto object-contain" />
@@ -323,12 +323,45 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
 // ==========================================
 export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
   
-  // 1. Initialize the Date first, so the dynamic number generator has a source to read from
+  const defaultInvoiceNumber = useMemo(() => {
+    if (existingInvoice) return existingInvoice.number; 
+
+    const date = new Date();
+    const yy = String(date.getFullYear()).slice(-2); 
+    const mm = String(date.getMonth() + 1).padStart(2, '0'); 
+    const prefix = `${yy}${mm}`;
+
+    const monthlyInvoices = (sys.invoices || []).filter(inv => String(inv.number).startsWith(prefix));
+    let maxSequence = 0;
+    
+    monthlyInvoices.forEach(inv => {
+      const seqStr = String(inv.number).slice(4); 
+      const seqNum = parseInt(seqStr, 10);
+      if (!isNaN(seqNum) && seqNum > maxSequence) {
+        maxSequence = seqNum;
+      }
+    });
+
+    const nextSequence = String(maxSequence + 1).padStart(3, '0');
+    return `${prefix}${nextSequence}`;
+  }, [sys.invoices, existingInvoice]);
+
+  const [invoiceNumber, setInvoiceNumber] = useState(defaultInvoiceNumber);
   const [invoiceDate, setInvoiceDate] = useState(
     existingInvoice ? existingInvoice.date : new Date().toISOString().split('T')[0]
   );
+  
+  const [customerId, setCustomerId] = useState(existingInvoice?.customerId || '');
+  
+  const [items, setItems] = useState(() => {
+    if (existingInvoice && Array.isArray(existingInvoice.items)) {
+      return JSON.parse(JSON.stringify(existingInvoice.items));
+    }
+    return [];
+  });
 
-  // 2. Dynamically scan the database for the max running number of the CURRENTLY selected month
+  const [paymentTerms, setPaymentTerms] = useState(existingInvoice?.paymentTerms || '30_days');
+
   const autoInvoiceNumber = useMemo(() => {
     if (existingInvoice && invoiceDate === existingInvoice.date) return existingInvoice.number; 
 
@@ -352,25 +385,20 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
 
     const nextSequence = String(maxSequence + 1).padStart(3, '0');
     return `${prefix}${nextSequence}`;
-  }, [sys.invoices, existingInvoice, invoiceDate]); // <-- Now listens to changes in invoiceDate
+  }, [sys.invoices, existingInvoice, invoiceDate]);
 
-  // 3. Set the actual editable text box to the computed number
-  const [invoiceNumber, setInvoiceNumber] = useState(autoInvoiceNumber);
-
-  // 4. Force the text box to update whenever the computed month/number changes
   useEffect(() => {
     setInvoiceNumber(autoInvoiceNumber);
   }, [autoInvoiceNumber]);
-
-  const [customerId, setCustomerId] = useState(existingInvoice ? existingInvoice.customerId : '');
-  const [paymentTerms, setPaymentTerms] = useState(existingInvoice ? existingInvoice.paymentTerms : '30_days');
-  const [items, setItems] = useState(existingInvoice ? existingInvoice.items : []);
   
   const [isParsing, setIsParsing] = useState(false);
   const [parseText, setParseText] = useState('');
   const [previewMode, setPreviewMode] = useState(false);
   const [autoFillNotif, setAutoFillNotif] = useState(false);
   
+  // NEW: State for the Pricing Modal
+  const [priceModal, setPriceModal] = useState(null);
+
   const customer = (sys.customers || []).find((entry) => entry.id === customerId);
 
   const isDuplicateNumber = useMemo(() => {
@@ -391,10 +419,15 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
   };
 
   useEffect(() => {
-    if (existingInvoice && customerId === existingInvoice.customerId) return; 
+    const originalCustomer = existingInvoice?.customerId || '';
+    if (existingInvoice && customerId === originalCustomer) {
+      return; 
+    }
 
     if (!customerId) {
-      setItems([]); setAutoFillNotif(false); return;
+      setItems([]); 
+      setAutoFillNotif(false); 
+      return;
     }
 
     const history = (sys.invoices || []).filter((invoice) => invoice.customerId === customerId);
@@ -548,6 +581,59 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
     if (printAfter) { setTimeout(() => { window.print(); onClose(); }, 500); } else { onClose(); }
   };
 
+  // ==========================================
+  // PRICING MANAGER: SAVE ACTIONS
+  // ==========================================
+  const executePriceSave = async (type, newPriceStr) => {
+    const { index, item, product } = priceModal;
+    const newPrice = Number(newPriceStr);
+    const ruleKey = `${product.id}|${item.unit}`;
+
+    try {
+      if (type === 'CUSTOMER') {
+        const updatedCustomPrices = { ...(customer.custom_prices || {}), [ruleKey]: newPrice };
+        // 1. Update Supabase
+        await supabase.from('customers').update({ custom_prices: updatedCustomPrices }).eq('id', customer.id);
+        // 2. Update Local State
+        sys.setCustomers(sys.customers.map(c => c.id === customer.id ? { ...c, custom_prices: updatedCustomPrices } : c));
+      } 
+      
+      else if (type === 'GLOBAL') {
+        // 1. Update Supabase
+        await supabase.from('product_list').update({ Price: newPrice }).eq('id', product.id);
+        // 2. Update Local State
+        sys.setInventory(sys.inventory.map(p => p.id === product.id ? { ...p, Price: newPrice } : p));
+      }
+      
+      else if (type === 'REMOVE_CUSTOMER') {
+        const updatedCustomPrices = { ...(customer.custom_prices || {}) };
+        delete updatedCustomPrices[ruleKey];
+        // 1. Update Supabase
+        await supabase.from('customers').update({ custom_prices: updatedCustomPrices }).eq('id', customer.id);
+        // 2. Update Local State
+        sys.setCustomers(sys.customers.map(c => c.id === customer.id ? { ...c, custom_prices: updatedCustomPrices } : c));
+        
+        // Auto-revert the draft invoice item back to the global default price
+        const fallbackPrice = product.Price || product.unitPrice || 0;
+        const nextItems = [...items];
+        nextItems[index].unitPrice = fallbackPrice;
+        setItems(nextItems);
+        setPriceModal(null);
+        return;
+      }
+
+      // Update the draft invoice row to reflect the newly saved price
+      const nextItems = [...items];
+      nextItems[index].unitPrice = newPrice;
+      setItems(nextItems);
+      setPriceModal(null);
+
+    } catch (error) {
+      console.error("Pricing update failed:", error);
+      alert("Database error: Could not save the pricing update.");
+    }
+  };
+
   if (previewMode) {
     return (
       <InvoicePreview
@@ -668,8 +754,24 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                       <td className="p-2 align-top pt-2">
                         <input className="w-full border-none bg-transparent p-1 text-center font-black text-blue-600 focus:ring-0 m-0" onChange={(event) => { const nextItems = [...items]; nextItems[index].qty = event.target.value; setItems(nextItems); }} type="number" value={item.qty} />
                       </td>
-                      <td className="p-2 align-top pt-2">
+                      <td className="p-2 align-top pt-2 text-right">
                         <input className="w-full border-none bg-transparent p-1 text-right font-black focus:ring-0 m-0 leading-none" onChange={(event) => { const nextItems = [...items]; nextItems[index].unitPrice = event.target.value; setItems(nextItems); }} step="0.01" type="number" value={item.unitPrice} />
+                        
+                        {/* NEW: Clickable Badge to open Pricing Manager Modal */}
+                        {item.itemId && customer && (
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              const product = (sys.inventory || []).find((entry) => entry.id === item.itemId);
+                              if (product) setPriceModal({ index, item, product, hasCustomPrice });
+                            }}
+                            className={`text-[9px] uppercase tracking-widest mt-0.5 px-2 py-1 rounded transition-colors flex items-center justify-end w-full ${
+                              hasCustomPrice ? 'text-emerald-500 font-black hover:bg-emerald-50' : 'text-slate-400 font-semibold hover:bg-slate-100'
+                            }`}
+                          >
+                            {hasCustomPrice ? '★ Custom' : <><Settings size={10} className="mr-1" /> Default</>}
+                          </button>
+                        )}
                       </td>
                       <td className="p-4 text-right font-mono text-lg font-black tracking-tighter text-slate-900 align-top">${formatMoney((Number(item.qty) || 0) * (Number(item.unitPrice) || 0))}</td>
                       <td className="w-8 p-0 align-top pt-4">
@@ -704,6 +806,65 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
           </div>
         </div>
       </div>
+
+      {/* ========================================== */}
+      {/* PRICING MANAGER MODAL */}
+      {/* ========================================== */}
+      {priceModal && (
+        <div className="fixed inset-0 z-[6000] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="bg-slate-900 px-6 py-4 flex justify-between items-center text-white">
+              <h2 className="text-sm font-black tracking-widest uppercase flex items-center">
+                <Settings size={16} className="mr-2 text-blue-400" />
+                Pricing Manager
+              </h2>
+              <button onClick={() => setPriceModal(null)} className="hover:bg-slate-800 p-1 rounded-full transition-colors"><X size={18} /></button>
+            </div>
+            
+            <div className="p-6">
+              <p className="text-sm text-slate-500 mb-1">Editing price for:</p>
+              <p className="text-base font-bold text-slate-900 mb-4">{priceModal.product.Name || priceModal.product.name} ({priceModal.item.unit})</p>
+              
+              <div className="mb-6">
+                <label className="block text-[11px] font-black uppercase tracking-widest text-slate-400 mb-2">Long-Term New Price ($)</label>
+                <input 
+                  type="number" 
+                  step="0.01" 
+                  className="w-full text-2xl font-black text-blue-600 border-2 border-blue-100 rounded-xl p-4 outline-none focus:border-blue-500 bg-blue-50/50"
+                  defaultValue={priceModal.item.unitPrice}
+                  id="pricingManagerInput"
+                />
+              </div>
+
+              <div className="space-y-3">
+                <button 
+                  onClick={() => executePriceSave('CUSTOMER', document.getElementById('pricingManagerInput').value)}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl flex items-center justify-center transition-colors shadow-lg shadow-emerald-500/20"
+                >
+                  <Sparkles size={16} className="mr-2" /> Save for {customer.name} Only
+                </button>
+                
+                <button 
+                  onClick={() => executePriceSave('GLOBAL', document.getElementById('pricingManagerInput').value)}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition-colors shadow-lg shadow-blue-500/20"
+                >
+                  Update Global Catalog Price
+                </button>
+
+                {priceModal.hasCustomPrice && (
+                  <button 
+                    onClick={() => executePriceSave('REMOVE_CUSTOMER')}
+                    className="w-full bg-white border-2 border-red-100 text-red-600 hover:bg-red-50 font-bold py-3 rounded-xl transition-colors"
+                  >
+                    Clear Custom Price
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
