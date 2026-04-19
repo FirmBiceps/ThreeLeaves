@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
-import { Eye, FileText, MessageSquare, Printer, Save, Sparkles, Trash2, Search, BrainCircuit, ChevronLeft, X, Settings } from 'lucide-react';
+import { Eye, FileText, MessageSquare, Printer, Save, Sparkles, Trash2, Search, BrainCircuit, ChevronLeft, X, Settings, AlertTriangle } from 'lucide-react';
 import { CompanyHeader } from '../../components/shared/CompanyHeader';
 import { UNIT_OPTIONS } from '../../data/company';
 import { formatMoney } from '../../utils/format';
@@ -432,6 +432,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
             qty: Math.max(1, Math.round(stats.totalQty / stats.count)),
             unitPrice: getSafePrice(product, determinedUnit), 
             picked: false,
+            suggestions: []
           });
         }
       }
@@ -460,6 +461,9 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
       .filter((item) => item && !(items || []).find((draftItem) => draftItem.itemId === item.id));
   }, [customerId, items, sys.invoices, sys.inventory]);
 
+  // ==========================================
+  // UPDATED: AI SMART EXTRACT WITH FUZZY MATCH
+  // ==========================================
   const handleSmartExtract = () => {
     const lines = parseText.split('\n').filter(l => l.trim() !== '');
     const nextDraftItems = [...items];
@@ -467,35 +471,83 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
     lines.forEach((line) => {
       const quantityMatch = line.match(/(\d+)/);
       const qty = quantityMatch ? parseInt(quantityMatch[0], 10) : 1;
+      
+      // Strip numbers out of the string so we only fuzzy-match the text/characters
       const searchString = line.replace(/(\d+)/g, '').trim().toLowerCase();
       if (!searchString) return;
 
-      let bestMatch = null;
-      let highestScore = 0;
-
-      (sys.inventory || []).forEach((inventoryItem) => {
+      // Score all items based on exact match, AI learned phrases, and partial fuzzy char overlap
+      const scoredItems = (sys.inventory || []).map((inventoryItem) => {
         const itemName = (inventoryItem.Name || inventoryItem.name || inventoryItem.Items || '').toLowerCase();
         let score = 0;
-        if (itemName.includes(searchString) || searchString.includes(itemName)) { score += 10; }
-        if (inventoryItem.learned_phrases && inventoryItem.learned_phrases[searchString]) { score += (inventoryItem.learned_phrases[searchString] * 20); }
 
-        if (score > highestScore) { highestScore = score; bestMatch = inventoryItem; }
+        // 1. Exact match gets highest priority
+        if (itemName === searchString) {
+          score += 50;
+        } 
+        // 2. Exact substring inclusion gets strong priority
+        else if (itemName.includes(searchString) || searchString.includes(itemName)) {
+          score += 10;
+        } 
+        // 3. Fallback to Fuzzy Character Overlap (great for mixed English/Chinese typos)
+        else {
+          const searchChars = new Set(searchString.replace(/\s/g, '').split(''));
+          if (searchChars.size > 0) {
+            let matchCount = 0;
+            searchChars.forEach(char => {
+              if (itemName.includes(char)) matchCount++;
+            });
+            // Only award points if at least half the characters match, to prevent pure junk suggestions
+            if (matchCount / searchChars.size >= 0.5) {
+               score += (matchCount / searchChars.size) * 5; 
+            }
+          }
+        }
+
+        // Add historical learned phrases score
+        if (inventoryItem.learned_phrases && inventoryItem.learned_phrases[searchString]) { 
+          score += (inventoryItem.learned_phrases[searchString] * 20); 
+        }
+
+        return { item: inventoryItem, score };
       });
 
-      if (bestMatch) {
-        const determinedUnit = bestMatch.Unit || bestMatch.unit || '箱';
+      // Sort by best score descending
+      scoredItems.sort((a, b) => b.score - a.score);
+      const bestMatch = scoredItems[0];
+
+      // If the score is strong enough (>= 10), auto-lock the item
+      if (bestMatch && bestMatch.score >= 10) {
+        const determinedUnit = bestMatch.item.Unit || bestMatch.item.unit || '箱';
         nextDraftItems.push({
-          itemId: bestMatch.id,
-          name: bestMatch.Name || bestMatch.name || bestMatch.Items,
+          itemId: bestMatch.item.id,
+          name: bestMatch.item.Name || bestMatch.item.name || bestMatch.item.Items,
           unit: determinedUnit,
           qty,
-          unitPrice: getSafePrice(bestMatch, determinedUnit),
+          unitPrice: getSafePrice(bestMatch.item, determinedUnit),
           picked: false,
           rawSearchString: searchString, 
-          originalPredictedId: bestMatch.id, 
+          originalPredictedId: bestMatch.item.id, 
+          suggestions: [] // Strong match, no suggestions needed
         });
       } else {
-        nextDraftItems.push({ itemId: '', name: '', unit: '箱', qty, unitPrice: 0, picked: false, rawSearchString: searchString, originalPredictedId: null });
+        // Weak match! Prefill qty/unit, but leave product blank and provide top 3 fuzzy suggestions
+        const topSuggestions = scoredItems
+          .filter(si => si.score > 0)
+          .slice(0, 3)
+          .map(si => si.item);
+
+        nextDraftItems.push({ 
+          itemId: '', 
+          name: '', 
+          unit: '箱', 
+          qty, 
+          unitPrice: 0, 
+          picked: false, 
+          rawSearchString: searchString, 
+          originalPredictedId: null,
+          suggestions: topSuggestions
+        });
       }
     });
 
@@ -558,9 +610,6 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
     if (printAfter) { setTimeout(() => { window.print(); onClose(); }, 500); } else { onClose(); }
   };
 
-  // ==========================================
-  // PRICING MANAGER: SAVE ACTIONS WITH ERROR HANDLING
-  // ==========================================
   const executePriceSave = async (type, newPriceStr) => {
     const { index, item, product } = priceModal;
     const newPrice = Number(newPriceStr);
@@ -576,7 +625,6 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
       } 
       
       else if (type === 'GLOBAL') {
-        // EXACT SAME UUID / NAME FALLBACK AS INVENTORY MODULE
         const isUUID = product.id && product.id.length === 36 && product.id.includes('-');
         let dbError;
 
@@ -584,15 +632,12 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
           const { error } = await supabase.from('product_list').update({ Price: newPrice }).eq('id', product.id);
           dbError = error;
         } else {
-          // Fallback if the database relies on Name for legacy CSV imported items
           const legacyName = product.Name || product.name || product.Items;
           const { error } = await supabase.from('product_list').update({ Price: newPrice }).eq('Name', legacyName);
           dbError = error;
         }
 
         if (dbError) throw dbError;
-
-        // Update Local State if DB save succeeded
         sys.setInventory(sys.inventory.map(p => p.id === product.id ? { ...p, Price: newPrice } : p));
       }
       
@@ -613,7 +658,6 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
         return;
       }
 
-      // Update the draft invoice row to reflect the newly saved price
       const nextItems = [...items];
       nextItems[index].unitPrice = newPrice;
       setItems(nextItems);
@@ -707,7 +751,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                     <button key={item.id} className="rounded border border-blue-100 bg-white px-3 py-1.5 text-[10px] font-bold text-blue-700 shadow-sm"
                       onClick={() => {
                         const determinedUnit = item.Unit || item.unit || '箱';
-                        setItems([...items, { itemId: item.id, name: item.Name || item.name || item.Items, unit: determinedUnit, qty: 1, unitPrice: getSafePrice(item, determinedUnit), picked: false }])
+                        setItems([...items, { itemId: item.id, name: item.Name || item.name || item.Items, unit: determinedUnit, qty: 1, unitPrice: getSafePrice(item, determinedUnit), picked: false, suggestions: [] }])
                       }} type="button">
                       + {item.Name || item.name || item.Items}
                     </button>
@@ -719,8 +763,13 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
             <table className="w-full text-left relative z-10">
               <thead className="border-y-2 border-slate-900 bg-slate-50">
                 <tr className="text-[10px] font-black uppercase tracking-widest text-gray-500">
-                  <th className="w-12 p-4 text-center">No.</th><th className="p-4 w-72">Description</th><th className="w-24 p-4 text-center">Unit</th>
-                  <th className="w-20 p-4 text-center">Qty</th><th className="w-28 p-4 text-right">Cost</th><th className="w-28 p-4 text-right">Total</th><th className="w-8 p-4"></th>
+                  <th className="w-12 p-4 text-center">No.</th>
+                  <th className="p-4 w-72">Description</th>
+                  <th className="w-24 p-4 text-center">Unit</th>
+                  <th className="w-20 p-4 text-center">Qty</th>
+                  <th className="w-28 p-4 text-right">Cost</th>
+                  <th className="w-28 p-4 text-right">Total</th>
+                  <th className="w-8 p-4"></th>
                 </tr>
               </thead>
               <tbody>
@@ -729,23 +778,71 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                   const hasCustomPrice = customer?.custom_prices && customer.custom_prices[ruleKey] !== undefined;
 
                   return (
-                    <tr className="border-b border-gray-100 font-bold" key={`${item.itemId}-${index}`}>
-                      <td className="p-4 text-center font-mono text-xs text-slate-300">{index + 1}</td>
-                      <td className="p-2 relative">
+                    <tr className={`border-b font-bold ${!item.itemId && item.rawSearchString ? 'bg-amber-50/30 border-amber-100' : 'border-gray-100'}`} key={`${item.itemId}-${index}`}>
+                      <td className="p-4 text-center font-mono text-xs text-slate-300 align-top pt-5">{index + 1}</td>
+                      <td className="p-2 relative align-top pt-3">
                         <div className="flex items-center space-x-2">
                           <input checked={item.picked || false} className="h-4 w-4 cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500 shrink-0" onChange={(event) => { const nextItems = [...items]; nextItems[index].picked = event.target.checked; setItems(nextItems); }} type="checkbox" />
-                          <ProductSearchSelect value={item.itemId} inventory={sys.inventory} onChange={(selectedId) => { const product = (sys.inventory || []).find((entry) => entry.id === selectedId); if (!product) return; const nextItems = [...items]; const determinedUnit = product.Unit || product.unit || '箱'; nextItems[index] = { ...nextItems[index], itemId: selectedId, name: product.Name || product.name || product.Items, unit: determinedUnit, unitPrice: getSafePrice(product, determinedUnit) }; setItems(nextItems); }} />
+                          <ProductSearchSelect value={item.itemId} inventory={sys.inventory} onChange={(selectedId) => { const product = (sys.inventory || []).find((entry) => entry.id === selectedId); if (!product) return; const nextItems = [...items]; const determinedUnit = product.Unit || product.unit || '箱'; nextItems[index] = { ...nextItems[index], itemId: selectedId, name: product.Name || product.name || product.Items, unit: determinedUnit, unitPrice: getSafePrice(product, determinedUnit), suggestions: [] }; setItems(nextItems); }} />
                         </div>
+                        
+                        {item.rawSearchString && item.itemId && (
+                          <p className="text-[9px] text-blue-400 font-medium ml-6 mt-1 flex items-center">
+                            <BrainCircuit size={10} className="mr-1" /> Predicted from: "{item.rawSearchString}"
+                          </p>
+                        )}
+
+                        {/* NEW: FUZZY SUGGESTIONS BLOCK */}
+                        {!item.itemId && item.suggestions && item.suggestions.length > 0 && (
+                          <div className="ml-6 mt-2 mb-1 p-2.5 bg-amber-50 border border-amber-200 rounded-lg shadow-sm">
+                            <p className="text-[9px] font-black uppercase tracking-widest text-amber-700 mb-2 flex items-center">
+                              <AlertTriangle size={12} className="mr-1.5" /> Did you mean?
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {item.suggestions.map((sugg) => {
+                                const suggName = sugg.Name || sugg.name || sugg.Items;
+                                const suggUnit = sugg.Unit || sugg.unit || '箱';
+                                return (
+                                  <button
+                                    key={sugg.id}
+                                    type="button"
+                                    onClick={() => {
+                                      const nextItems = [...items];
+                                      nextItems[index] = {
+                                        ...nextItems[index],
+                                        itemId: sugg.id,
+                                        name: suggName,
+                                        unit: suggUnit,
+                                        unitPrice: getSafePrice(sugg, suggUnit),
+                                        suggestions: [], 
+                                        originalPredictedId: sugg.id
+                                      };
+                                      setItems(nextItems);
+                                    }}
+                                    className="text-[11px] bg-white border border-amber-300 text-amber-900 font-bold px-2 py-1 rounded shadow-sm hover:bg-amber-200 transition-colors"
+                                  >
+                                    {suggName}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                        {!item.itemId && item.rawSearchString && (!item.suggestions || item.suggestions.length === 0) && (
+                          <p className="text-[9px] text-amber-500 font-medium ml-6 mt-1 flex items-center">
+                            <AlertTriangle size={10} className="mr-1" /> No matches found for "{item.rawSearchString}"
+                          </p>
+                        )}
                       </td>
-                      <td className="p-2 align-top pt-3">
+                      <td className="p-2 align-top pt-4">
                         <select className="w-full border-none text-center text-xs font-bold focus:ring-0 bg-transparent m-0" onChange={(event) => { const nextItems = [...items]; const newUnit = event.target.value; nextItems[index].unit = newUnit; const product = (sys.inventory || []).find(p => p.id === nextItems[index].itemId); if (product) { nextItems[index].unitPrice = getSafePrice(product, newUnit); } setItems(nextItems); }} value={item.unit}>
                           {UNIT_OPTIONS.map((option) => (<option key={option.value} value={option.value}>{option.label}</option>))}
                         </select>
                       </td>
-                      <td className="p-2 align-top pt-2">
+                      <td className="p-2 align-top pt-3">
                         <input className="w-full border-none bg-transparent p-1 text-center font-black text-blue-600 focus:ring-0 m-0" onChange={(event) => { const nextItems = [...items]; nextItems[index].qty = event.target.value; setItems(nextItems); }} type="number" value={item.qty} />
                       </td>
-                      <td className="p-2 align-top pt-2 text-right">
+                      <td className="p-2 align-top pt-3 text-right">
                         <input className="w-full border-none bg-transparent p-1 text-right font-black focus:ring-0 m-0 leading-none" onChange={(event) => { const nextItems = [...items]; nextItems[index].unitPrice = event.target.value; setItems(nextItems); }} step="0.01" type="number" value={item.unitPrice} />
                         
                         {item.itemId && customer && (
@@ -763,8 +860,8 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                           </button>
                         )}
                       </td>
-                      <td className="p-4 text-right font-mono text-lg font-black tracking-tighter text-slate-900 align-top">${formatMoney((Number(item.qty) || 0) * (Number(item.unitPrice) || 0))}</td>
-                      <td className="w-8 p-0 align-top pt-4">
+                      <td className="p-4 text-right font-mono text-lg font-black tracking-tighter text-slate-900 align-top pt-3">${formatMoney((Number(item.qty) || 0) * (Number(item.unitPrice) || 0))}</td>
+                      <td className="w-8 p-0 align-top pt-5">
                         <button className="ml-2 text-red-200 hover:text-red-500" onClick={() => setItems(items.filter((_, itemIndex) => itemIndex !== index))} type="button"><Trash2 size={18} /></button>
                       </td>
                     </tr>
@@ -773,7 +870,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
               </tbody>
             </table>
 
-            <button className="mt-8 rounded bg-blue-50 px-5 py-2 text-[10px] font-bold uppercase text-blue-600 shadow-sm transition-all" onClick={() => setItems([...items, { itemId: '', name: '', unit: '箱', qty: 1, unitPrice: 0, picked: false }])} type="button">
+            <button className="mt-8 rounded bg-blue-50 px-5 py-2 text-[10px] font-bold uppercase text-blue-600 shadow-sm transition-all" onClick={() => setItems([...items, { itemId: '', name: '', unit: '箱', qty: 1, unitPrice: 0, picked: false, suggestions: [] }])} type="button">
               + Add Row Manually
             </button>
 
