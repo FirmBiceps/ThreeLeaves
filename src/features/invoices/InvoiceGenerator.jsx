@@ -323,30 +323,6 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
 // ==========================================
 export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
   
-  const defaultInvoiceNumber = useMemo(() => {
-    if (existingInvoice) return existingInvoice.number; 
-
-    const date = new Date();
-    const yy = String(date.getFullYear()).slice(-2); 
-    const mm = String(date.getMonth() + 1).padStart(2, '0'); 
-    const prefix = `${yy}${mm}`;
-
-    const monthlyInvoices = (sys.invoices || []).filter(inv => String(inv.number).startsWith(prefix));
-    let maxSequence = 0;
-    
-    monthlyInvoices.forEach(inv => {
-      const seqStr = String(inv.number).slice(4); 
-      const seqNum = parseInt(seqStr, 10);
-      if (!isNaN(seqNum) && seqNum > maxSequence) {
-        maxSequence = seqNum;
-      }
-    });
-
-    const nextSequence = String(maxSequence + 1).padStart(3, '0');
-    return `${prefix}${nextSequence}`;
-  }, [sys.invoices, existingInvoice]);
-
-  const [invoiceNumber, setInvoiceNumber] = useState(defaultInvoiceNumber);
   const [invoiceDate, setInvoiceDate] = useState(
     existingInvoice ? existingInvoice.date : new Date().toISOString().split('T')[0]
   );
@@ -387,6 +363,8 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
     return `${prefix}${nextSequence}`;
   }, [sys.invoices, existingInvoice, invoiceDate]);
 
+  const [invoiceNumber, setInvoiceNumber] = useState(autoInvoiceNumber);
+
   useEffect(() => {
     setInvoiceNumber(autoInvoiceNumber);
   }, [autoInvoiceNumber]);
@@ -396,7 +374,6 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
   const [previewMode, setPreviewMode] = useState(false);
   const [autoFillNotif, setAutoFillNotif] = useState(false);
   
-  // NEW: State for the Pricing Modal
   const [priceModal, setPriceModal] = useState(null);
 
   const customer = (sys.customers || []).find((entry) => entry.id === customerId);
@@ -582,7 +559,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
   };
 
   // ==========================================
-  // PRICING MANAGER: SAVE ACTIONS
+  // PRICING MANAGER: SAVE ACTIONS WITH ERROR HANDLING
   // ==========================================
   const executePriceSave = async (type, newPriceStr) => {
     const { index, item, product } = priceModal;
@@ -592,29 +569,43 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
     try {
       if (type === 'CUSTOMER') {
         const updatedCustomPrices = { ...(customer.custom_prices || {}), [ruleKey]: newPrice };
-        // 1. Update Supabase
-        await supabase.from('customers').update({ custom_prices: updatedCustomPrices }).eq('id', customer.id);
-        // 2. Update Local State
+        const { error } = await supabase.from('customers').update({ custom_prices: updatedCustomPrices }).eq('id', customer.id);
+        if (error) throw error;
+        
         sys.setCustomers(sys.customers.map(c => c.id === customer.id ? { ...c, custom_prices: updatedCustomPrices } : c));
       } 
       
       else if (type === 'GLOBAL') {
-        // 1. Update Supabase
-        await supabase.from('product_list').update({ Price: newPrice }).eq('id', product.id);
-        // 2. Update Local State
+        // EXACT SAME UUID / NAME FALLBACK AS INVENTORY MODULE
+        const isUUID = product.id && product.id.length === 36 && product.id.includes('-');
+        let dbError;
+
+        if (isUUID) {
+          const { error } = await supabase.from('product_list').update({ Price: newPrice }).eq('id', product.id);
+          dbError = error;
+        } else {
+          // Fallback if the database relies on Name for legacy CSV imported items
+          const legacyName = product.Name || product.name || product.Items;
+          const { error } = await supabase.from('product_list').update({ Price: newPrice }).eq('Name', legacyName);
+          dbError = error;
+        }
+
+        if (dbError) throw dbError;
+
+        // Update Local State if DB save succeeded
         sys.setInventory(sys.inventory.map(p => p.id === product.id ? { ...p, Price: newPrice } : p));
       }
       
       else if (type === 'REMOVE_CUSTOMER') {
         const updatedCustomPrices = { ...(customer.custom_prices || {}) };
         delete updatedCustomPrices[ruleKey];
-        // 1. Update Supabase
-        await supabase.from('customers').update({ custom_prices: updatedCustomPrices }).eq('id', customer.id);
-        // 2. Update Local State
+        
+        const { error } = await supabase.from('customers').update({ custom_prices: updatedCustomPrices }).eq('id', customer.id);
+        if (error) throw error;
+
         sys.setCustomers(sys.customers.map(c => c.id === customer.id ? { ...c, custom_prices: updatedCustomPrices } : c));
         
-        // Auto-revert the draft invoice item back to the global default price
-        const fallbackPrice = product.Price || product.unitPrice || 0;
+        const fallbackPrice = product.Price || product.unitPrice || product['Unit Price (SG)'] || 0;
         const nextItems = [...items];
         nextItems[index].unitPrice = fallbackPrice;
         setItems(nextItems);
@@ -630,7 +621,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
 
     } catch (error) {
       console.error("Pricing update failed:", error);
-      alert("Database error: Could not save the pricing update.");
+      alert(`Database Update Failed: ${error.message || 'Could not verify connection.'}`);
     }
   };
 
@@ -757,7 +748,6 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                       <td className="p-2 align-top pt-2 text-right">
                         <input className="w-full border-none bg-transparent p-1 text-right font-black focus:ring-0 m-0 leading-none" onChange={(event) => { const nextItems = [...items]; nextItems[index].unitPrice = event.target.value; setItems(nextItems); }} step="0.01" type="number" value={item.unitPrice} />
                         
-                        {/* NEW: Clickable Badge to open Pricing Manager Modal */}
                         {item.itemId && customer && (
                           <button 
                             type="button"
