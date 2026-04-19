@@ -7,7 +7,6 @@ import { supabase } from '../../lib/supabaseClient';
 // COMPONENT 1: INVENTORY ADD/EDIT MODAL
 // ==========================================
 function InventoryFormModal({ item, onClose, onSave, onDelete }) {
-  // Added 'stock' back into the formData state
   const [formData, setFormData] = useState({
     id: item?.id || `prod-${Date.now()}`,
     sku: item?.sku || item?.SKU || '',
@@ -114,7 +113,6 @@ function InventoryFormModal({ item, onClose, onSave, onDelete }) {
                 className="w-full border border-blue-200 bg-blue-50 rounded-xl p-3 text-base text-right text-blue-700 focus:ring-2 focus:ring-blue-500 outline-none"
               />
             </div>
-            {/* Added Stock Input Field */}
             <div>
               <label className="block text-sm text-emerald-600 mb-1">Stock</label>
               <input 
@@ -219,15 +217,15 @@ export function InventoryModule({ sys }) {
 
       const isUUID = finalId && finalId.length === 36 && finalId.includes('-');
       
-      // Added stock back to the Supabase sync payload
+      // FIX: Force React strings into pure mathematical numbers before sending to Supabase
       const payload = {
         sku: formData.sku,
         Name: formData.Name,
         Unit: formData.Unit,
         Description: formData.Description,
         Packing: formData.Packing,
-        Price: formData.Price,
-        stock: formData.stock
+        Price: Number(formData.Price) || 0,        // Forces decimals (e.g., 15.50)
+        stock: parseInt(formData.stock, 10) || 0   // Forces strict integers (e.g., 15)
       };
 
       if (isEditing && isUUID) {
@@ -247,7 +245,7 @@ export function InventoryModule({ sys }) {
           product_id: savedProduct.id,
           product_name: formData.Name,
           old_price_sg: oldPrice,
-          new_price_sg: formData.Price
+          new_price_sg: payload.Price
         });
       }
 
@@ -344,7 +342,7 @@ export function InventoryModule({ sys }) {
               <th className="p-5">Description</th>
               <th className="p-5">Packing</th>
               <th className="p-5 text-right">Price</th>
-              <th className="p-5 text-center">Stock</th> {/* Added Stock Column Header */}
+              <th className="p-5 text-center">Stock</th>
               <th className="p-5 pr-8 text-center">Action</th>
             </tr>
           </thead>
@@ -356,7 +354,7 @@ export function InventoryModule({ sys }) {
               const desc = item.Description || item.description || '-';
               const packing = item.Packing || item.packaging || '-';
               const price = item.Price || item.unitPrice || item['Unit Price (SG)'] || 0;
-              const stock = item.stock ?? 0; // Grab the stock value
+              const stock = item.stock ?? 0; 
 
               return (
                 <tr key={item.id || `fallback-${idx}`} className="hover:bg-slate-50 transition-colors">
@@ -372,7 +370,6 @@ export function InventoryModule({ sys }) {
                   <td className="p-5 text-right text-base font-bold text-blue-700">
                     ${formatMoney(price)}
                   </td>
-                  {/* Added Stock Cell with Warning Color Logic */}
                   <td className="p-5 text-center">
                     <span
                       className={`text-xs px-3 py-1.5 rounded-md font-bold ${
