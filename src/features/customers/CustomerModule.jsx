@@ -56,10 +56,12 @@ function ProductSearchSelect({ value, inventory, onChange }) {
   }, []);
 
   const selectedProduct = inventory.find((entry) => entry.id === value);
-  const displayName = selectedProduct ? (selectedProduct.name || selectedProduct.Items) : '';
+  // FIX: Updated to check .Name first
+  const displayName = selectedProduct ? (selectedProduct.Name || selectedProduct.name || selectedProduct.Items) : '';
 
   const filteredInventory = inventory.filter((item) => {
-    const itemName = (item.name || item.Items || '').toLowerCase();
+    // FIX: Updated to check .Name first
+    const itemName = (item.Name || item.name || item.Items || '').toLowerCase();
     return itemName.includes(searchTerm.toLowerCase());
   });
 
@@ -94,8 +96,9 @@ function ProductSearchSelect({ value, inventory, onChange }) {
           <div className="max-h-52 overflow-y-auto">
             {filteredInventory.length > 0 ? (
               filteredInventory.map((item) => {
-                const itemName = item.name || item.Items || 'Unnamed Product';
-                const defaultPrice = formatMoney(item.unitPrice || item['Unit Price (SG)'] || 0);
+                // FIX: Updated to check .Name and .Price first
+                const itemName = item.Name || item.name || item.Items || 'Unnamed Product';
+                const defaultPrice = formatMoney(item.Price || item.unitPrice || item['Unit Price (SG)'] || 0);
                 return (
                   <button
                     key={item.id}
@@ -229,7 +232,8 @@ export function CustomerModule({ sys }) {
         customerInvoices.forEach((invoice) => {
           invoice.items?.forEach((item) => {
             const product = sys.inventory.find((entry) => entry.id === item.itemId);
-            const name = product?.name || product?.Items || item.itemId || 'Unknown';
+            // FIX: Check for product.Name
+            const name = product?.Name || product?.name || product?.Items || item.itemId || 'Unknown';
             itemCounts[name] = (itemCounts[name] || 0) + Number(item.qty || 0);
           });
         });
@@ -284,11 +288,9 @@ export function CustomerModule({ sys }) {
   );
 
   const handleSave = (form) => {
-    // If it exists, update it but preserve the custom_prices dictionary!
     if (form.id) {
       sys.setCustomers(sys.customers.map((c) => (c.id === form.id ? { ...c, ...form } : c)));
       
-      // Also update the local view instantly if we are looking at them
       if (selectedCustomer && selectedCustomer.customer.id === form.id) {
         setSelectedCustomer({ ...selectedCustomer, customer: { ...selectedCustomer.customer, ...form }});
       }
@@ -298,7 +300,6 @@ export function CustomerModule({ sys }) {
     setIsOpen(false);
   };
 
-  // Engine for adding/removing special pricing rules (Unit-Aware)
   const handleAddPricingRule = () => {
     if (!pricingItem || !pricingValue || !pricingUnit) return;
     
@@ -307,7 +308,6 @@ export function CustomerModule({ sys }) {
       updatedCustomer.custom_prices = {};
     }
     
-    // Create a composite key: "ProductID|Unit" so we can have different prices for Boxes vs Kgs
     const ruleKey = `${pricingItem}|${pricingUnit}`;
     updatedCustomer.custom_prices[ruleKey] = Number(pricingValue);
     
@@ -421,7 +421,7 @@ export function CustomerModule({ sys }) {
               </div>
             </div>
 
-            {/* SPECIAL PRICING AGREEMENTS CARD (Now Unit-Aware!) */}
+            {/* SPECIAL PRICING AGREEMENTS CARD */}
             <div className="rounded-2xl border border-blue-200 bg-white p-8 shadow-sm">
               <h3 className="mb-6 flex items-center text-sm font-black uppercase tracking-widest text-blue-800">
                 <Tag className="mr-2 text-blue-500" size={18} /> Special Pricing Agreements
@@ -436,7 +436,7 @@ export function CustomerModule({ sys }) {
                     setPricingItem(selectedId);
                     const product = sys.inventory.find((entry) => entry.id === selectedId);
                     if (product) {
-                      setPricingUnit(product.unit || product.Unit || '箱');
+                      setPricingUnit(product.Unit || product.unit || '箱');
                     }
                   }}
                 />
@@ -486,13 +486,16 @@ export function CustomerModule({ sys }) {
                     // Extract ID and Unit from the composite key "itemId|unit"
                     const [itemId, unit] = ruleKey.includes('|') ? ruleKey.split('|') : [ruleKey, '箱'];
                     const product = sys.inventory.find(i => i.id === itemId);
-                    const defaultPrice = product?.unitPrice || product?.['Unit Price (SG)'] || 0;
+                    
+                    // FIX: Make sure we check for .Price and .Name
+                    const defaultPrice = product?.Price || product?.unitPrice || product?.['Unit Price (SG)'] || 0;
+                    const productName = product?.Name || product?.name || product?.Items || 'Unknown Product';
                     
                     return (
                       <div key={ruleKey} className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl shadow-sm hover:border-blue-200 transition-colors">
                         <div>
                           <p className="text-sm font-bold text-slate-800 flex items-center">
-                            {product?.name || product?.Items || 'Unknown Product'} 
+                            {productName} 
                             <span className="ml-3 px-2 py-0.5 bg-blue-50 text-blue-600 rounded text-xs font-black border border-blue-100">{unit}</span>
                           </p>
                           <p className="text-xs font-medium text-slate-500 mt-1">
