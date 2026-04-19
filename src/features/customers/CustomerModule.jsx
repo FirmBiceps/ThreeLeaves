@@ -14,7 +14,8 @@ import {
   Trash2,
   Save,
   Edit,
-  Search
+  Search,
+  Filter
 } from 'lucide-react';
 import { EntityModal } from '../../components/shared/EntityModal';
 import { formatMoney, formatMoneyWhole } from '../../utils/format';
@@ -56,11 +57,9 @@ function ProductSearchSelect({ value, inventory, onChange }) {
   }, []);
 
   const selectedProduct = inventory.find((entry) => entry.id === value);
-  // FIX: Updated to check .Name first
   const displayName = selectedProduct ? (selectedProduct.Name || selectedProduct.name || selectedProduct.Items) : '';
 
   const filteredInventory = inventory.filter((item) => {
-    // FIX: Updated to check .Name first
     const itemName = (item.Name || item.name || item.Items || '').toLowerCase();
     return itemName.includes(searchTerm.toLowerCase());
   });
@@ -96,7 +95,6 @@ function ProductSearchSelect({ value, inventory, onChange }) {
           <div className="max-h-52 overflow-y-auto">
             {filteredInventory.length > 0 ? (
               filteredInventory.map((item) => {
-                // FIX: Updated to check .Name and .Price first
                 const itemName = item.Name || item.name || item.Items || 'Unnamed Product';
                 const defaultPrice = formatMoney(item.Price || item.unitPrice || item['Unit Price (SG)'] || 0);
                 return (
@@ -164,6 +162,7 @@ function CustomerFormModal({ initialValue, onClose, onSave }) {
           <option value="North">North Sector</option>
           <option value="West">West Sector</option>
           <option value="East">East Sector</option>
+          <option value="South">South Sector</option>
           <option value="Central">Central Sector</option>
         </select>
         <textarea
@@ -182,9 +181,12 @@ export function CustomerModule({ sys }) {
   const [isOpen, setIsOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(EMPTY_CUSTOMER);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
-  const [filter, setFilter] = useState('All');
+  
+  // NEW: Advanced Filtering State
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('All');
+  const [regionFilter, setRegionFilter] = useState('All');
 
-  // State for Custom Pricing Engine
   const [pricingItem, setPricingItem] = useState('');
   const [pricingUnit, setPricingUnit] = useState('箱');
   const [pricingValue, setPricingValue] = useState('');
@@ -232,7 +234,6 @@ export function CustomerModule({ sys }) {
         customerInvoices.forEach((invoice) => {
           invoice.items?.forEach((item) => {
             const product = sys.inventory.find((entry) => entry.id === item.itemId);
-            // FIX: Check for product.Name
             const name = product?.Name || product?.name || product?.Items || item.itemId || 'Unknown';
             itemCounts[name] = (itemCounts[name] || 0) + Number(item.qty || 0);
           });
@@ -279,13 +280,35 @@ export function CustomerModule({ sys }) {
       .sort((left, right) => right.totalRevenue - left.totalRevenue);
   }, [sys.customers, sys.invoices, sys.inventory]);
 
-  const stagnantCount = analytics.filter((entry) =>
-    ['at-risk', 'churned', 'cooling'].includes(entry.status),
-  ).length;
-  
-  const displayList = analytics.filter((entry) =>
-    filter === 'All' ? true : ['at-risk', 'churned', 'cooling'].includes(entry.status),
-  );
+  // NEW: Comprehensive Filtering Engine
+  const displayList = useMemo(() => {
+    return analytics.filter((entry) => {
+      // 1. Search Filter (Matches Company Name or Contact Person)
+      const searchLower = searchTerm.toLowerCase();
+      const matchesSearch = 
+        (entry.customer.name || '').toLowerCase().includes(searchLower) ||
+        (entry.customer.contactPerson || '').toLowerCase().includes(searchLower);
+
+      // 2. Status Filter
+      let matchesStatus = true;
+      if (statusFilter === 'Stagnant') {
+        matchesStatus = ['at-risk', 'churned', 'cooling'].includes(entry.status);
+      } else if (statusFilter === 'Active') {
+        matchesStatus = entry.status === 'active';
+      } else if (statusFilter === 'Cooling') {
+        matchesStatus = entry.status === 'cooling';
+      } else if (statusFilter === 'At Risk') {
+        matchesStatus = entry.status === 'at-risk';
+      } else if (statusFilter === 'Churned') {
+        matchesStatus = entry.status === 'churned';
+      }
+
+      // 3. Region Filter
+      const matchesRegion = regionFilter === 'All' ? true : entry.customer.region === regionFilter;
+
+      return matchesSearch && matchesStatus && matchesRegion;
+    });
+  }, [analytics, searchTerm, statusFilter, regionFilter]);
 
   const handleSave = (form) => {
     if (form.id) {
@@ -427,7 +450,6 @@ export function CustomerModule({ sys }) {
                 <Tag className="mr-2 text-blue-500" size={18} /> Special Pricing Agreements
               </h3>
               
-              {/* Form to Add New Rule */}
               <div className="flex space-x-3 mb-6 bg-slate-50 p-4 rounded-xl border border-slate-100 items-center">
                 <ProductSearchSelect
                   value={pricingItem}
@@ -474,7 +496,6 @@ export function CustomerModule({ sys }) {
                 </button>
               </div>
 
-              {/* Active Rules List */}
               <div className="space-y-3">
                 {Object.keys(customPrices).length === 0 ? (
                   <div className="text-center p-6 border-2 border-dashed border-slate-200 rounded-xl">
@@ -483,11 +504,8 @@ export function CustomerModule({ sys }) {
                   </div>
                 ) : (
                   Object.entries(customPrices).map(([ruleKey, price]) => {
-                    // Extract ID and Unit from the composite key "itemId|unit"
                     const [itemId, unit] = ruleKey.includes('|') ? ruleKey.split('|') : [ruleKey, '箱'];
                     const product = sys.inventory.find(i => i.id === itemId);
-                    
-                    // FIX: Make sure we check for .Price and .Name
                     const defaultPrice = product?.Price || product?.unitPrice || product?.['Unit Price (SG)'] || 0;
                     const productName = product?.Name || product?.name || product?.Items || 'Unknown Product';
                     
@@ -649,41 +667,21 @@ export function CustomerModule({ sys }) {
 
   return (
     <div className="flex h-full flex-col rounded-xl border border-gray-200 bg-white shadow-sm">
+      
+      {/* HEADER */}
       <div className="flex shrink-0 items-center justify-between rounded-t-xl border-b border-gray-100 bg-gray-50 p-5">
         <div>
           <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">
             Customer Intelligence
           </h3>
           <p className="mt-1 text-xs font-medium text-slate-500">
-            Revenue rankings and behavioral analytics
+            Revenue rankings, behavioral analytics, and account management.
           </p>
         </div>
         <div className="flex items-center space-x-3">
-          <div className="mr-4 flex rounded-lg border border-gray-200 bg-white p-1 shadow-sm">
-            <button
-              className={`rounded-md px-4 py-1.5 text-[10px] font-black uppercase tracking-widest transition-all ${
-                filter === 'All' ? 'bg-blue-600 text-white shadow' : 'text-gray-500 hover:bg-gray-50'
-              }`}
-              onClick={() => setFilter('All')}
-              type="button"
-            >
-              All Accounts
-            </button>
-            <button
-              className={`flex items-center rounded-md px-4 py-1.5 text-[10px] font-black uppercase tracking-widest transition-all ${
-                filter === 'Stagnant'
-                  ? 'bg-orange-500 text-white shadow'
-                  : 'text-orange-600 hover:bg-orange-50'
-              }`}
-              onClick={() => setFilter('Stagnant')}
-              type="button"
-            >
-              <AlertTriangle className="mr-1" size={12} /> Stagnant ({stagnantCount})
-            </button>
-          </div>
           {sys.hasPerm('manage_customers') && (
             <button
-              className="flex items-center rounded-lg bg-slate-900 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-slate-800"
+              className="flex items-center rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-blue-700 transition-colors"
               onClick={() => {
                 setEditingCustomer(EMPTY_CUSTOMER);
                 setIsOpen(true);
@@ -696,7 +694,56 @@ export function CustomerModule({ sys }) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto">
+      {/* NEW: DEDICATED SEARCH & FILTER BAR */}
+      <div className="flex flex-col sm:flex-row items-center justify-between border-b border-slate-100 bg-white p-4 gap-4 shadow-sm relative z-20">
+        
+        <div className="flex items-center bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 w-full sm:w-96 shadow-sm focus-within:ring-2 focus-within:ring-blue-100 focus-within:border-blue-300 transition-all">
+          <Search className="text-slate-400 mr-2 shrink-0" size={18} />
+          <input
+            type="text"
+            placeholder="Search by entity or contact..."
+            className="w-full bg-transparent border-none focus:ring-0 text-sm font-semibold outline-none placeholder:text-slate-400 placeholder:font-normal"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+
+        <div className="flex items-center space-x-3 w-full sm:w-auto">
+          <div className="relative flex items-center">
+            <Filter size={14} className="absolute left-3 text-slate-400 pointer-events-none" />
+            <select
+              className="w-full sm:w-auto rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-8 text-sm font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 shadow-sm cursor-pointer appearance-none"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="All">All Health Statuses</option>
+              <option value="Active">Healthy (Active)</option>
+              <option value="Stagnant">Needs Attention (Stagnant)</option>
+              <option value="Cooling">↳ Cooling</option>
+              <option value="At Risk">↳ At Risk</option>
+              <option value="Churned">↳ Churned</option>
+            </select>
+          </div>
+
+          <div className="relative flex items-center">
+            <MapPin size={14} className="absolute left-3 text-slate-400 pointer-events-none" />
+            <select
+              className="w-full sm:w-auto rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-8 text-sm font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 shadow-sm cursor-pointer appearance-none"
+              value={regionFilter}
+              onChange={(e) => setRegionFilter(e.target.value)}
+            >
+              <option value="All">All Regions</option>
+              <option value="North">North Sector</option>
+              <option value="South">South Sector</option>
+              <option value="East">East Sector</option>
+              <option value="West">West Sector</option>
+              <option value="Central">Central Sector</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-auto relative z-10">
         <table className="w-full text-left font-medium">
           <thead className="sticky top-0 z-10 border-b bg-white text-[10px] font-black uppercase text-gray-400 shadow-sm">
             <tr>
@@ -772,8 +819,8 @@ export function CustomerModule({ sys }) {
             })}
             {displayList.length === 0 && (
               <tr>
-                <td className="p-12 text-center text-sm font-bold text-gray-400" colSpan="7">
-                  No customers found for this filter.
+                <td className="p-12 text-center text-sm font-bold text-slate-400" colSpan="7">
+                  No customers match your search and filter criteria.
                 </td>
               </tr>
             )}
