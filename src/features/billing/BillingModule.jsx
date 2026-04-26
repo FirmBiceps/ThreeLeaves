@@ -1,8 +1,11 @@
 import { useMemo, useState } from 'react';
-import { FileText, Printer, Search, Calendar } from 'lucide-react';
+import { FileText, Printer, Search, Calendar, Download, Loader2 } from 'lucide-react';
 import { formatMoney } from '../../utils/format';
+import JSZip from 'jszip';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 
-// Re-use the logo and QR code from your invoices folder
+// Re-use the logo and QR code from your invoices folder (adjust path if needed)
 import logo from '../invoices/three_leaves_logo.png'; 
 import paynowQr from '../invoices/paynow_qr.jpg';
 
@@ -15,8 +18,9 @@ export function BillingModule({ sys }) {
   });
   const [searchTerm, setSearchTerm] = useState('');
   
-  // Controls what gets sent to the printer: 'ALL' or a specific 'customerId'
+  // Controls what gets sent to the printer/zipper: 'ALL' or a specific 'customerId'
   const [printTarget, setPrintTarget] = useState(null);
+  const [isZipping, setIsZipping] = useState(false);
 
   // 1. Group all invoices by Customer for the selected month
   const statementData = useMemo(() => {
@@ -60,7 +64,7 @@ export function BillingModule({ sys }) {
     return results;
   }, [sys.invoices, sys.customers, selectedMonth, searchTerm]);
 
-  // Handle Print Action
+  // Handle Standard Print Action
   const handlePrint = (target) => {
     setPrintTarget(target);
     // Give React a tiny fraction of a second to render the hidden print views before triggering browser print
@@ -68,6 +72,81 @@ export function BillingModule({ sys }) {
       window.print();
       setPrintTarget(null); // Reset after printing
     }, 100);
+  };
+
+  // Handle Download ZIP Action
+  const handleDownloadZip = () => {
+    setIsZipping(true);
+    setPrintTarget('ALL'); // Force React to render all statements into the DOM temporarily
+
+    setTimeout(async () => {
+      try {
+        const zip = new JSZip();
+        
+        // Temporarily reveal the print container off-screen so html2canvas can read it
+        const printContainer = document.getElementById('print-ui');
+        printContainer.style.display = 'block';
+        printContainer.style.position = 'absolute';
+        printContainer.style.left = '-9999px';
+        printContainer.style.top = '0';
+
+        const statementNodes = printContainer.children;
+        const d = new Date(`${selectedMonth}-01`);
+        const monthShort = d.toLocaleString('en-US', { month: 'short' });
+        const yearShort = String(d.getFullYear()).slice(-2);
+
+        // Generate a PDF for each customer statement
+        for (let i = 0; i < statementData.length; i++) {
+          const data = statementData[i];
+          const node = statementNodes[i];
+          
+          if (!node) continue;
+
+          // Capture the HTML element as an image
+          const canvas = await html2canvas(node, { scale: 2, useCORS: true });
+          const imgData = canvas.toDataURL('image/jpeg', 1.0);
+          
+          // A4 dimensions
+          const pdf = new jsPDF('p', 'mm', 'a4');
+          const pdfWidth = pdf.internal.pageSize.getWidth();
+          const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+          
+          pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+          
+          // Format FileName: CustomerName_Month_Year (Removes illegal windows characters)
+          const customerNameSafe = data.customerName.replace(/[<>:"/\\|?*]/g, '').trim();
+          const fileName = `${customerNameSafe}_${monthShort}_${yearShort}.pdf`;
+          
+          // Add PDF to the Zip File
+          const pdfBlob = pdf.output('blob');
+          zip.file(fileName, pdfBlob);
+        }
+
+        // Hide the print container again
+        printContainer.style.display = '';
+        printContainer.style.position = '';
+        printContainer.style.left = '';
+        printContainer.style.top = '';
+
+        // Generate and download the final ZIP
+        const content = await zip.generateAsync({ type: 'blob' });
+        const url = URL.createObjectURL(content);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `All_Statements_${monthShort}_${yearShort}.zip`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+      } catch (error) {
+        console.error('Error generating ZIP:', error);
+        alert('Failed to generate ZIP folder. Please check the console for details.');
+      } finally {
+        setIsZipping(false);
+        setPrintTarget(null); // Reset the render target
+      }
+    }, 500); // 500ms delay ensures React finishes rendering the elements before we snapshot them
   };
 
   // Determine which statements to render in the hidden print area
@@ -86,9 +165,9 @@ export function BillingModule({ sys }) {
   }, [selectedMonth]);
 
   return (
-    <div className="p-8 h-full overflow-y-auto relative print:p-0 print:overflow-visible">
+    <div className="p-8 h-full overflow-y-auto relative">
       
-      {/* CRITICAL PRINT STYLES - "Natural Flow" Isolation */}
+      {/* HARD-INJECTED PRINT STYLES */}
       <style type="text/css">
         {`
           @media print {
@@ -106,23 +185,8 @@ export function BillingModule({ sys }) {
             }
             /* Hide the main app UI when printing */
             #screen-ui { display: none !important; }
-            
-            /* Un-hide the print container, force it to top-left and 100% width */
-            #print-ui { 
-              display: block !important; 
-              position: absolute !important;
-              left: 0 !important;
-              top: 0 !important;
-              width: 100% !important;
-              background: white !important;
-            }
-            *, html, body, div, p, span, h1, h2, h3, table, th, td {
-              font-family: ${CJK_FONT} !important;
-            }
-            tr, td, th {
-              page-break-inside: avoid;
-              break-inside: avoid;
-            }
+            /* Show only the print container */
+            #print-ui { display: block !important; }
           }
         `}
       </style>
@@ -138,17 +202,33 @@ export function BillingModule({ sys }) {
               Statements of Account (SOA)
             </h1>
             <p className="text-base text-slate-500 mt-1">
-              Generate and batch-print monthly summaries for your customers.
+              Generate, print, or download batch summaries for your customers.
             </p>
           </div>
-          <button
-            className="flex items-center rounded-xl bg-blue-600 px-6 py-2.5 font-medium text-white shadow-lg transition-all hover:bg-blue-700 active:scale-95 disabled:opacity-50"
-            onClick={() => handlePrint('ALL')}
-            disabled={statementData.length === 0}
-            type="button"
-          >
-            <Printer className="mr-2" size={18} /> Print ALL Statements
-          </button>
+          
+          <div className="flex items-center space-x-3">
+            <button
+              className="flex items-center rounded-xl bg-indigo-600 px-6 py-2.5 font-medium text-white shadow-lg transition-all hover:bg-indigo-700 active:scale-95 disabled:opacity-50"
+              onClick={handleDownloadZip}
+              disabled={statementData.length === 0 || isZipping}
+              type="button"
+            >
+              {isZipping ? (
+                <><Loader2 className="mr-2 animate-spin" size={18} /> Zipping Files...</>
+              ) : (
+                <><Download className="mr-2" size={18} /> Download ZIP</>
+              )}
+            </button>
+
+            <button
+              className="flex items-center rounded-xl bg-blue-600 px-6 py-2.5 font-medium text-white shadow-lg transition-all hover:bg-blue-700 active:scale-95 disabled:opacity-50"
+              onClick={() => handlePrint('ALL')}
+              disabled={statementData.length === 0 || isZipping}
+              type="button"
+            >
+              <Printer className="mr-2" size={18} /> Print ALL
+            </button>
+          </div>
         </div>
 
         <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
@@ -218,64 +298,68 @@ export function BillingModule({ sys }) {
       </div>
 
       {/* ========================================================================= */}
-      {/* PRINT UI (HIDDEN ON SCREEN, VISIBLE ON PRINT) */}
+      {/* PRINT UI (HIDDEN ON SCREEN, VISIBLE ON PRINT OR WHILE ZIPPING) */}
       {/* ========================================================================= */}
       <div id="print-ui" className="hidden">
         {statementsToPrint.map((data, index) => (
           <div 
             key={data.customer?.id || index} 
-            className="page-break flex w-full max-w-[210mm] min-h-[297mm] flex-col bg-white p-[15mm] text-black shadow-2xl mx-auto mb-12 print:w-full print:max-w-none print:min-h-0 print:h-auto print:shadow-none print:mb-0 print:m-0 box-border shrink-0"
+            className="page-break w-[210mm] min-h-[297mm] bg-white p-[15mm] text-black flex flex-col mx-auto box-border"
             style={{ fontFamily: CJK_FONT }}
           >
             {/* EXACT MATCH HEADER LAYOUT */}
-            <div className="flex w-full mb-6 items-center">
+            <div className="flex w-full mb-6 justify-between">
               
-              {/* LEFT COLUMN: Logo + Company Text */}
-              <div className="w-[75%] flex items-center pr-4">
-                <div className="w-[120px] shrink-0 mr-5">
-                  <img src={logo} alt="Three Leaves Logo" className="w-full h-auto object-contain" />
-                </div>
-                <div className="flex-1 text-left leading-snug">
-                  <h1 className="font-bold text-[18px] text-black" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
-                  <h2 className="font-bold text-[16px] mb-1 text-black" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
-                  
-                  <div className="text-[#d55e2d] font-bold text-[11px] leading-[1.4] tracking-tight">
-                    <p>CO.REG NO.53033969B &nbsp;&nbsp; GST REG NO. M90355440L</p>
-                    <p>280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
-                    <p>HP: 97578869 (Mr Ye) &nbsp;&nbsp; HP: 91113505 (Min) &nbsp;&nbsp; Email: 3leaves.sg@gmail.com</p>
+              {/* LEFT COLUMN */}
+              <div className="flex-1 flex flex-col pr-4">
+                <div className="flex items-center mb-5">
+                  <div className="w-[110px] shrink-0 mr-4">
+                    <img src={logo} alt="Three Leaves Logo" className="w-full h-auto object-contain" />
+                  </div>
+                  <div className="flex-1 text-left leading-snug pt-2 whitespace-nowrap overflow-visible">
+                    <h1 className="font-black text-[17px]" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
+                    <h2 className="font-bold text-[16px] mb-1" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
+                    
+                    <div className="text-[#d55e2d] font-bold text-[10px] leading-tight tracking-tighter">
+                      <p>CO.REG NO.53033969B &nbsp;&nbsp; GST REG NO. M90355440L</p>
+                      <p>280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
+                      <p>HP: 97578869 (Mr Ye) &nbsp;&nbsp; HP: 91113505 (Min) &nbsp;&nbsp; Email: 3leaves.sg@gmail.com</p>
+                    </div>
                   </div>
                 </div>
+
+                <div className="flex justify-between items-end w-full mb-2 text-[14px] font-bold">
+                  <div className="flex items-end flex-1 pr-4">
+                    <span className="shrink-0 mr-2 text-black">TO:</span>
+                    <span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[13px] tracking-tight" style={{ fontFamily: CJK_FONT }}>
+                      {data.customerName}
+                    </span>
+                  </div>
+                  <div className="flex items-end w-[40%] pl-2">
+                    <span className="shrink-0 mr-2 text-black">STMT MONTH:</span>
+                    <span className="flex-1 text-center border-b border-black pb-0.5 uppercase">
+                      {displayMonth}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-end w-full text-[14px] font-bold">
+                  <span className="shrink-0 mr-2 text-black">ADDRESS:</span>
+                  <span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[12px] tracking-tighter" style={{ fontFamily: CJK_FONT }}>
+                    {data.customer?.address || ''}
+                  </span>
+                </div>
               </div>
 
-              {/* RIGHT COLUMN: Title */}
-              <div className="w-[25%] flex flex-col items-start pl-4 border-l border-transparent">
-                <h2 className="text-[26px] font-bold tracking-[0.4em] leading-none mb-1 text-black" style={{ fontFamily: CJK_FONT }}>结账单</h2>
-                <h3 className="text-[16px] font-black tracking-wide uppercase mb-6 text-black">STATEMENT</h3>
-              </div>
-            </div>
-
-            {/* ALIGNED META DATA */}
-            <div className="flex flex-col w-full mb-6 text-[15px] font-bold text-black">
-              <div className="flex w-full items-end mb-3">
-                <span className="mr-3 shrink-0 uppercase">TO:</span>
-                <span className="flex-1 border-b border-black pb-0.5" style={{ fontFamily: CJK_FONT }}>
-                  {data.customerName}
-                </span>
-                <span className="ml-6 mr-3 shrink-0 uppercase">STMT MONTH:</span>
-                <span className="w-40 border-b border-black pb-0.5 text-center uppercase">
-                  {displayMonth}
-                </span>
-              </div>
-              <div className="flex w-full items-end">
-                <span className="mr-3 shrink-0 uppercase">ADDRESS:</span>
-                <span className="flex-1 border-b border-black pb-0.5 break-words whitespace-pre-wrap" style={{ fontFamily: CJK_FONT }}>
-                  {data.customer?.address || ''}
-                </span>
+              {/* RIGHT COLUMN */}
+              <div className="w-[180px] shrink-0 flex flex-col items-start pl-4 pt-1">
+                <h2 className="text-[22px] font-bold tracking-[0.4em] leading-none mb-1" style={{ fontFamily: CJK_FONT }}>结账单</h2>
+                <h3 className="text-[15px] font-black tracking-wide uppercase mb-6 text-black">STATEMENT</h3>
               </div>
             </div>
 
             {/* STATEMENT TABLE */}
-            <table className="w-full text-[15px] border-2 border-black text-center mb-0 leading-tight flex-grow mt-2" style={{ fontFamily: CJK_FONT }}>
+            <table className="w-full text-[15px] border-2 border-black text-center mb-0 leading-tight flex-grow" style={{ fontFamily: CJK_FONT }}>
               <thead className="border-b-2 border-black">
                 <tr className="font-bold bg-white text-[14px]">
                   <th className="py-2 px-2 border-r border-black text-left w-40">DATE</th>
@@ -283,7 +367,7 @@ export function BillingModule({ sys }) {
                   <th className="py-2 px-2 text-right w-48">AMOUNT</th>
                 </tr>
               </thead>
-              <tbody style={{ fontFamily: CJK_FONT }}>
+              <tbody>
                 {data.invoices.map((inv, idx) => {
                   const billed = inv.total || 0;
 
@@ -321,7 +405,7 @@ export function BillingModule({ sys }) {
               </div>
             </div>
 
-            {/* NEW FOOTER MESSAGE WITH QR CODE & BANK DETAILS */}
+            {/* FOOTER MESSAGE WITH QR CODE & BANK DETAILS */}
             <div className="mt-8 pt-4 border-t border-black flex" style={{ fontFamily: CJK_FONT }}>
               <div className="flex items-center">
                 <div className="w-[80px] h-[80px] shrink-0 mr-5">
