@@ -31,8 +31,8 @@ function InventoryFormModal({ item, onClose, onSave, onDelete }) {
     stock: item?.stock ?? item?.Stock ?? 0,
   });
 
-  // Automatically switch to Custom mode if the existing unit isn't in our default list
-  const initialIsCustom = formData.Unit && !DEFAULT_UNITS.includes(formData.Unit);
+  const safeUnit = String(formData.Unit || '');
+  const initialIsCustom = safeUnit && !DEFAULT_UNITS.includes(safeUnit);
   const [isCustomUnit, setIsCustomUnit] = useState(initialIsCustom);
 
   const handleChange = (e) => {
@@ -44,7 +44,7 @@ function InventoryFormModal({ item, onClose, onSave, onDelete }) {
     const val = e.target.value;
     if (val === '__CUSTOM__') {
       setIsCustomUnit(true);
-      setFormData({ ...formData, Unit: '' }); // Clear it so they can type
+      setFormData({ ...formData, Unit: '' }); 
     } else {
       setFormData({ ...formData, Unit: val });
     }
@@ -119,20 +119,18 @@ function InventoryFormModal({ item, onClose, onSave, onDelete }) {
               />
             </div>
             
-            {/* UPDATED UNIT SELECTOR */}
             <div>
               <label className="block text-sm text-slate-500 mb-1">Unit</label>
               {!isCustomUnit ? (
                 <select
                   name="Unit"
-                  value={DEFAULT_UNITS.includes(formData.Unit) ? formData.Unit : ''}
+                  value={DEFAULT_UNITS.includes(safeUnit) ? safeUnit : ''}
                   onChange={handleUnitDropdown}
                   className="w-full border border-slate-200 rounded-xl p-3 text-base text-center text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer"
                 >
                   {DEFAULT_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
-                  {/* Safety fallback if the unit exists but isn't in default list */}
-                  {formData.Unit && !DEFAULT_UNITS.includes(formData.Unit) && (
-                    <option value={formData.Unit}>{formData.Unit}</option>
+                  {safeUnit && !DEFAULT_UNITS.includes(safeUnit) && (
+                    <option value={safeUnit}>{safeUnit}</option>
                   )}
                   <option value="__CUSTOM__" className="font-bold text-blue-600">+ Add Custom...</option>
                 </select>
@@ -235,13 +233,16 @@ export function InventoryModule({ sys }) {
     }, 6000); 
   };
 
-  const filteredInventory = sys.inventory.filter((item) => {
-    const sku = item.sku || item.SKU || '';
-    const name = item.Name || item.name || item.Items || '';
-    const desc = item.Description || item.description || '';
-    const packing = item.Packing || '';
+  // BULLETPROOF FALLBACK: Ensure inventory is an array and safely convert all fields to strings before searching
+  const safeInventoryArray = Array.isArray(sys?.inventory) ? sys.inventory : [];
+  
+  const filteredInventory = safeInventoryArray.filter((item) => {
+    const sku = String(item?.sku || item?.SKU || '');
+    const name = String(item?.Name || item?.name || item?.Items || '');
+    const desc = String(item?.Description || item?.description || '');
+    const packing = String(item?.Packing || item?.packaging || '');
     
-    const searchLower = searchTerm.toLowerCase();
+    const searchLower = String(searchTerm).toLowerCase();
     return (
       sku.toLowerCase().includes(searchLower) ||
       name.toLowerCase().includes(searchLower) ||
@@ -256,8 +257,6 @@ export function InventoryModule({ sys }) {
       const oldPrice = isEditing ? (editingItem.Price || editingItem.unitPrice || editingItem['Unit Price (SG)']) : 0;
       const priceChanged = isEditing && Number(oldPrice) !== Number(formData.Price);
 
-      let finalId = formData.id;
-
       const payload = {
         SKU: formData.sku,
         Name: formData.Name,
@@ -271,14 +270,16 @@ export function InventoryModule({ sys }) {
       let savedProduct;
 
       if (isEditing) {
-        finalId = editingItem.id || formData.id;
-        const isUUID = finalId && finalId.length === 36 && finalId.includes('-');
+        const finalId = editingItem.id || formData.id;
+        // BULLETPROOF FALLBACK: Force finalId to string to prevent numerical crash
+        const finalIdStr = String(finalId || '');
+        const isUUID = finalIdStr.length === 36 && finalIdStr.includes('-');
         
         if (isUUID) {
           const { data, error } = await supabase
             .from('product_list')
             .update(payload)
-            .eq('id', finalId)
+            .eq('id', finalIdStr)
             .select()
             .single();
             
@@ -308,7 +309,7 @@ export function InventoryModule({ sys }) {
       }
 
       if (isEditing) {
-        const updatedInventory = sys.inventory.map(item => {
+        const updatedInventory = safeInventoryArray.map(item => {
           const matchById = item.id && item.id === (editingItem.id || formData.id);
           const matchByName = !item.id && (item.Name === editingItem.Name || item.name === editingItem.Name || item.Items === editingItem.Name);
           
@@ -319,7 +320,7 @@ export function InventoryModule({ sys }) {
         });
         sys.setInventory(updatedInventory);
       } else {
-        sys.setInventory([savedProduct, ...sys.inventory]);
+        sys.setInventory([savedProduct, ...safeInventoryArray]);
       }
 
       if (priceChanged && savedProduct?.id) {
@@ -345,13 +346,13 @@ export function InventoryModule({ sys }) {
     const itemName = itemToRemove.Name || itemToRemove.name || itemToRemove.Items;
     if (window.confirm(`Are you sure you want to delete ${itemName}?`)) {
       try {
-        const updatedInventory = sys.inventory.filter(item => {
+        const updatedInventory = safeInventoryArray.filter(item => {
           if (itemToRemove.id && item.id) return item.id !== itemToRemove.id;
           return (item.Name || item.name || item.Items) !== itemName;
         });
         sys.setInventory(updatedInventory);
         
-        const isUUID = itemToRemove.id && itemToRemove.id.length === 36;
+        const isUUID = itemToRemove.id && String(itemToRemove.id).length === 36;
         if (isUUID) {
           const { error } = await supabase
             .from('product_list')
@@ -430,13 +431,13 @@ export function InventoryModule({ sys }) {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {filteredInventory.map((item, idx) => {
-              const sku = item.sku || item.SKU || '-';
-              const name = item.Name || item.name || item.Items || 'Unnamed Product';
-              const unit = item.Unit || item.unit || '-';
-              const desc = item.Description || item.description || '-';
-              const packing = item.Packing || item.packaging || '-';
-              const price = item.Price || item.unitPrice || item['Unit Price (SG)'] || 0;
-              const stock = item.stock ?? item.Stock ?? 0; 
+              const sku = item?.sku || item?.SKU || '-';
+              const name = item?.Name || item?.name || item?.Items || 'Unnamed Product';
+              const unit = item?.Unit || item?.unit || '-';
+              const desc = item?.Description || item?.description || '-';
+              const packing = item?.Packing || item?.packaging || '-';
+              const price = item?.Price || item?.unitPrice || item?.['Unit Price (SG)'] || 0;
+              const stock = item?.stock ?? item?.Stock ?? 0; 
 
               return (
                 <tr key={item.id || `fallback-${idx}`} className="hover:bg-slate-50 transition-colors">
