@@ -26,13 +26,13 @@ function ProductSearchSelect({ value, inventory, onChange }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const safeInventory = inventory || [];
+  const safeInventory = Array.isArray(inventory) ? inventory : [];
   const selectedProduct = safeInventory.find((entry) => entry.id === value);
-  const displayName = selectedProduct ? (selectedProduct.Name || selectedProduct.name || selectedProduct.Items) : '';
+  const displayName = selectedProduct ? String(selectedProduct.Name || selectedProduct.name || selectedProduct.Items || '') : '';
 
   const filteredInventory = safeInventory.filter((item) => {
-    const itemName = (item.Name || item.name || item.Items || '').toLowerCase();
-    return itemName.includes(searchTerm.toLowerCase());
+    const itemName = String(item.Name || item.name || item.Items || '').toLowerCase();
+    return itemName.includes(String(searchTerm).toLowerCase());
   });
 
   return (
@@ -54,7 +54,7 @@ function ProductSearchSelect({ value, inventory, onChange }) {
           <div className="max-h-52 overflow-y-auto">
             {filteredInventory.length > 0 ? (
               filteredInventory.map((item) => {
-                const itemName = item.Name || item.name || item.Items || 'Unnamed Product';
+                const itemName = String(item.Name || item.name || item.Items || 'Unnamed Product');
                 return (
                   <button key={item.id} type="button" className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 border-b border-slate-100 last:border-0 transition-colors" onClick={() => { onChange(item.id); setIsOpen(false); }}>
                     {itemName}
@@ -85,11 +85,11 @@ function CustomerSearchSelect({ value, customers, onChange, disabled }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const safeCustomers = customers || [];
+  const safeCustomers = Array.isArray(customers) ? customers : [];
   const selectedCustomer = safeCustomers.find((c) => c.id === value);
-  const displayName = selectedCustomer ? selectedCustomer.name : '';
+  const displayName = selectedCustomer ? String(selectedCustomer.name || '') : '';
 
-  const filteredCustomers = safeCustomers.filter((c) => (c.name || '').toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredCustomers = safeCustomers.filter((c) => String(c.name || '').toLowerCase().includes(String(searchTerm).toLowerCase()));
 
   return (
     <div className="relative w-full text-left" ref={dropdownRef}>
@@ -112,7 +112,7 @@ function CustomerSearchSelect({ value, customers, onChange, disabled }) {
             {filteredCustomers.length > 0 ? (
               filteredCustomers.map((c) => (
                 <button key={c.id} type="button" className="w-full text-left px-4 py-3 text-sm font-bold text-slate-700 hover:bg-blue-50 border-b border-slate-100 last:border-0 transition-colors" onClick={() => { onChange(c.id); setIsOpen(false); }}>
-                  {c.name}
+                  {String(c.name || '')}
                 </button>
               ))
             ) : (<div className="p-4 text-center text-sm text-slate-400 font-medium">No customers found.</div>)}
@@ -128,6 +128,7 @@ function CustomerSearchSelect({ value, customers, onChange, disabled }) {
 // ==========================================
 function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBack, onRegister, paymentTerms, subtotal, sys, total, existingInvoice }) {
   const customerAddress = customer?.address || existingInvoice?.address || '';
+  const safeInventory = Array.isArray(sys?.inventory) ? sys.inventory : [];
 
   return (
     <div className="fixed inset-0 z-[3000] overflow-y-auto bg-slate-950/90 print:static print:block print:bg-white print:p-0 print:backdrop-filter-none">
@@ -172,7 +173,7 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
             <Eye size={24} className="mr-3 text-blue-400" />
             <div>
               <h2 className="text-sm font-black tracking-widest uppercase text-slate-200">Invoice Layout Check</h2>
-              <p className="text-lg font-bold text-white leading-none mt-0.5">#{invoiceNumber}</p>
+              <p className="text-lg font-bold text-white leading-none mt-0.5">#{String(invoiceNumber)}</p>
             </div>
           </div>
           <div className="flex items-center space-x-3">
@@ -213,7 +214,7 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
                 <div className="flex items-end flex-1 pr-4">
                   <span className="shrink-0 mr-2 text-black">TO:</span>
                   <span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[13px] tracking-tight" style={{ fontFamily: CJK_FONT }}>
-                    {customer?.name || existingInvoice?.customer || ''}
+                    {String(customer?.name || existingInvoice?.customer || '')}
                   </span>
                 </div>
                 <div className="flex items-end w-[35%] pl-2">
@@ -227,7 +228,7 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
               <div className="flex items-end w-full text-[14px] font-bold">
                 <span className="shrink-0 mr-2 text-black">ADDRESS:</span>
                 <span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[12px] tracking-tighter" style={{ fontFamily: CJK_FONT }}>
-                  {customerAddress}
+                  {String(customerAddress)}
                 </span>
               </div>
             </div>
@@ -239,7 +240,7 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
               <div className="w-full flex flex-col gap-3 mt-auto mb-2">
                 <div className="flex items-baseline">
                   <span className="font-bold w-[50px] shrink-0 text-black text-[15px]">No.</span>
-                  <span className="text-red-600 font-bold tracking-wider text-[17px] leading-none">{invoiceNumber}</span>
+                  <span className="text-red-600 font-bold tracking-wider text-[17px] leading-none">{String(invoiceNumber)}</span>
                 </div>
                 <div className="flex items-baseline">
                   <span className="font-bold w-[50px] shrink-0 text-black text-[15px]">Term:</span>
@@ -260,21 +261,21 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
               </tr>
             </thead>
             <tbody style={{ fontFamily: CJK_FONT }}>
-              {(items || []).map((item, idx) => {
-                const foundProduct = (sys.inventory || []).find((entry) => entry.id === item.itemId);
-                const productName = foundProduct ? (foundProduct.Name || foundProduct.name || foundProduct.Items) : (item.Name || item.name || '-');
+              {(Array.isArray(items) ? items : []).map((item, idx) => {
+                const foundProduct = safeInventory.find((entry) => entry.id === item.itemId);
+                const productName = foundProduct ? String(foundProduct.Name || foundProduct.name || foundProduct.Items || '') : String(item.Name || item.name || '-');
                 return (
                   <tr key={idx} className="h-[25px] align-top" style={{ fontFamily: CJK_FONT }}>
                     <td className="px-1 py-0.5 border-r border-black font-medium text-center">{idx + 1}</td>
                     <td className="px-1 py-0.5 border-r border-black text-left pl-2 font-bold leading-none pt-1" style={{ fontFamily: CJK_FONT }}>{productName}</td>
-                    <td className="px-1 py-0.5 border-r border-black font-medium text-center" style={{ fontFamily: CJK_FONT }}>{item.qty || item.quantity} {item.unit || item.Unit}</td>
+                    <td className="px-1 py-0.5 border-r border-black font-medium text-center" style={{ fontFamily: CJK_FONT }}>{String(item.qty || item.quantity || 0)} {String(item.unit || item.Unit || '')}</td>
                     <td className="px-1 py-0.5 border-r border-black text-center">${formatMoney(item.unitPrice)}</td>
                     <td className="px-1 py-0.5 text-center font-bold">${formatMoney((Number(item.qty || item.quantity) || 0) * (Number(item.unitPrice) || 0))}</td>
                   </tr>
                 );
               })}
               
-              {items && items.length < 20 && Array.from({ length: 20 - items.length }).map((_, i) => (
+              {Array.isArray(items) && items.length < 20 && Array.from({ length: 20 - items.length }).map((_, i) => (
                 <tr key={`blank-${i}`} className="h-[25px]">
                   <td className="border-r border-black"></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td></td>
                 </tr>
@@ -335,11 +336,15 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
 export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
   
   const [invoiceDate, setInvoiceDate] = useState(
-    existingInvoice ? existingInvoice.date : new Date().toISOString().split('T')[0]
+    existingInvoice ? String(existingInvoice.date || '') : new Date().toISOString().split('T')[0]
   );
   
   const [customerId, setCustomerId] = useState(existingInvoice?.customerId || '');
   
+  const safeInventory = Array.isArray(sys?.inventory) ? sys.inventory : [];
+  const safeCustomers = Array.isArray(sys?.customers) ? sys.customers : [];
+  const safeInvoices = Array.isArray(sys?.invoices) ? sys.invoices : [];
+
   const [items, setItems] = useState(() => {
     if (existingInvoice && Array.isArray(existingInvoice.items)) {
       return JSON.parse(JSON.stringify(existingInvoice.items));
@@ -350,7 +355,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
   const [paymentTerms, setPaymentTerms] = useState(existingInvoice?.paymentTerms || '30_days');
 
   const autoInvoiceNumber = useMemo(() => {
-    if (existingInvoice && invoiceDate === existingInvoice.date) return existingInvoice.number; 
+    if (existingInvoice && invoiceDate === existingInvoice.date) return String(existingInvoice.number || ''); 
 
     const dateObj = new Date(invoiceDate);
     if (isNaN(dateObj.getTime())) return '';
@@ -359,11 +364,11 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
     const mm = String(dateObj.getMonth() + 1).padStart(2, '0'); 
     const prefix = `${yy}${mm}`;
 
-    const monthlyInvoices = (sys.invoices || []).filter(inv => String(inv.number).startsWith(prefix));
+    const monthlyInvoices = safeInvoices.filter(inv => String(inv.number || '').startsWith(prefix));
     let maxSequence = 0;
     
     monthlyInvoices.forEach(inv => {
-      const seqStr = String(inv.number).slice(4); 
+      const seqStr = String(inv.number || '').slice(4); 
       const seqNum = parseInt(seqStr, 10);
       if (!isNaN(seqNum) && seqNum > maxSequence) {
         maxSequence = seqNum;
@@ -372,7 +377,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
 
     const nextSequence = String(maxSequence + 1).padStart(3, '0');
     return `${prefix}${nextSequence}`;
-  }, [sys.invoices, existingInvoice, invoiceDate]);
+  }, [safeInvoices, existingInvoice, invoiceDate]);
 
   const [invoiceNumber, setInvoiceNumber] = useState(autoInvoiceNumber);
 
@@ -387,23 +392,24 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
   
   const [priceModal, setPriceModal] = useState(null);
 
-  const customer = (sys.customers || []).find((entry) => entry.id === customerId);
+  const customer = safeCustomers.find((entry) => entry.id === customerId);
 
   const isDuplicateNumber = useMemo(() => {
-    return (sys.invoices || []).some(inv => String(inv.number) === String(invoiceNumber) && inv.id !== (existingInvoice ? existingInvoice.id : null));
-  }, [invoiceNumber, sys.invoices, existingInvoice]);
+    return safeInvoices.some(inv => String(inv.number || '') === String(invoiceNumber) && inv.id !== (existingInvoice ? existingInvoice.id : null));
+  }, [invoiceNumber, safeInvoices, existingInvoice]);
 
-  const subtotal = (items || []).reduce((sum, item) => sum + (Number(item.qty) || 0) * (Number(item.unitPrice) || 0), 0);
+  const subtotal = (Array.isArray(items) ? items : []).reduce((sum, item) => sum + (Number(item.qty || item.quantity) || 0) * (Number(item.unitPrice) || 0), 0);
   const gst = subtotal * 0.09;
   const total = subtotal + gst;
 
   const getSafePrice = (product, unit = '箱') => {
+    if (!product) return 0;
     const ruleKey = `${product.id}|${unit}`;
-    if (customer?.custom_prices && customer.custom_prices[ruleKey] !== undefined) {
-      return Number(customer.custom_prices[ruleKey]);
+    if (customer?.custom_prices && typeof customer.custom_prices === 'object' && customer.custom_prices[ruleKey] !== undefined) {
+      return Number(customer.custom_prices[ruleKey]) || 0;
     }
     let price = product.Price || product.unitPrice || product['Unit Price (SG)'] || 0;
-    return Number(price);
+    return Number(price) || 0;
   };
 
   useEffect(() => {
@@ -418,27 +424,27 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
       return;
     }
 
-    const history = (sys.invoices || []).filter((invoice) => invoice.customerId === customerId);
+    const history = safeInvoices.filter((invoice) => invoice.customerId === customerId);
     if (history.length === 0) { setItems([]); setAutoFillNotif(false); return; }
 
     const itemStats = {};
     history.forEach((invoice) => {
-      invoice.items?.forEach((item) => {
-        if (!itemStats[item.itemId]) { itemStats[item.itemId] = { count: 0, totalQty: 0, unit: item.unit || item.Unit }; }
+      (Array.isArray(invoice.items) ? invoice.items : []).forEach((item) => {
+        if (!itemStats[item.itemId]) { itemStats[item.itemId] = { count: 0, totalQty: 0, unit: String(item.unit || item.Unit || '') }; }
         itemStats[item.itemId].count += 1;
-        itemStats[item.itemId].totalQty += Number(item.qty || 0);
+        itemStats[item.itemId].totalQty += Number(item.qty || item.quantity || 0);
       });
     });
 
     const autoFilled = [];
     Object.entries(itemStats).forEach(([itemId, stats]) => {
       if (stats.count / history.length >= 0.9) {
-        const product = (sys.inventory || []).find((entry) => entry.id === itemId);
+        const product = safeInventory.find((entry) => entry.id === itemId);
         if (product) {
-          const determinedUnit = stats.unit || product.Unit || product.unit || '箱';
+          const determinedUnit = String(stats.unit || product.Unit || product.unit || '箱');
           autoFilled.push({
             itemId,
-            name: product.Name || product.name || product.Items,
+            name: String(product.Name || product.name || product.Items || ''),
             unit: determinedUnit,
             qty: Math.max(1, Math.round(stats.totalQty / stats.count)),
             unitPrice: getSafePrice(product, determinedUnit), 
@@ -454,27 +460,27 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
     } else {
       setItems([]); setAutoFillNotif(false);
     }
-  }, [customerId, sys.invoices, sys.inventory, existingInvoice]);
+  }, [customerId, safeInvoices, safeInventory, existingInvoice]);
 
   const suggestions = useMemo(() => {
     if (!customerId) return [];
-    const history = (sys.invoices || []).filter((invoice) => invoice.customerId === customerId);
+    const history = safeInvoices.filter((invoice) => invoice.customerId === customerId);
     if (history.length === 0) return [];
 
     const counts = {};
     history.forEach((invoice) => {
-      invoice.items?.forEach((item) => { counts[item.itemId] = (counts[item.itemId] || 0) + 1; });
+      (Array.isArray(invoice.items) ? invoice.items : []).forEach((item) => { counts[item.itemId] = (counts[item.itemId] || 0) + 1; });
     });
 
     return Object.entries(counts)
       .filter(([, count]) => { const confidence = count / history.length; return confidence >= 0.3 && confidence < 0.9; })
-      .map(([itemId]) => (sys.inventory || []).find((entry) => entry.id === itemId))
-      .filter((item) => item && !(items || []).find((draftItem) => draftItem.itemId === item.id));
-  }, [customerId, items, sys.invoices, sys.inventory]);
+      .map(([itemId]) => safeInventory.find((entry) => entry.id === itemId))
+      .filter((item) => item && !(Array.isArray(items) ? items : []).find((draftItem) => draftItem.itemId === item.id));
+  }, [customerId, items, safeInvoices, safeInventory]);
 
   const handleSmartExtract = () => {
-    const lines = parseText.split('\n').filter(l => l.trim() !== '');
-    const nextDraftItems = [...items];
+    const lines = String(parseText || '').split('\n').filter(l => l.trim() !== '');
+    const nextDraftItems = [...(Array.isArray(items) ? items : [])];
 
     lines.forEach((line) => {
       const quantityMatch = line.match(/(\d+)/);
@@ -482,8 +488,8 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
       const searchString = line.replace(/(\d+)/g, '').trim().toLowerCase();
       if (!searchString) return;
 
-      const scoredItems = (sys.inventory || []).map((inventoryItem) => {
-        const itemName = (inventoryItem.Name || inventoryItem.name || inventoryItem.Items || '').toLowerCase();
+      const scoredItems = safeInventory.map((inventoryItem) => {
+        const itemName = String(inventoryItem.Name || inventoryItem.name || inventoryItem.Items || '').toLowerCase();
         let score = 0;
 
         if (itemName === searchString) {
@@ -503,8 +509,8 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
           }
         }
 
-        if (inventoryItem.learned_phrases && inventoryItem.learned_phrases[searchString]) { 
-          score += (inventoryItem.learned_phrases[searchString] * 20); 
+        if (inventoryItem.learned_phrases && typeof inventoryItem.learned_phrases === 'object' && inventoryItem.learned_phrases[searchString]) { 
+          score += (Number(inventoryItem.learned_phrases[searchString]) || 0) * 20; 
         }
 
         return { item: inventoryItem, score };
@@ -514,10 +520,10 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
       const bestMatch = scoredItems[0];
 
       if (bestMatch && bestMatch.score >= 10) {
-        const determinedUnit = bestMatch.item.Unit || bestMatch.item.unit || '箱';
+        const determinedUnit = String(bestMatch.item.Unit || bestMatch.item.unit || '箱');
         nextDraftItems.push({
           itemId: bestMatch.item.id,
-          name: bestMatch.item.Name || bestMatch.item.name || bestMatch.item.Items,
+          name: String(bestMatch.item.Name || bestMatch.item.name || bestMatch.item.Items || ''),
           unit: determinedUnit,
           qty,
           unitPrice: getSafePrice(bestMatch.item, determinedUnit),
@@ -554,40 +560,44 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
   const handleRegister = (printAfter = false) => {
     const invoice = {
       id: existingInvoice ? existingInvoice.id : `INV-${invoiceNumber}`,
-      number: invoiceNumber,
+      number: String(invoiceNumber),
       customerId,
-      customer: customer?.name || existingInvoice?.customer || 'Unknown Customer',
-      region: customer?.region || existingInvoice?.region || '',
-      date: invoiceDate,
-      items,
+      customer: String(customer?.name || existingInvoice?.customer || 'Unknown Customer'),
+      region: String(customer?.region || existingInvoice?.region || ''),
+      date: String(invoiceDate),
+      items: Array.isArray(items) ? items : [],
       total,
-      status: existingInvoice ? existingInvoice.status : 'Paid',
-      deliveryStatus: existingInvoice ? existingInvoice.deliveryStatus : 'Pending',
-      paymentTerms,
+      status: existingInvoice ? String(existingInvoice.status || 'Paid') : 'Paid',
+      deliveryStatus: existingInvoice ? String(existingInvoice.deliveryStatus || 'Pending') : 'Pending',
+      paymentTerms: String(paymentTerms),
     };
 
-    const nextInventory = [...(sys.inventory || [])];
+    const nextInventory = [...safeInventory];
 
-    items.forEach((item) => {
+    (Array.isArray(items) ? items : []).forEach((item) => {
       if (!existingInvoice && item.itemId) {
         const stockIndex = nextInventory.findIndex((entry) => entry.id === item.itemId);
-        if (stockIndex > -1) { nextInventory[stockIndex].stock -= Number(item.qty) || 0; }
+        if (stockIndex > -1) { nextInventory[stockIndex].stock -= Number(item.qty || item.quantity) || 0; }
       }
 
       if (item.rawSearchString) {
         if (item.itemId) {
           const correctIndex = nextInventory.findIndex((entry) => entry.id === item.itemId);
           if (correctIndex > -1) {
-            if (!nextInventory[correctIndex].learned_phrases) { nextInventory[correctIndex].learned_phrases = {}; }
-            const currentScore = nextInventory[correctIndex].learned_phrases[item.rawSearchString] || 0;
+            if (!nextInventory[correctIndex].learned_phrases || typeof nextInventory[correctIndex].learned_phrases !== 'object') { 
+              nextInventory[correctIndex].learned_phrases = {}; 
+            }
+            const currentScore = Number(nextInventory[correctIndex].learned_phrases[item.rawSearchString]) || 0;
             nextInventory[correctIndex].learned_phrases[item.rawSearchString] = currentScore + 1;
           }
         }
         if (item.originalPredictedId && item.originalPredictedId !== item.itemId) {
           const wrongIndex = nextInventory.findIndex((entry) => entry.id === item.originalPredictedId);
           if (wrongIndex > -1) {
-            if (!nextInventory[wrongIndex].learned_phrases) { nextInventory[wrongIndex].learned_phrases = {}; }
-            const currentScore = nextInventory[wrongIndex].learned_phrases[item.rawSearchString] || 0;
+            if (!nextInventory[wrongIndex].learned_phrases || typeof nextInventory[wrongIndex].learned_phrases !== 'object') { 
+              nextInventory[wrongIndex].learned_phrases = {}; 
+            }
+            const currentScore = Number(nextInventory[wrongIndex].learned_phrases[item.rawSearchString]) || 0;
             nextInventory[wrongIndex].learned_phrases[item.rawSearchString] = currentScore - 1;
           }
         }
@@ -597,9 +607,9 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
     sys.setInventory(nextInventory);
 
     if (existingInvoice) {
-      sys.setInvoices((sys.invoices || []).map(inv => inv.id === existingInvoice.id ? invoice : inv));
+      sys.setInvoices(safeInvoices.map(inv => inv.id === existingInvoice.id ? invoice : inv));
     } else {
-      sys.setInvoices([...(sys.invoices || []), invoice]);
+      sys.setInvoices([...safeInvoices, invoice]);
     }
 
     if (printAfter) { setTimeout(() => { window.print(); onClose(); }, 500); } else { onClose(); }
@@ -607,7 +617,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
 
   const executePriceSave = async (type, newPriceStr) => {
     const { index, item, product } = priceModal;
-    const newPrice = Number(newPriceStr);
+    const newPrice = Number(newPriceStr) || 0;
     const ruleKey = `${product.id}|${item.unit}`;
 
     try {
@@ -616,24 +626,24 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
         const { error } = await supabase.from('customers').update({ custom_prices: updatedCustomPrices }).eq('id', customer.id);
         if (error) throw error;
         
-        sys.setCustomers(sys.customers.map(c => c.id === customer.id ? { ...c, custom_prices: updatedCustomPrices } : c));
+        sys.setCustomers(safeCustomers.map(c => c.id === customer.id ? { ...c, custom_prices: updatedCustomPrices } : c));
       } 
       
       else if (type === 'GLOBAL') {
-        const isUUID = product.id && product.id.length === 36 && product.id.includes('-');
+        const isUUID = product.id && String(product.id).length === 36 && String(product.id).includes('-');
         let dbError;
 
         if (isUUID) {
           const { error } = await supabase.from('product_list').update({ Price: newPrice }).eq('id', product.id);
           dbError = error;
         } else {
-          const legacyName = product.Name || product.name || product.Items;
+          const legacyName = String(product.Name || product.name || product.Items || '');
           const { error } = await supabase.from('product_list').update({ Price: newPrice }).eq('Name', legacyName);
           dbError = error;
         }
 
         if (dbError) throw dbError;
-        sys.setInventory(sys.inventory.map(p => p.id === product.id ? { ...p, Price: newPrice } : p));
+        sys.setInventory(safeInventory.map(p => p.id === product.id ? { ...p, Price: newPrice } : p));
       }
       
       else if (type === 'REMOVE_CUSTOMER') {
@@ -643,17 +653,17 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
         const { error } = await supabase.from('customers').update({ custom_prices: updatedCustomPrices }).eq('id', customer.id);
         if (error) throw error;
 
-        sys.setCustomers(sys.customers.map(c => c.id === customer.id ? { ...c, custom_prices: updatedCustomPrices } : c));
+        sys.setCustomers(safeCustomers.map(c => c.id === customer.id ? { ...c, custom_prices: updatedCustomPrices } : c));
         
-        const fallbackPrice = product.Price || product.unitPrice || product['Unit Price (SG)'] || 0;
-        const nextItems = [...items];
+        const fallbackPrice = Number(product.Price || product.unitPrice || product['Unit Price (SG)']) || 0;
+        const nextItems = [...(Array.isArray(items) ? items : [])];
         nextItems[index].unitPrice = fallbackPrice;
         setItems(nextItems);
         setPriceModal(null);
         return;
       }
 
-      const nextItems = [...items];
+      const nextItems = [...(Array.isArray(items) ? items : [])];
       nextItems[index].unitPrice = newPrice;
       setItems(nextItems);
       setPriceModal(null);
@@ -711,7 +721,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
             <div className="mb-12 flex justify-between">
               <div className="w-[30%] border-r border-slate-100 pr-6">
                 <label className="text-[10px] font-black uppercase text-gray-400">Customer Account:</label>
-                <CustomerSearchSelect value={customerId} customers={sys.customers} onChange={setCustomerId} disabled={!!existingInvoice} />
+                <CustomerSearchSelect value={customerId} customers={safeCustomers} onChange={setCustomerId} disabled={!!existingInvoice} />
                 {autoFillNotif && (<p className="mt-2 flex items-center text-[10px] font-black uppercase tracking-widest text-emerald-500"><Sparkles className="mr-1" size={12} /> Predictively Prefilled</p>)}
               </div>
 
@@ -745,10 +755,10 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                   {suggestions.map((item) => (
                     <button key={item.id} className="rounded border border-blue-100 bg-white px-3 py-1.5 text-[10px] font-bold text-blue-700 shadow-sm"
                       onClick={() => {
-                        const determinedUnit = item.Unit || item.unit || '箱';
-                        setItems([...items, { itemId: item.id, name: item.Name || item.name || item.Items, unit: determinedUnit, qty: 1, unitPrice: getSafePrice(item, determinedUnit), picked: false, suggestions: [] }])
+                        const determinedUnit = String(item.Unit || item.unit || '箱');
+                        setItems([...(Array.isArray(items) ? items : []), { itemId: item.id, name: String(item.Name || item.name || item.Items || ''), unit: determinedUnit, qty: 1, unitPrice: getSafePrice(item, determinedUnit), picked: false, suggestions: [] }])
                       }} type="button">
-                      + {item.Name || item.name || item.Items}
+                      + {String(item.Name || item.name || item.Items || '')}
                     </button>
                   ))}
                 </div>
@@ -768,9 +778,37 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                 </tr>
               </thead>
               <tbody>
-                {items.map((item, index) => {
-                  const ruleKey = `${item.itemId}|${item.unit}`;
-                  const hasCustomPrice = customer?.custom_prices && customer.custom_prices[ruleKey] !== undefined;
+                {(Array.isArray(items) ? items : []).map((item, index) => {
+                  const safeItemUnit = String(item.unit || '');
+                  const ruleKey = `${item.itemId}|${safeItemUnit}`;
+                  const hasCustomPrice = customer?.custom_prices && typeof customer.custom_prices === 'object' && customer.custom_prices[ruleKey] !== undefined;
+
+                  // NEW: GET DYNAMIC UNIT OPTIONS FOR THIS SPECIFIC PRODUCT
+                  const selectedProduct = safeInventory.find(p => p.id === item.itemId);
+                  let rowUnitOptions = [];
+
+                  if (selectedProduct) {
+                    const defaultUnit = String(selectedProduct.Unit || selectedProduct.unit || '箱');
+                    rowUnitOptions.push({ value: defaultUnit, label: defaultUnit });
+
+                    if (customer?.custom_prices && typeof customer.custom_prices === 'object') {
+                      Object.keys(customer.custom_prices).forEach(key => {
+                        const [pid, pUnit] = key.split('|');
+                        if (pid === selectedProduct.id && pUnit !== defaultUnit) {
+                          rowUnitOptions.push({ value: pUnit, label: `${pUnit} (Custom)` });
+                        }
+                      });
+                    }
+
+                    if (safeItemUnit && !rowUnitOptions.find(opt => opt.value === safeItemUnit)) {
+                      rowUnitOptions.push({ value: safeItemUnit, label: safeItemUnit });
+                    }
+                  } else {
+                    rowUnitOptions = Array.isArray(UNIT_OPTIONS) ? UNIT_OPTIONS : [];
+                    if (safeItemUnit && !rowUnitOptions.find(opt => opt.value === safeItemUnit)) {
+                      rowUnitOptions.push({ value: safeItemUnit, label: safeItemUnit });
+                    }
+                  }
 
                   return (
                     <tr className={`border-b font-bold ${!item.itemId && item.rawSearchString ? 'bg-amber-50/30 border-amber-100' : 'border-gray-100'}`} key={`${item.itemId}-${index}`}>
@@ -778,7 +816,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                       <td className="p-2 relative align-top pt-3">
                         <div className="flex items-center space-x-2">
                           <input checked={item.picked || false} className="h-4 w-4 cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500 shrink-0" onChange={(event) => { const nextItems = [...items]; nextItems[index].picked = event.target.checked; setItems(nextItems); }} type="checkbox" />
-                          <ProductSearchSelect value={item.itemId} inventory={sys.inventory} onChange={(selectedId) => { const product = (sys.inventory || []).find((entry) => entry.id === selectedId); if (!product) return; const nextItems = [...items]; const determinedUnit = product.Unit || product.unit || '箱'; nextItems[index] = { ...nextItems[index], itemId: selectedId, name: product.Name || product.name || product.Items, unit: determinedUnit, unitPrice: getSafePrice(product, determinedUnit), suggestions: [] }; setItems(nextItems); }} />
+                          <ProductSearchSelect value={item.itemId} inventory={safeInventory} onChange={(selectedId) => { const product = safeInventory.find((entry) => entry.id === selectedId); if (!product) return; const nextItems = [...items]; const determinedUnit = String(product.Unit || product.unit || '箱'); nextItems[index] = { ...nextItems[index], itemId: selectedId, name: String(product.Name || product.name || product.Items || ''), unit: determinedUnit, unitPrice: getSafePrice(product, determinedUnit), suggestions: [] }; setItems(nextItems); }} />
                         </div>
                         
                         {item.rawSearchString && item.itemId && (
@@ -794,8 +832,8 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                             </p>
                             <div className="flex flex-wrap gap-2">
                               {item.suggestions.map((sugg) => {
-                                const suggName = sugg.Name || sugg.name || sugg.Items;
-                                const suggUnit = sugg.Unit || sugg.unit || '箱';
+                                const suggName = String(sugg.Name || sugg.name || sugg.Items || '');
+                                const suggUnit = String(sugg.Unit || sugg.unit || '箱');
                                 return (
                                   <button
                                     key={sugg.id}
@@ -829,21 +867,22 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                         )}
                       </td>
                       <td className="p-2 align-top pt-4">
-                        <select className="w-full border-none text-center text-xs font-bold focus:ring-0 bg-transparent m-0" onChange={(event) => { const nextItems = [...items]; const newUnit = event.target.value; nextItems[index].unit = newUnit; const product = (sys.inventory || []).find(p => p.id === nextItems[index].itemId); if (product) { nextItems[index].unitPrice = getSafePrice(product, newUnit); } setItems(nextItems); }} value={item.unit}>
-                          {UNIT_OPTIONS.map((option) => (<option key={option.value} value={option.value}>{option.label}</option>))}
+                        {/* NEW: DYNAMIC PRODUCT-SPECIFIC UNIT FILTER */}
+                        <select className="w-full border-none text-center text-xs font-bold focus:ring-0 bg-transparent m-0" onChange={(event) => { const nextItems = [...items]; const newUnit = event.target.value; nextItems[index].unit = newUnit; const product = safeInventory.find(p => p.id === nextItems[index].itemId); if (product) { nextItems[index].unitPrice = getSafePrice(product, newUnit); } setItems(nextItems); }} value={safeItemUnit}>
+                          {rowUnitOptions.map((option) => (<option key={option.value} value={option.value}>{option.label}</option>))}
                         </select>
                       </td>
                       <td className="p-2 align-top pt-3">
-                        <input className="w-full border-none bg-transparent p-1 text-center font-black text-blue-600 focus:ring-0 m-0" onChange={(event) => { const nextItems = [...items]; nextItems[index].qty = event.target.value; setItems(nextItems); }} type="number" value={item.qty} />
+                        <input className="w-full border-none bg-transparent p-1 text-center font-black text-blue-600 focus:ring-0 m-0" onChange={(event) => { const nextItems = [...items]; nextItems[index].qty = event.target.value; setItems(nextItems); }} type="number" value={item.qty || item.quantity || ''} />
                       </td>
                       <td className="p-2 align-top pt-3 text-right">
-                        <input className="w-full border-none bg-transparent p-1 text-right font-black focus:ring-0 m-0 leading-none" onChange={(event) => { const nextItems = [...items]; nextItems[index].unitPrice = event.target.value; setItems(nextItems); }} step="0.01" type="number" value={item.unitPrice} />
+                        <input className="w-full border-none bg-transparent p-1 text-right font-black focus:ring-0 m-0 leading-none" onChange={(event) => { const nextItems = [...items]; nextItems[index].unitPrice = event.target.value; setItems(nextItems); }} step="0.01" type="number" value={item.unitPrice || ''} />
                         
                         {item.itemId && customer && (
                           <button 
                             type="button"
                             onClick={() => {
-                              const product = (sys.inventory || []).find((entry) => entry.id === item.itemId);
+                              const product = safeInventory.find((entry) => entry.id === item.itemId);
                               if (product) setPriceModal({ index, item, product, hasCustomPrice });
                             }}
                             className={`text-[9px] uppercase tracking-widest mt-0.5 px-2 py-1 rounded transition-colors flex items-center justify-end w-full ${
@@ -854,7 +893,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                           </button>
                         )}
                       </td>
-                      <td className="p-4 text-right font-mono text-lg font-black tracking-tighter text-slate-900 align-top pt-3">${formatMoney((Number(item.qty) || 0) * (Number(item.unitPrice) || 0))}</td>
+                      <td className="p-4 text-right font-mono text-lg font-black tracking-tighter text-slate-900 align-top pt-3">${formatMoney((Number(item.qty || item.quantity) || 0) * (Number(item.unitPrice) || 0))}</td>
                       <td className="w-8 p-0 align-top pt-5">
                         <button className="ml-2 text-red-200 hover:text-red-500" onClick={() => setItems(items.filter((_, itemIndex) => itemIndex !== index))} type="button"><Trash2 size={18} /></button>
                       </td>
@@ -864,7 +903,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
               </tbody>
             </table>
 
-            <button className="mt-8 rounded bg-blue-50 px-5 py-2 text-[10px] font-bold uppercase text-blue-600 shadow-sm transition-all" onClick={() => setItems([...items, { itemId: '', name: '', unit: '箱', qty: 1, unitPrice: 0, picked: false, suggestions: [] }])} type="button">
+            <button className="mt-8 rounded bg-blue-50 px-5 py-2 text-[10px] font-bold uppercase text-blue-600 shadow-sm transition-all" onClick={() => setItems([...(Array.isArray(items) ? items : []), { itemId: '', name: '', unit: '箱', qty: 1, unitPrice: 0, picked: false, suggestions: [] }])} type="button">
               + Add Row Manually
             </button>
 
@@ -904,7 +943,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
             
             <div className="p-6">
               <p className="text-sm text-slate-500 mb-1">Editing price for:</p>
-              <p className="text-base font-bold text-slate-900 mb-4">{priceModal.product.Name || priceModal.product.name} ({priceModal.item.unit})</p>
+              <p className="text-base font-bold text-slate-900 mb-4">{String(priceModal.product.Name || priceModal.product.name || '')} ({String(priceModal.item.unit || '')})</p>
               
               <div className="mb-6">
                 <label className="block text-[11px] font-black uppercase tracking-widest text-slate-400 mb-2">Long-Term New Price ($)</label>
@@ -922,7 +961,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                   onClick={() => executePriceSave('CUSTOMER', document.getElementById('pricingManagerInput').value)}
                   className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl flex items-center justify-center transition-colors shadow-lg shadow-emerald-500/20"
                 >
-                  <Sparkles size={16} className="mr-2" /> Save for {customer.name} Only
+                  <Sparkles size={16} className="mr-2" /> Save for {String(customer?.name || 'Customer')} Only
                 </button>
                 
                 <button 
