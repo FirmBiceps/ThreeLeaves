@@ -1,519 +1,734 @@
-import { useState } from 'react';
-import { Search, Plus, Edit, Package, X, Trash2, Save, CheckCircle } from 'lucide-react';
+import { useEffect, useMemo, useState, useRef } from 'react';
+import { Eye, FileText, MessageSquare, Printer, Save, Sparkles, Trash2, Search, BrainCircuit, ChevronLeft, X, Settings, AlertTriangle, ArrowUpDown, Plus, Edit } from 'lucide-react';
+import { CompanyHeader } from '../../components/shared/CompanyHeader';
+import { UNIT_OPTIONS } from '../../data/company';
 import { formatMoney } from '../../utils/format';
 import { supabase } from '../../lib/supabaseClient';
 
-const DEFAULT_UNITS = [
-  '箱', 
-  '包', 
-  '个', 
-  '袋', 
-  '瓶', 
-  'per 100g', 
-  'per 250g', 
-  'per 500g', 
-  'per 1kg',
-  'per 5kg'
-];
+import logo from './three_leaves_logo.png';
+import paynowQr from './paynow_qr.jpg';
+
+const CJK_FONT = '"Microsoft YaHei", "微软雅黑", "PingFang SC", "Hiragino Sans GB", "SimHei", "黑体", "SimSun", "宋体", serif';
 
 // ==========================================
-// COMPONENT 1: INVENTORY ADD/EDIT MODAL
+// COMPONENT: SEARCHABLE PRODUCT DROPDOWN
 // ==========================================
-function InventoryFormModal({ item, onClose, onSave, onDelete }) {
-  const [formData, setFormData] = useState({
-    id: item?.id || `prod-${Date.now()}`,
-    sku: item?.sku || item?.SKU || '',
-    Name: item?.Name || item?.name || item?.Items || '',
-    Unit: item?.Unit || item?.unit || '箱',
-    Description: item?.Description || item?.description || '',
-    Packing: item?.Packing || item?.packaging || '',
-    Price: item?.Price || item?.unitPrice || item?.['Unit Price (SG)'] || 0,
-    stock: item?.stock ?? item?.Stock ?? 0,
+function ProductSearchSelect({ value, inventory, onChange }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) { setIsOpen(false); }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const safeInventory = Array.isArray(inventory) ? inventory : [];
+  const selectedProduct = safeInventory.find((entry) => entry.id === value);
+  const displayName = selectedProduct ? String(selectedProduct.Name || selectedProduct.name || selectedProduct.Items || '') : '';
+
+  const filteredInventory = safeInventory.filter((item) => {
+    const itemName = String(item.Name || item.name || item.Items || '').toLowerCase();
+    return itemName.includes(String(searchTerm).toLowerCase());
   });
 
-  const safeUnit = String(formData.Unit || '');
-  const initialIsCustom = safeUnit && !DEFAULT_UNITS.includes(safeUnit);
-  const [isCustomUnit, setIsCustomUnit] = useState(initialIsCustom);
+  return (
+    <div className="relative w-full text-left" ref={dropdownRef}>
+      {!isOpen ? (
+        <button
+          type="button"
+          onClick={() => { setIsOpen(true); setSearchTerm(''); }}
+          className={`w-full text-left text-xs font-bold p-1 border border-transparent rounded hover:bg-slate-200 transition-colors focus:outline-none ${displayName ? 'text-slate-900' : 'text-slate-400'}`}
+        >
+          {displayName || '- Search Product -'}
+        </button>
+      ) : (
+        <div className="absolute z-[5000] top-0 left-0 w-72 bg-white border border-slate-300 rounded shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+          <div className="flex items-center p-2 border-b border-slate-200 bg-slate-50">
+            <Search size={14} className="text-slate-400 ml-1 mr-2 shrink-0" />
+            <input autoFocus type="text" className="w-full bg-transparent border-none text-xs font-bold text-slate-800 p-1 focus:ring-0 placeholder:text-slate-400 outline-none" placeholder="Type to search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+          </div>
+          <div className="max-h-52 overflow-y-auto">
+            {filteredInventory.length > 0 ? (
+              filteredInventory.map((item) => {
+                const itemName = String(item.Name || item.name || item.Items || 'Unnamed Product');
+                return (
+                  <button key={item.id} type="button" className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 border-b border-slate-100 last:border-0 transition-colors" onClick={() => { onChange(item.id); setIsOpen(false); }}>
+                    {itemName}
+                  </button>
+                );
+              })
+            ) : (<div className="p-3 text-center text-xs text-slate-400 font-medium">No products found.</div>)}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
-  };
+// ==========================================
+// COMPONENT: SEARCHABLE CUSTOMER DROPDOWN
+// ==========================================
+function CustomerSearchSelect({ value, customers, onChange, disabled }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const dropdownRef = useRef(null);
 
-  const handleUnitDropdown = (e) => {
-    const val = e.target.value;
-    if (val === '__CUSTOM__') {
-      setIsCustomUnit(true);
-      setFormData({ ...formData, Unit: '' }); 
-    } else {
-      setFormData({ ...formData, Unit: val });
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) { setIsOpen(false); }
     }
-  };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    onSave(formData);
-  };
+  const safeCustomers = Array.isArray(customers) ? customers : [];
+  const selectedCustomer = safeCustomers.find((c) => c.id === value);
+  const displayName = selectedCustomer ? String(selectedCustomer.name || '') : '';
+
+  const filteredCustomers = safeCustomers.filter((c) => String(c.name || '').toLowerCase().includes(String(searchTerm).toLowerCase()));
 
   return (
-    <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden">
+    <div className="relative w-full text-left" ref={dropdownRef}>
+      {!isOpen ? (
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => { setIsOpen(true); setSearchTerm(''); }}
+          className={`mt-1 w-full text-left text-[16px] font-black p-0 border border-transparent bg-transparent focus:outline-none transition-colors ${displayName ? 'text-slate-900' : 'text-slate-400'} ${disabled ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:text-blue-600'}`}
+        >
+          {displayName || 'Select Entity...'}
+        </button>
+      ) : (
+        <div className="absolute z-[5000] top-8 left-0 w-80 bg-white border border-slate-300 rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+          <div className="flex items-center p-3 border-b border-slate-200 bg-slate-50">
+            <Search size={16} className="text-slate-400 ml-1 mr-2 shrink-0" />
+            <input autoFocus type="text" className="w-full bg-transparent border-none text-sm font-bold text-slate-800 p-1 focus:ring-0 placeholder:text-slate-400 outline-none" placeholder="Search customer..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+          </div>
+          <div className="max-h-60 overflow-y-auto">
+            {filteredCustomers.length > 0 ? (
+              filteredCustomers.map((c) => (
+                <button key={c.id} type="button" className="w-full text-left px-4 py-3 text-sm font-bold text-slate-700 hover:bg-blue-50 border-b border-slate-100 last:border-0 transition-colors" onClick={() => { onChange(c.id); setIsOpen(false); }}>
+                  {String(c.name || '')}
+                </button>
+              ))
+            ) : (<div className="p-4 text-center text-sm text-slate-400 font-medium">No customers found.</div>)}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ==========================================
+// COMPONENT: LAYOUT CHECK (Generator Preview)
+// ==========================================
+function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBack, onRegister, paymentTerms, subtotal, sys, total, existingInvoice }) {
+  const customerAddress = customer?.address || existingInvoice?.address || '';
+  const safeInventory = Array.isArray(sys?.inventory) ? sys.inventory : [];
+
+  return (
+    <div className="fixed inset-0 z-[3000] overflow-y-auto bg-slate-950/90 print:static print:block print:bg-white print:p-0 print:backdrop-filter-none">
+      
+      <style type="text/css">
+        {`
+          @media print {
+            @page { size: A4; margin: 0 !important; }
+            html, body {
+              margin: 0 !important;
+              padding: 0 !important;
+              background: white !important;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+            body * { visibility: hidden !important; }
+            #printable-invoice-generator, #printable-invoice-generator * { visibility: visible !important; }
+            
+            #printable-invoice-generator {
+              position: absolute !important;
+              left: 0 !important;
+              top: 0 !important;
+              width: 210mm !important; 
+              height: 297mm !important; 
+              padding: 15mm !important;
+              margin: 0 !important;
+              background: white !important;
+              backdrop-filter: none !important;
+              box-sizing: border-box !important;
+            }
+            
+            *, html, body, div, p, span, h1, h2, h3, table, th, td { font-family: ${CJK_FONT} !important; }
+            tr, td, th { page-break-inside: avoid; break-inside: avoid; }
+          }
+        `}
+      </style>
+
+      <div className="flex min-h-full flex-col items-center py-12 print:block print:py-0 print:m-0">
         
-        <div className="bg-slate-900 px-6 py-4 flex justify-between items-center text-white">
-          <h2 className="text-base font-semibold flex items-center">
-            <Package size={18} className="mr-2 text-blue-400" />
-            {item ? 'Edit Product' : 'Add New Product'}
-          </h2>
-          <button type="button" onClick={onClose} className="hover:bg-slate-800 p-1.5 rounded-full transition-colors">
-            <X size={20} />
-          </button>
+        <div className="w-full max-w-[210mm] shrink-0 bg-slate-900 px-8 py-4 flex justify-between items-center text-white rounded-t-2xl shadow-2xl print:hidden border-b-4 border-blue-600">
+          <div className="flex items-center">
+            <Eye size={24} className="mr-3 text-blue-400" />
+            <div>
+              <h2 className="text-sm font-black tracking-widest uppercase text-slate-200">Invoice Layout Check</h2>
+              <p className="text-lg font-bold text-white leading-none mt-0.5">#{String(invoiceNumber)}</p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-3">
+            <button className="flex items-center rounded bg-slate-800 px-5 py-2.5 font-bold text-white transition-all hover:bg-slate-700 border border-slate-700 text-sm" onClick={onBack} type="button">
+              <ChevronLeft size={16} className="mr-1" /> Edit Draft
+            </button>
+            <button className="flex items-center rounded bg-white px-5 py-2.5 font-bold text-slate-900 shadow-lg transition-all hover:bg-slate-50 text-sm" onClick={() => onRegister(false)} type="button">
+              <Save className="mr-2" size={16} /> Save Invoice
+            </button>
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div className="grid grid-cols-3 gap-4">
-            <div className="col-span-1">
-              <label className="block text-sm text-slate-500 mb-1">SKU</label>
-              <input 
-                type="text" 
-                name="sku" 
-                value={formData.sku} 
-                onChange={handleChange}
-                placeholder="e.g. TL-001"
-                className="w-full border border-slate-200 rounded-xl p-3 text-base text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none uppercase"
-              />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-sm text-slate-500 mb-1">Product Name</label>
-              <input 
-                required
-                type="text" 
-                name="Name" 
-                value={formData.Name} 
-                onChange={handleChange}
-                className="w-full border border-slate-200 rounded-xl p-3 text-base text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm text-slate-500 mb-1">Description</label>
-            <input 
-              type="text" 
-              name="Description" 
-              value={formData.Description} 
-              onChange={handleChange}
-              className="w-full border border-slate-200 rounded-xl p-3 text-base text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none"
-            />
-          </div>
-
-          <div className="grid grid-cols-4 gap-4">
-            <div>
-              <label className="block text-sm text-slate-500 mb-1">Packing</label>
-              <input 
-                type="text" 
-                name="Packing" 
-                value={formData.Packing} 
-                onChange={handleChange}
-                placeholder="e.g. 24 x 300g"
-                className="w-full border border-slate-200 rounded-xl p-3 text-base text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm text-slate-500 mb-1">Unit</label>
-              {!isCustomUnit ? (
-                <select
-                  name="Unit"
-                  value={DEFAULT_UNITS.includes(safeUnit) ? safeUnit : ''}
-                  onChange={handleUnitDropdown}
-                  className="w-full border border-slate-200 rounded-xl p-3 text-base text-center text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer"
-                >
-                  {DEFAULT_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
-                  {safeUnit && !DEFAULT_UNITS.includes(safeUnit) && (
-                    <option value={safeUnit}>{safeUnit}</option>
-                  )}
-                  <option value="__CUSTOM__" className="font-bold text-blue-600">+ Add Custom...</option>
-                </select>
-              ) : (
-                <div className="flex items-center border border-blue-300 bg-blue-50 rounded-xl focus-within:ring-2 focus-within:ring-blue-500 overflow-hidden">
-                  <input
-                    type="text"
-                    name="Unit"
-                    value={formData.Unit}
-                    onChange={handleChange}
-                    autoFocus
-                    placeholder="e.g. per 200g"
-                    className="w-full p-3 bg-transparent text-base text-center text-blue-800 outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsCustomUnit(false);
-                      setFormData({ ...formData, Unit: '箱' });
-                    }}
-                    className="text-blue-400 hover:text-red-500 p-3 bg-blue-100/50 transition-colors"
-                  >
-                    <X size={16} />
-                  </button>
+        <div 
+          id="printable-invoice-generator"
+          lang="zh" 
+          className="flex w-full max-w-[210mm] h-[297mm] flex-col bg-white p-[15mm] text-black shadow-2xl rounded-b-2xl print:w-[210mm] print:h-[297mm] print:max-w-none print:rounded-none print:shadow-none box-border shrink-0"
+          style={{ fontFamily: CJK_FONT }}
+        >
+          <div className="flex w-full mb-4 justify-between">
+            <div className="flex-1 flex flex-col pr-4">
+              <div className="flex items-center mb-5">
+                <div className="w-[110px] shrink-0 mr-4">
+                  <img src={logo} alt="Three Leaves Logo" className="w-full h-auto object-contain" />
                 </div>
-              )}
+                <div className="flex-1 text-left leading-snug pt-2 whitespace-nowrap overflow-visible">
+                  <h1 className="font-black text-[17px]" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
+                  <h2 className="font-bold text-[16px] mb-1" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
+                  
+                  <div className="text-[#d55e2d] font-bold text-[10.5px] leading-tight tracking-tight">
+                    <p className="whitespace-nowrap">CO.REG NO.53033969B &nbsp;&nbsp; GST REG NO. M90355440L</p>
+                    <p className="whitespace-nowrap">280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
+                    <p className="whitespace-nowrap">HP: 97578869 (Mr Ye) &nbsp;&nbsp; HP: 91113505 (Min) &nbsp;&nbsp; Email: 3leaves.sg@gmail.com</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-between items-end w-full mb-2 text-[14px] font-bold">
+                <div className="flex items-end flex-1 pr-4">
+                  <span className="shrink-0 mr-2 text-black">TO:</span>
+                  <span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[13px] tracking-tight" style={{ fontFamily: CJK_FONT }}>
+                    {String(customer?.name || existingInvoice?.customer || '')}
+                  </span>
+                </div>
+                <div className="flex items-end w-[35%] pl-2">
+                  <span className="shrink-0 mr-2 text-black">DATE:</span>
+                  <span className="flex-1 text-center border-b border-black pb-0.5">
+                    {invoiceDate && !isNaN(new Date(invoiceDate).getTime()) ? new Date(invoiceDate).toLocaleDateString('en-GB').replace(/\//g, '-') : new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-end w-full text-[14px] font-bold">
+                <span className="shrink-0 mr-2 text-black">ADDRESS:</span>
+                <span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[12px] tracking-tighter" style={{ fontFamily: CJK_FONT }}>
+                  {String(customerAddress)}
+                </span>
+              </div>
             </div>
 
-            <div>
-              <label className="block text-sm text-blue-600 mb-1">Price</label>
-              <input 
-                required
-                type="number" 
-                step="0.01"
-                name="Price" 
-                value={formData.Price} 
-                onChange={handleChange}
-                className="w-full border border-blue-200 bg-blue-50 rounded-xl p-3 text-base text-right text-blue-700 focus:ring-2 focus:ring-blue-500 outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-emerald-600 mb-1">Stock</label>
-              <input 
-                type="number" 
-                name="stock" 
-                value={formData.stock} 
-                onChange={handleChange}
-                className="w-full border border-emerald-200 bg-emerald-50 rounded-xl p-3 text-base text-right text-emerald-700 focus:ring-2 focus:ring-emerald-500 outline-none"
-              />
+            <div className="w-[180px] shrink-0 flex flex-col items-start pl-4 pt-1">
+              <h2 className="text-[22px] font-bold tracking-[0.4em] leading-none mb-1" style={{ fontFamily: CJK_FONT }}>發票</h2>
+              <h3 className="text-[15px] font-black tracking-wide uppercase mb-6 text-black">TAX INVOICE</h3>
+              
+              <div className="w-full flex flex-col gap-3 mt-auto mb-2">
+                <div className="flex items-baseline">
+                  <span className="font-bold w-[50px] shrink-0 text-black text-[15px]">No.</span>
+                  <span className="text-red-600 font-bold tracking-wider text-[17px] leading-none">{String(invoiceNumber)}</span>
+                </div>
+                <div className="flex items-baseline">
+                  <span className="font-bold w-[50px] shrink-0 text-black text-[15px]">Term:</span>
+                  <span className="text-red-600 font-bold text-[16px] leading-none">{paymentTerms === 'cod' ? 'COD' : '30 Days'}</span>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div className="flex justify-between items-center pt-4 mt-2 border-t border-slate-100">
-            {item ? (
-              <button 
-                type="button"
-                onClick={() => onDelete(item)}
-                className="text-red-500 hover:bg-red-50 px-4 py-2 rounded-lg text-sm flex items-center transition-colors"
-              >
-                <Trash2 size={16} className="mr-2" /> Delete
-              </button>
-            ) : <div></div>}
+          <table className="w-full text-[15px] border-2 border-black text-center mb-0 leading-tight flex-none mt-2" style={{ fontFamily: CJK_FONT }}>
+            <thead className="border-b-2 border-black">
+              <tr className="font-bold bg-white text-[14px]">
+                <th className="py-2 px-1 border-r border-black w-10">NO.</th>
+                <th className="py-2 px-2 border-r border-black text-left">DESCRIPTION</th>
+                <th className="py-2 px-1 border-r border-black w-24">QUANTITY</th>
+                <th className="py-2 px-1 border-r border-black w-32 text-center">UNIT PRICE</th>
+                <th className="py-2 px-1 w-32 text-center">AMOUNT</th>
+              </tr>
+            </thead>
+            <tbody style={{ fontFamily: CJK_FONT }}>
+              {(Array.isArray(items) ? items : []).map((item, idx) => {
+                const foundProduct = safeInventory.find((entry) => entry.id === item.itemId);
+                const productName = foundProduct ? String(foundProduct.Name || foundProduct.name || foundProduct.Items || '') : String(item.Name || item.name || '-');
+                return (
+                  <tr key={idx} className="h-[25px] align-top" style={{ fontFamily: CJK_FONT }}>
+                    <td className="px-1 py-0.5 border-r border-black font-medium text-center">{idx + 1}</td>
+                    <td className="px-1 py-0.5 border-r border-black text-left pl-2 font-bold leading-none pt-1" style={{ fontFamily: CJK_FONT }}>{productName}</td>
+                    <td className="px-1 py-0.5 border-r border-black font-medium text-center" style={{ fontFamily: CJK_FONT }}>{String(item.qty || item.quantity || 0)} {String(item.unit || item.Unit || '')}</td>
+                    <td className="px-1 py-0.5 border-r border-black text-center">${formatMoney(item.unitPrice)}</td>
+                    <td className="px-1 py-0.5 text-center font-bold">${formatMoney((Number(item.qty || item.quantity) || 0) * (Number(item.unitPrice) || 0))}</td>
+                  </tr>
+                );
+              })}
+              
+              {Array.isArray(items) && items.length < 20 && Array.from({ length: 20 - items.length }).map((_, i) => (
+                <tr key={`blank-${i}`} className="h-[25px]">
+                  <td className="border-r border-black"></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td></td>
+                </tr>
+              ))}
 
-            <div className="flex gap-3">
-              <button 
-                type="button" 
-                onClick={onClose}
-                className="px-5 py-2.5 text-slate-500 hover:bg-slate-100 rounded-xl text-sm transition-colors"
-              >
-                Cancel
-              </button>
-              <button 
-                type="submit"
-                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl text-sm flex items-center shadow-lg transition-colors"
-              >
-                <Save size={16} className="mr-2" /> Save Product
-              </button>
+              <tr className="border-t-2 border-black font-bold h-[26px]" style={{ fontFamily: CJK_FONT }}>
+                <td colSpan="3" rowSpan="3" className="border-r border-black bg-white"></td>
+                <td className="p-1 border-r border-black border-b border-black text-center text-[14px]">SUBTOTAL</td>
+                <td className="p-1 text-center border-b border-black text-[15px]">${formatMoney(subtotal)}</td>
+              </tr>
+              <tr className="font-bold h-[26px]" style={{ fontFamily: CJK_FONT }}>
+                <td className="p-1 border-r border-black border-b border-black text-center text-[14px]">9% GST</td>
+                <td className="p-1 text-center border-b border-black text-[15px]">${formatMoney(gst)}</td>
+              </tr>
+              <tr className="font-bold h-[30px]" style={{ fontFamily: CJK_FONT }}>
+                <td className="p-1 border-r border-black text-center text-[16px]">TOTAL</td>
+                <td className="p-1 text-center text-[17px]">${formatMoney(total)}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div className="flex w-full mt-auto pt-2 items-end shrink-0">
+            <div className="w-[70%] text-[12px] font-bold leading-snug pr-4">
+              <div style={{ fontFamily: CJK_FONT }}>
+                <p className="text-[12px]">请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
+                <p className="text-[10px] whitespace-nowrap text-slate-800">Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
+                
+                <div className="mt-2 flex items-center">
+                  <div className="w-[65px] h-[65px] shrink-0 mr-3">
+                    <img src={paynowQr} alt="PayNow QR Code" className="w-full h-full object-contain" />
+                  </div>
+                  <div className="flex flex-col justify-center text-[11px]">
+                    <p>UEN: 53033969B</p>
+                    <p>A/C Name: Three Leaves (Singapore) Trading Enterprise</p>
+                    <p>A/C Number: 535-846562-001</p>
+                    <p>Bank Name: OCBC</p>
+                    <p className="mt-0.5 font-normal text-[10px] text-slate-800">All payments must be made payable to Three Leaves (Singapore) Trading Enterprise.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="w-[30%] shrink-0 flex flex-col justify-end pb-1 pl-2">
+              <div className="h-12"></div> 
+              <div className="border-t-2 border-black text-center pt-1.5 text-[12px] font-bold uppercase tracking-widest">Received By</div>
             </div>
           </div>
-        </form>
+
+        </div>
       </div>
     </div>
   );
 }
 
 // ==========================================
-// MAIN INVENTORY MODULE
+// COMPONENT: HISTORY PREVIEW MODAL
 // ==========================================
-export function InventoryModule({ sys }) {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState(null);
-  
-  const [notification, setNotification] = useState(null);
+function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
+  if (!invoice) return null;
 
-  const showNotification = (message, type = 'success') => {
-    setNotification({ message, type });
-    setTimeout(() => {
-      setNotification(null);
-    }, 6000); 
-  };
+  const safeCustomers = Array.isArray(sys?.customers) ? sys.customers : [];
+  const safeInventory = Array.isArray(sys?.inventory) ? sys.inventory : [];
+  const safeItems = Array.isArray(invoice?.items) ? invoice.items : [];
 
-  // BULLETPROOF FALLBACK: Ensure inventory is an array and safely convert all fields to strings before searching
-  const safeInventoryArray = Array.isArray(sys?.inventory) ? sys.inventory : [];
-  
-  const filteredInventory = safeInventoryArray.filter((item) => {
-    const sku = String(item?.sku || item?.SKU || '');
-    const name = String(item?.Name || item?.name || item?.Items || '');
-    const desc = String(item?.Description || item?.description || '');
-    const packing = String(item?.Packing || item?.packaging || '');
-    
-    const searchLower = String(searchTerm).toLowerCase();
-    return (
-      sku.toLowerCase().includes(searchLower) ||
-      name.toLowerCase().includes(searchLower) ||
-      desc.toLowerCase().includes(searchLower) ||
-      packing.toLowerCase().includes(searchLower)
-    );
-  });
-
-  const handleSaveProduct = async (formData) => {
-    try {
-      const isEditing = !!editingItem;
-      const oldPrice = isEditing ? (editingItem.Price || editingItem.unitPrice || editingItem['Unit Price (SG)']) : 0;
-      const priceChanged = isEditing && Number(oldPrice) !== Number(formData.Price);
-
-      const payload = {
-        SKU: formData.sku,
-        Name: formData.Name,
-        Unit: formData.Unit,
-        Description: formData.Description,
-        Packing: formData.Packing,
-        Price: Number(formData.Price) || 0,
-        stock: parseInt(formData.stock, 10) || 0
-      };
-
-      let savedProduct;
-
-      if (isEditing) {
-        const finalId = editingItem.id || formData.id;
-        // BULLETPROOF FALLBACK: Force finalId to string to prevent numerical crash
-        const finalIdStr = String(finalId || '');
-        const isUUID = finalIdStr.length === 36 && finalIdStr.includes('-');
-        
-        if (isUUID) {
-          const { data, error } = await supabase
-            .from('product_list')
-            .update(payload)
-            .eq('id', finalIdStr)
-            .select()
-            .single();
-            
-          if (error) throw error;
-          savedProduct = data;
-        } else {
-          const legacyName = editingItem.Name || editingItem.name || editingItem.Items;
-          const { data, error } = await supabase
-            .from('product_list')
-            .update(payload)
-            .eq('Name', legacyName)
-            .select()
-            .single();
-            
-          if (error) throw error;
-          savedProduct = data;
-        }
-      } else {
-        const { data, error } = await supabase
-          .from('product_list')
-          .insert([payload])
-          .select()
-          .single();
-
-        if (error) throw error;
-        savedProduct = data;
-      }
-
-      if (isEditing) {
-        const updatedInventory = safeInventoryArray.map(item => {
-          const matchById = item.id && item.id === (editingItem.id || formData.id);
-          const matchByName = !item.id && (item.Name === editingItem.Name || item.name === editingItem.Name || item.Items === editingItem.Name);
-          
-          if (matchById || matchByName) {
-            return { ...item, ...savedProduct, ...formData }; 
-          }
-          return item;
-        });
-        sys.setInventory(updatedInventory);
-      } else {
-        sys.setInventory([savedProduct, ...safeInventoryArray]);
-      }
-
-      if (priceChanged && savedProduct?.id) {
-        await supabase.from('price_history').insert({
-          product_id: savedProduct.id,
-          product_name: formData.Name,
-          old_price_sg: oldPrice,
-          new_price_sg: payload.Price
-        });
-      }
-
-      showNotification(isEditing ? 'Product successfully updated!' : 'New product added to catalog!');
-      setIsModalOpen(false);
-      setEditingItem(null);
-
-    } catch (error) {
-      console.error("Save error: ", error);
-      showNotification(`DB Error: ${error.message || 'Failed to save product'}`, 'error');
-    }
-  };
-
-  const handleDeleteProduct = async (itemToRemove) => {
-    const itemName = itemToRemove.Name || itemToRemove.name || itemToRemove.Items;
-    if (window.confirm(`Are you sure you want to delete ${itemName}?`)) {
-      try {
-        const updatedInventory = safeInventoryArray.filter(item => {
-          if (itemToRemove.id && item.id) return item.id !== itemToRemove.id;
-          return (item.Name || item.name || item.Items) !== itemName;
-        });
-        sys.setInventory(updatedInventory);
-        
-        const isUUID = itemToRemove.id && String(itemToRemove.id).length === 36;
-        if (isUUID) {
-          const { error } = await supabase
-            .from('product_list')
-            .delete()
-            .eq('id', itemToRemove.id);
-            
-          if (error) throw error;
-        }
-        
-        showNotification('Product removed from catalog.', 'error');
-        setIsModalOpen(false);
-        setEditingItem(null);
-        
-      } catch (error) {
-        console.error("Delete error: ", error);
-        showNotification(`Delete Error: ${error.message || 'Failed to delete product'}`, 'error');
-      }
-    }
-  };
-
-  const openAddModal = () => {
-    setEditingItem(null);
-    setIsModalOpen(true);
-  };
-
-  const openEditModal = (item) => {
-    setEditingItem(item);
-    setIsModalOpen(true);
-  };
+  const customerObj = safeCustomers.find(c => c.id === invoice.customerId) || {};
+  const customerAddress = String(customerObj.address || '');
+  const subtotal = safeItems.reduce((sum, item) => sum + (Number(item.qty || item.quantity) || 0) * (Number(item.unitPrice) || 0), 0);
+  const gst = subtotal * 0.09;
+  const total = subtotal + gst;
 
   return (
-    <div className="p-8 h-full overflow-y-auto relative">
+    <div className="fixed inset-0 z-[5000] overflow-y-auto bg-slate-950/90 print:static print:block print:bg-white print:p-0 print:backdrop-filter-none">
       
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900 flex items-center">
-            <Package className="mr-3 text-blue-600" size={28} />
-            Inventory Catalog
-          </h1>
-          <p className="text-base text-slate-500 mt-1">
-            Manage your products, packaging, and pricing details.
-          </p>
+      <style type="text/css">
+        {`
+          @media print {
+            @page { size: A4; margin: 0 !important; }
+            html, body {
+              margin: 0 !important;
+              padding: 0 !important;
+              background: white !important;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+            body * { visibility: hidden !important; }
+            #printable-invoice-history, #printable-invoice-history * { visibility: visible !important; }
+            
+            #printable-invoice-history {
+              position: absolute !important;
+              left: 0 !important;
+              top: 0 !important;
+              width: 210mm !important; 
+              height: 297mm !important; 
+              padding: 15mm !important; 
+              box-sizing: border-box !important;
+              background: white !important;
+              backdrop-filter: none !important;
+            }
+
+            *, html, body, div, p, span, h1, h2, h3, table, th, td { font-family: ${CJK_FONT} !important; }
+            tr, td, th { page-break-inside: avoid; break-inside: avoid; }
+          }
+        `}
+      </style>
+
+      <div className="flex min-h-full flex-col items-center py-12 print:block print:py-0 print:m-0">
+        
+        <div className="w-full max-w-[210mm] shrink-0 bg-slate-900 px-8 py-4 flex justify-between items-center text-white rounded-t-2xl shadow-2xl print:hidden border-b-4 border-blue-600">
+          <div className="flex items-center">
+            <FileText size={24} className="mr-3 text-blue-400" />
+            <div>
+              <h2 className="text-sm font-black tracking-widest uppercase text-slate-200">A4 Print Preview</h2>
+              <p className="text-lg font-bold text-white leading-none mt-0.5">#{String(invoice.number || invoice.id || '')}</p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-3">
+            <button onClick={() => window.print()} className="flex items-center text-sm font-bold bg-blue-600 hover:bg-blue-500 px-5 py-2.5 rounded-xl transition-colors shadow-lg">
+              <Printer size={18} className="mr-2" /> Print Document
+            </button>
+            <button onClick={() => onEdit(invoice)} className="flex items-center text-sm font-bold bg-slate-800 hover:bg-slate-700 px-5 py-2.5 rounded-xl transition-colors border border-slate-700">
+              <Edit size={16} className="mr-2" /> Edit
+            </button>
+            <button onClick={onClose} className="hover:bg-slate-700 p-2.5 rounded-full transition-colors ml-2 bg-slate-800">
+              <X size={20} />
+            </button>
+          </div>
         </div>
-        <button 
-          onClick={openAddModal}
-          className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-medium text-base flex items-center shadow-lg hover:bg-blue-700 transition-all active:scale-95"
+
+        <div 
+          id="printable-invoice-history"
+          lang="zh" 
+          className="flex w-full max-w-[210mm] h-[297mm] flex-col bg-white p-[15mm] text-black shadow-2xl rounded-b-2xl print:w-[210mm] print:h-[297mm] print:max-w-none print:rounded-none print:shadow-none box-border shrink-0"
+          style={{ fontFamily: CJK_FONT }}
         >
-          <Plus size={20} className="mr-2" /> Add Product
-        </button>
-      </div>
+          <div className="flex w-full mb-4 justify-between">
+            <div className="flex-1 flex flex-col pr-4">
+              <div className="flex items-center mb-5">
+                <div className="w-[110px] shrink-0 mr-4">
+                  <img src={logo} alt="Three Leaves Logo" className="w-full h-auto object-contain" />
+                </div>
+                <div className="flex-1 text-left leading-snug pt-2 whitespace-nowrap overflow-visible">
+                  <h1 className="font-black text-[17px]" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
+                  <h2 className="font-bold text-[16px] mb-1" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
+                  
+                  <div className="text-[#d55e2d] font-bold text-[10.5px] leading-tight tracking-tight">
+                    <p className="whitespace-nowrap">CO.REG NO.53033969B &nbsp;&nbsp; GST REG NO. M90355440L</p>
+                    <p className="whitespace-nowrap">280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
+                    <p className="whitespace-nowrap">HP: 97578869 (Mr Ye) &nbsp;&nbsp; HP: 91113505 (Min) &nbsp;&nbsp; Email: 3leaves.sg@gmail.com</p>
+                  </div>
+                </div>
+              </div>
 
-      <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="p-5 border-b border-slate-100 flex items-center bg-slate-50">
-          <Search className="text-slate-400 mr-3" size={22} />
-          <input
-            type="text"
-            placeholder="Search by SKU, Name, Description, or Packing..."
-            className="w-full bg-transparent border-none focus:ring-0 text-base placeholder:text-slate-400 outline-none"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+              <div className="flex justify-between items-end w-full mb-2 text-[14px] font-bold">
+                <div className="flex items-end flex-1 pr-4">
+                  <span className="shrink-0 mr-2 text-black">TO:</span>
+                  <span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[13px] tracking-tight" style={{ fontFamily: CJK_FONT }}>
+                    {String(invoice.customer || '')}
+                  </span>
+                </div>
+                <div className="flex items-end w-[35%] pl-2">
+                  <span className="shrink-0 mr-2 text-black">DATE:</span>
+                  <span className="flex-1 text-center border-b border-black pb-0.5">
+                    {invoice.date && !isNaN(new Date(invoice.date).getTime()) 
+                      ? new Date(invoice.date).toLocaleDateString('en-GB').replace(/\//g, '-') 
+                      : new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-end w-full text-[14px] font-bold">
+                <span className="shrink-0 mr-2 text-black">ADDRESS:</span>
+                <span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[12px] tracking-tighter" style={{ fontFamily: CJK_FONT }}>
+                  {customerAddress}
+                </span>
+              </div>
+            </div>
+
+            <div className="w-[180px] shrink-0 flex flex-col items-start pl-4 pt-1">
+              <h2 className="text-[22px] font-bold tracking-[0.4em] leading-none mb-1" style={{ fontFamily: CJK_FONT }}>發票</h2>
+              <h3 className="text-[15px] font-black tracking-wide uppercase mb-6 text-black">TAX INVOICE</h3>
+              
+              <div className="w-full flex flex-col gap-3 mt-auto mb-2">
+                <div className="flex items-baseline">
+                  <span className="font-bold w-[50px] shrink-0 text-black text-[15px]">No.</span>
+                  <span className="text-red-600 font-bold tracking-wider text-[17px] leading-none">{String(invoice.number || '')}</span>
+                </div>
+                <div className="flex items-baseline">
+                  <span className="font-bold w-[50px] shrink-0 text-black text-[15px]">Term:</span>
+                  <span className="text-red-600 font-bold text-[16px] leading-none">{invoice.paymentTerms === 'cod' ? 'COD' : '30 Days'}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <table className="w-full text-[15px] border-2 border-black text-center mb-0 leading-tight flex-none mt-2" style={{ fontFamily: CJK_FONT }}>
+            <thead className="border-b-2 border-black">
+              <tr className="font-bold bg-white text-[14px]">
+                <th className="py-2 px-1 border-r border-black w-10">NO.</th>
+                <th className="py-2 px-2 border-r border-black text-left">DESCRIPTION</th>
+                <th className="py-2 px-1 border-r border-black w-24">QUANTITY</th>
+                <th className="py-2 px-1 border-r border-black w-32 text-center">UNIT PRICE</th>
+                <th className="py-2 px-1 w-32 text-center">AMOUNT</th>
+              </tr>
+            </thead>
+            <tbody style={{ fontFamily: CJK_FONT }}>
+              {safeItems.map((item, idx) => {
+                const productName = String(item.name || item.Items || '-');
+
+                return (
+                  <tr key={idx} className="h-[25px] align-top" style={{ fontFamily: CJK_FONT }}>
+                    <td className="px-1 py-0.5 border-r border-black font-medium text-center">{idx + 1}</td>
+                    <td className="px-1 py-0.5 border-r border-black text-left pl-2 font-bold leading-none pt-1" style={{ fontFamily: CJK_FONT }}>{productName}</td>
+                    <td className="px-1 py-0.5 border-r border-black font-medium text-center" style={{ fontFamily: CJK_FONT }}>{String(item.qty || item.quantity || 0)} {String(item.unit || '')}</td>
+                    <td className="px-1 py-0.5 border-r border-black text-center">${formatMoney(item.unitPrice)}</td>
+                    <td className="px-1 py-0.5 text-center font-bold">
+                      ${formatMoney((Number(item.qty || item.quantity) || 0) * (Number(item.unitPrice) || 0))}
+                    </td>
+                  </tr>
+                );
+              })}
+              
+              {safeItems.length < 20 && Array.from({ length: 20 - safeItems.length }).map((_, i) => (
+                <tr key={`blank-${i}`} className="h-[25px]">
+                  <td className="border-r border-black"></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td></td>
+                </tr>
+              ))}
+
+              <tr className="border-t-2 border-black font-bold h-[26px]" style={{ fontFamily: CJK_FONT }}>
+                <td colSpan="3" rowSpan="3" className="border-r border-black bg-white"></td>
+                <td className="p-1 border-r border-black border-b border-black text-center text-[14px]">SUBTOTAL</td>
+                <td className="p-1 text-center border-b border-black text-[15px]">${formatMoney(subtotal)}</td>
+              </tr>
+              <tr className="font-bold h-[26px]" style={{ fontFamily: CJK_FONT }}>
+                <td className="p-1 border-r border-black border-b border-black text-center text-[14px]">9% GST</td>
+                <td className="p-1 text-center border-b border-black text-[15px]">${formatMoney(gst)}</td>
+              </tr>
+              <tr className="font-bold h-[30px]" style={{ fontFamily: CJK_FONT }}>
+                <td className="p-1 border-r border-black text-center text-[16px]">TOTAL</td>
+                <td className="p-1 text-center text-[17px]">${formatMoney(total)}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div className="flex w-full mt-auto pt-2 items-end shrink-0">
+            <div className="w-[70%] text-[12px] font-bold leading-snug pr-4">
+              <div style={{ fontFamily: CJK_FONT }}>
+                <p className="text-[12px]">请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
+                <p className="text-[10px] whitespace-nowrap text-slate-800">Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
+                
+                <div className="mt-2 flex items-center">
+                  <div className="w-[65px] h-[65px] shrink-0 mr-3">
+                    <img src={paynowQr} alt="PayNow QR Code" className="w-full h-full object-contain" />
+                  </div>
+                  <div className="flex flex-col justify-center text-[11px]">
+                    <p>UEN: 53033969B</p>
+                    <p>A/C Name: Three Leaves (Singapore) Trading Enterprise</p>
+                    <p>A/C Number: 535-846562-001</p>
+                    <p>Bank Name: OCBC</p>
+                    <p className="mt-0.5 font-normal text-[10px] text-slate-800">All payments must be made payable to Three Leaves (Singapore) Trading Enterprise.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="w-[30%] shrink-0 flex flex-col justify-end pb-1 pl-2">
+              <div className="h-12"></div> 
+              <div className="border-t-2 border-black text-center pt-1.5 text-[12px] font-bold uppercase tracking-widest">Received By</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// MAIN EXPORT: INVOICE DASHBOARD
+// ==========================================
+export function InvoiceModule({ sys }) {
+  const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
+  const [filter, setFilter] = useState('All');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortOption, setSortOption] = useState('date_desc');
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 30;
+
+  const [previewInvoice, setPreviewInvoice] = useState(null);
+  const [editingInvoice, setEditingInvoice] = useState(null);
+
+  const safeInvoices = Array.isArray(sys?.invoices) ? sys.invoices : [];
+
+  const handleDeleteInvoice = async (e, invoiceId) => {
+    e.stopPropagation(); 
+    
+    const confirmDelete = window.confirm("Are you sure you want to permanently delete this invoice? This cannot be undone.");
+    
+    if (confirmDelete) {
+      const updatedInvoices = safeInvoices.filter(inv => inv.id !== invoiceId);
+      sys.setInvoices(updatedInvoices);
+      if (sys.deleteRecord) { await sys.deleteRecord('invoices', invoiceId); }
+    }
+  };
+
+  const filteredInvoices = useMemo(() => {
+    let result = [...safeInvoices];
+
+    if (searchTerm) {
+      const searchLower = String(searchTerm).toLowerCase();
+      result = result.filter(inv => 
+        String(inv.customer || '').toLowerCase().includes(searchLower) ||
+        String(inv.number || inv.id || '').toLowerCase().includes(searchLower)
+      );
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    result = result.filter(inv => {
+      if (filter === 'All') return true;
+      const [year, month, day] = String(inv.date || '').split('-').map(Number);
+      if (!year || !month || !day) return false;
+      const invDate = new Date(year, month - 1, day);
+      if (isNaN(invDate.getTime())) return false; 
+      invDate.setHours(0,0,0,0);
+      
+      if (filter === 'Today') return invDate.getTime() === today.getTime();
+      if (filter === 'This Week') {
+        const diffDays = Math.ceil(Math.abs(today - invDate) / (1000 * 60 * 60 * 24));
+        return diffDays <= 7; 
+      }
+      if (filter === 'This Month') return invDate.getMonth() === today.getMonth() && invDate.getFullYear() === today.getFullYear();
+      return true;
+    });
+
+    result.sort((a, b) => {
+      const dateA = new Date(a.date || 0).getTime() || 0;
+      const dateB = new Date(b.date || 0).getTime() || 0;
+      const numA = String(a.number || a.id || '');
+      const numB = String(b.number || b.id || '');
+      const totA = Number(a.total) || 0;
+      const totB = Number(b.total) || 0;
+      const custA = String(a.customer || '');
+      const custB = String(b.customer || '');
+
+      switch (sortOption) {
+        case 'date_asc': return dateA - dateB;
+        case 'number_desc': return numB.localeCompare(numA, undefined, { numeric: true });
+        case 'number_asc': return numA.localeCompare(numB, undefined, { numeric: true });
+        case 'total_desc': return totB - totA;
+        case 'total_asc': return totA - totB;
+        case 'customer_asc': return custA.localeCompare(custB);
+        case 'customer_desc': return custB.localeCompare(custA);
+        case 'date_desc':
+        default:
+          return dateB - dateA;
+      }
+    });
+
+    return result;
+  }, [safeInvoices, filter, searchTerm, sortOption]);
+
+  const paginatedInvoices = filteredInvoices.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
+  return (
+    <div className="p-8 h-full overflow-y-auto relative print:p-0 print:overflow-visible">
+      
+      <div className={(previewInvoice || isGeneratorOpen) ? "print:hidden" : "block"}>
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-2xl font-semibold text-slate-900 flex items-center">
+            <FileText className="mr-3 text-blue-600" size={28} /> Invoice History
+          </h1>
+          <button className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-medium shadow-lg hover:bg-blue-700" onClick={() => setIsGeneratorOpen(true)}>
+            <Plus className="mr-2" size={18} /> New Invoice
+          </button>
         </div>
 
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-white border-b border-slate-200 text-xs uppercase tracking-widest text-slate-500 font-semibold">
-              <th className="p-5 pl-8">SKU</th>
-              <th className="p-5">Name</th>
-              <th className="p-5 text-center">Unit</th>
-              <th className="p-5">Description</th>
-              <th className="p-5">Packing</th>
-              <th className="p-5 text-right">Price</th>
-              <th className="p-5 text-center">Stock</th>
-              <th className="p-5 pr-8 text-center">Action</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {filteredInventory.map((item, idx) => {
-              const sku = item?.sku || item?.SKU || '-';
-              const name = item?.Name || item?.name || item?.Items || 'Unnamed Product';
-              const unit = item?.Unit || item?.unit || '-';
-              const desc = item?.Description || item?.description || '-';
-              const packing = item?.Packing || item?.packaging || '-';
-              const price = item?.Price || item?.unitPrice || item?.['Unit Price (SG)'] || 0;
-              const stock = item?.stock ?? item?.Stock ?? 0; 
+        <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="flex flex-wrap justify-between items-center border-b bg-slate-50 p-4 gap-4">
+            
+            <div className="flex bg-white rounded-lg p-1 border">
+              {['All', 'Today', 'This Week', 'This Month'].map((opt) => (
+                <button key={opt} onClick={() => setFilter(opt)} className={`px-4 py-1.5 text-[11px] font-black uppercase rounded-md ${filter === opt ? 'bg-slate-800 text-white' : 'text-slate-500'}`}>
+                  {opt}
+                </button>
+              ))}
+            </div>
 
-              return (
-                <tr key={item.id || `fallback-${idx}`} className="hover:bg-slate-50 transition-colors">
-                  <td className="p-5 pl-8 text-sm font-mono text-slate-500 uppercase">{sku}</td>
-                  <td className="p-5 text-base text-slate-800 font-medium">{name}</td>
+            <div className="flex items-center space-x-3 w-full sm:w-auto">
+              <div className="relative flex items-center bg-white border rounded-xl shadow-sm px-3 py-2 w-full sm:w-48 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
+                <ArrowUpDown className="text-slate-400 mr-2 shrink-0" size={16} />
+                <select
+                  className="w-full bg-transparent outline-none text-xs font-bold text-slate-700 cursor-pointer appearance-none"
+                  value={sortOption}
+                  onChange={(e) => setSortOption(e.target.value)}
+                >
+                  <option value="date_desc">Date (Newest First)</option>
+                  <option value="date_asc">Date (Oldest First)</option>
+                  <option value="number_desc">Invoice No. (Highest)</option>
+                  <option value="number_asc">Invoice No. (Lowest)</option>
+                  <option value="total_desc">Amount (Highest)</option>
+                  <option value="total_asc">Amount (Lowest)</option>
+                  <option value="customer_asc">Customer (A-Z)</option>
+                  <option value="customer_desc">Customer (Z-A)</option>
+                </select>
+              </div>
+
+              <div className="flex items-center bg-white border rounded-xl px-4 py-2 w-full sm:w-64 shadow-sm focus-within:ring-2 focus-within:ring-blue-100 transition-all">
+                <Search className="text-slate-400 mr-2 shrink-0" size={16} />
+                <input type="text" placeholder="Search..." className="w-full bg-transparent outline-none text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+              </div>
+            </div>
+
+          </div>
+
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="text-xs uppercase tracking-widest text-slate-500 font-semibold border-b">
+                <th className="p-5 pl-8">Invoice No.</th>
+                <th className="p-5">Date</th>
+                <th className="p-5">Customer</th>
+                <th className="p-5 text-right">Total</th>
+                <th className="p-5 text-center w-20">Delete</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-sm">
+              {paginatedInvoices.map((inv) => (
+                <tr key={inv.id} className="hover:bg-blue-50 cursor-pointer transition-colors group" onClick={() => setPreviewInvoice(inv)}>
+                  <td className="p-5 pl-8 font-mono font-bold text-blue-600">#{String(inv.number || inv.id || '')}</td>
+                  <td className="p-5 text-slate-500">{String(inv.date || '')}</td>
+                  <td className="p-5 text-slate-800">{String(inv.customer || '')}</td>
+                  <td className="p-5 text-right font-black text-slate-900">${formatMoney(inv.total)}</td>
                   <td className="p-5 text-center">
-                    <span className="text-sm text-slate-600 border border-slate-200 px-3 py-1 rounded-md bg-white">
-                      {unit}
-                    </span>
-                  </td>
-                  <td className="p-5 text-sm text-slate-600 max-w-[200px] truncate">{desc}</td>
-                  <td className="p-5 text-sm text-slate-600">{packing}</td>
-                  <td className="p-5 text-right text-base font-bold text-blue-700">
-                    ${formatMoney(price)}
-                  </td>
-                  <td className="p-5 text-center">
-                    <span
-                      className={`text-xs px-3 py-1.5 rounded-md font-bold ${
-                        stock > 10
-                          ? 'bg-emerald-50 text-emerald-700'
-                          : 'bg-red-50 text-red-700'
-                      }`}
-                    >
-                      {stock}
-                    </span>
-                  </td>
-                  <td className="p-5 pr-8 text-center">
-                    <button 
-                      onClick={() => openEditModal(item)}
-                      className="text-slate-400 hover:text-blue-600 p-2 transition-colors inline-block bg-white hover:bg-blue-50 rounded-lg border border-transparent hover:border-blue-100 shadow-sm"
-                    >
-                      <Edit size={18} />
+                    <button onClick={(e) => handleDeleteInvoice(e, inv.id)} className="p-2 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all">
+                      <Trash2 size={18} />
                     </button>
                   </td>
                 </tr>
-              );
-            })}
-            
-            {filteredInventory.length === 0 && (
-              <tr>
-                <td colSpan="8" className="p-12 text-center text-base text-slate-500">
-                  No products match your search.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+              ))}
+              {paginatedInvoices.length === 0 && (
+                <tr>
+                  <td colSpan="5" className="p-12 text-center text-sm font-bold text-slate-400">
+                    No invoices match your current search and sorting criteria.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {isModalOpen && (
-        <InventoryFormModal 
-          item={editingItem} 
-          onClose={() => {
-            setIsModalOpen(false);
-            setEditingItem(null);
-          }} 
-          onSave={handleSaveProduct}
-          onDelete={handleDeleteProduct}
-        />
-      )}
-
-      {notification && (
-        <div 
-          className={`fixed bottom-8 left-1/2 -translate-x-1/2 px-6 py-3 rounded-xl shadow-2xl flex items-center z-[6000] text-white font-medium transition-all duration-300 ${
-            notification.type === 'error' ? 'bg-slate-800' : 'bg-emerald-600'
-          }`}
-        >
-          {notification.type === 'error' ? (
-            <Trash2 size={18} className="mr-3 shrink-0" />
-          ) : (
-            <CheckCircle size={18} className="mr-3 shrink-0" />
-          )}
-          {notification.message}
-        </div>
-      )}
-
+      {previewInvoice && <InvoicePreviewModal invoice={previewInvoice} onClose={() => setPreviewInvoice(null)} sys={sys} onEdit={(inv) => { setEditingInvoice(inv); setIsGeneratorOpen(true); setPreviewInvoice(null); }} />}
+      {isGeneratorOpen && <InvoiceGenerator sys={sys} existingInvoice={editingInvoice} onClose={() => { setIsGeneratorOpen(false); setEditingInvoice(null); }} />}
     </div>
   );
 }
