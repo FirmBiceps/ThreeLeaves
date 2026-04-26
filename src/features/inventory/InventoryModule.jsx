@@ -3,6 +3,19 @@ import { Search, Plus, Edit, Package, X, Trash2, Save, CheckCircle } from 'lucid
 import { formatMoney } from '../../utils/format';
 import { supabase } from '../../lib/supabaseClient';
 
+const DEFAULT_UNITS = [
+  '箱', 
+  '包', 
+  '个', 
+  '袋', 
+  '瓶', 
+  'per 100g', 
+  'per 250g', 
+  'per 500g', 
+  'per 1kg',
+  'per 5kg'
+];
+
 // ==========================================
 // COMPONENT 1: INVENTORY ADD/EDIT MODAL
 // ==========================================
@@ -18,9 +31,23 @@ function InventoryFormModal({ item, onClose, onSave, onDelete }) {
     stock: item?.stock ?? item?.Stock ?? 0,
   });
 
+  // Automatically switch to Custom mode if the existing unit isn't in our default list
+  const initialIsCustom = formData.Unit && !DEFAULT_UNITS.includes(formData.Unit);
+  const [isCustomUnit, setIsCustomUnit] = useState(initialIsCustom);
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
+  };
+
+  const handleUnitDropdown = (e) => {
+    const val = e.target.value;
+    if (val === '__CUSTOM__') {
+      setIsCustomUnit(true);
+      setFormData({ ...formData, Unit: '' }); // Clear it so they can type
+    } else {
+      setFormData({ ...formData, Unit: val });
+    }
   };
 
   const handleSubmit = (e) => {
@@ -91,16 +118,49 @@ function InventoryFormModal({ item, onClose, onSave, onDelete }) {
                 className="w-full border border-slate-200 rounded-xl p-3 text-base text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none"
               />
             </div>
+            
+            {/* UPDATED UNIT SELECTOR */}
             <div>
               <label className="block text-sm text-slate-500 mb-1">Unit</label>
-              <input 
-                type="text" 
-                name="Unit" 
-                value={formData.Unit} 
-                onChange={handleChange}
-                className="w-full border border-slate-200 rounded-xl p-3 text-base text-center text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none"
-              />
+              {!isCustomUnit ? (
+                <select
+                  name="Unit"
+                  value={DEFAULT_UNITS.includes(formData.Unit) ? formData.Unit : ''}
+                  onChange={handleUnitDropdown}
+                  className="w-full border border-slate-200 rounded-xl p-3 text-base text-center text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer"
+                >
+                  {DEFAULT_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                  {/* Safety fallback if the unit exists but isn't in default list */}
+                  {formData.Unit && !DEFAULT_UNITS.includes(formData.Unit) && (
+                    <option value={formData.Unit}>{formData.Unit}</option>
+                  )}
+                  <option value="__CUSTOM__" className="font-bold text-blue-600">+ Add Custom...</option>
+                </select>
+              ) : (
+                <div className="flex items-center border border-blue-300 bg-blue-50 rounded-xl focus-within:ring-2 focus-within:ring-blue-500 overflow-hidden">
+                  <input
+                    type="text"
+                    name="Unit"
+                    value={formData.Unit}
+                    onChange={handleChange}
+                    autoFocus
+                    placeholder="e.g. per 200g"
+                    className="w-full p-3 bg-transparent text-base text-center text-blue-800 outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCustomUnit(false);
+                      setFormData({ ...formData, Unit: '箱' });
+                    }}
+                    className="text-blue-400 hover:text-red-500 p-3 bg-blue-100/50 transition-colors"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              )}
             </div>
+
             <div>
               <label className="block text-sm text-blue-600 mb-1">Price</label>
               <input 
@@ -170,7 +230,6 @@ export function InventoryModule({ sys }) {
 
   const showNotification = (message, type = 'success') => {
     setNotification({ message, type });
-    // Extended timeout so you have time to read the error message
     setTimeout(() => {
       setNotification(null);
     }, 6000); 
@@ -199,9 +258,8 @@ export function InventoryModule({ sys }) {
 
       let finalId = formData.id;
 
-      // FIX: Changed "sku" to "SKU" to match your Database strictly!
       const payload = {
-        SKU: formData.sku,      // <--- This was the fix!
+        SKU: formData.sku,
         Name: formData.Name,
         Unit: formData.Unit,
         Description: formData.Description,
@@ -212,7 +270,6 @@ export function InventoryModule({ sys }) {
 
       let savedProduct;
 
-      // EXPLICIT DATABASE LOGIC
       if (isEditing) {
         finalId = editingItem.id || formData.id;
         const isUUID = finalId && finalId.length === 36 && finalId.includes('-');
@@ -228,7 +285,6 @@ export function InventoryModule({ sys }) {
           if (error) throw error;
           savedProduct = data;
         } else {
-          // Fallback if the database doesn't use UUIDs (finds by Name instead)
           const legacyName = editingItem.Name || editingItem.name || editingItem.Items;
           const { data, error } = await supabase
             .from('product_list')
@@ -241,7 +297,6 @@ export function InventoryModule({ sys }) {
           savedProduct = data;
         }
       } else {
-        // NEW PRODUCT - Just insert the raw payload without forcing an ID
         const { data, error } = await supabase
           .from('product_list')
           .insert([payload])
@@ -252,7 +307,6 @@ export function InventoryModule({ sys }) {
         savedProduct = data;
       }
 
-      // ONLY update the local table IF the database sync was successful
       if (isEditing) {
         const updatedInventory = sys.inventory.map(item => {
           const matchById = item.id && item.id === (editingItem.id || formData.id);
@@ -268,7 +322,6 @@ export function InventoryModule({ sys }) {
         sys.setInventory([savedProduct, ...sys.inventory]);
       }
 
-      // Log Price History
       if (priceChanged && savedProduct?.id) {
         await supabase.from('price_history').insert({
           product_id: savedProduct.id,
@@ -284,7 +337,6 @@ export function InventoryModule({ sys }) {
 
     } catch (error) {
       console.error("Save error: ", error);
-      // DISPLAYS THE EXACT SUPABASE ERROR MESSAGE ON SCREEN
       showNotification(`DB Error: ${error.message || 'Failed to save product'}`, 'error');
     }
   };
