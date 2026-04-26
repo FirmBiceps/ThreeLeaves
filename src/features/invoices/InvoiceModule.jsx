@@ -1,11 +1,333 @@
-import { useMemo, useState } from 'react';
-import { FileText, Printer, Trash2, Search, Plus, X, Edit } from 'lucide-react';
+import { useEffect, useMemo, useState, useRef } from 'react';
+import { Eye, FileText, MessageSquare, Printer, Save, Sparkles, Trash2, Search, BrainCircuit, ChevronLeft, X, Settings, AlertTriangle, ArrowUpDown, Plus, Edit } from 'lucide-react';
+import { CompanyHeader } from '../../components/shared/CompanyHeader';
+import { UNIT_OPTIONS } from '../../data/company';
 import { formatMoney } from '../../utils/format';
-import { InvoiceGenerator } from './InvoiceGenerator'; 
+import { supabase } from '../../lib/supabaseClient';
 
 import logo from './three_leaves_logo.png';
 import paynowQr from './paynow_qr.jpg';
+
 const CJK_FONT = '"Microsoft YaHei", "微软雅黑", "PingFang SC", "Hiragino Sans GB", "SimHei", "黑体", "SimSun", "宋体", serif';
+
+// ==========================================
+// COMPONENT: SEARCHABLE PRODUCT DROPDOWN
+// ==========================================
+function ProductSearchSelect({ value, inventory, onChange }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) { setIsOpen(false); }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const safeInventory = inventory || [];
+  const selectedProduct = safeInventory.find((entry) => entry.id === value);
+  const displayName = selectedProduct ? (selectedProduct.Name || selectedProduct.name || selectedProduct.Items) : '';
+
+  const filteredInventory = safeInventory.filter((item) => {
+    const itemName = (item.Name || item.name || item.Items || '').toLowerCase();
+    return itemName.includes(searchTerm.toLowerCase());
+  });
+
+  return (
+    <div className="relative w-full text-left" ref={dropdownRef}>
+      {!isOpen ? (
+        <button
+          type="button"
+          onClick={() => { setIsOpen(true); setSearchTerm(''); }}
+          className={`w-full text-left text-xs font-bold p-1 border border-transparent rounded hover:bg-slate-200 transition-colors focus:outline-none ${displayName ? 'text-slate-900' : 'text-slate-400'}`}
+        >
+          {displayName || '- Search Product -'}
+        </button>
+      ) : (
+        <div className="absolute z-[5000] top-0 left-0 w-72 bg-white border border-slate-300 rounded shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+          <div className="flex items-center p-2 border-b border-slate-200 bg-slate-50">
+            <Search size={14} className="text-slate-400 ml-1 mr-2 shrink-0" />
+            <input autoFocus type="text" className="w-full bg-transparent border-none text-xs font-bold text-slate-800 p-1 focus:ring-0 placeholder:text-slate-400 outline-none" placeholder="Type to search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+          </div>
+          <div className="max-h-52 overflow-y-auto">
+            {filteredInventory.length > 0 ? (
+              filteredInventory.map((item) => {
+                const itemName = item.Name || item.name || item.Items || 'Unnamed Product';
+                return (
+                  <button key={item.id} type="button" className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 border-b border-slate-100 last:border-0 transition-colors" onClick={() => { onChange(item.id); setIsOpen(false); }}>
+                    {itemName}
+                  </button>
+                );
+              })
+            ) : (<div className="p-3 text-center text-xs text-slate-400 font-medium">No products found.</div>)}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ==========================================
+// COMPONENT: SEARCHABLE CUSTOMER DROPDOWN
+// ==========================================
+function CustomerSearchSelect({ value, customers, onChange, disabled }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) { setIsOpen(false); }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const safeCustomers = customers || [];
+  const selectedCustomer = safeCustomers.find((c) => c.id === value);
+  const displayName = selectedCustomer ? selectedCustomer.name : '';
+
+  const filteredCustomers = safeCustomers.filter((c) => (c.name || '').toLowerCase().includes(searchTerm.toLowerCase()));
+
+  return (
+    <div className="relative w-full text-left" ref={dropdownRef}>
+      {!isOpen ? (
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => { setIsOpen(true); setSearchTerm(''); }}
+          className={`mt-1 w-full text-left text-[16px] font-black p-0 border border-transparent bg-transparent focus:outline-none transition-colors ${displayName ? 'text-slate-900' : 'text-slate-400'} ${disabled ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:text-blue-600'}`}
+        >
+          {displayName || 'Select Entity...'}
+        </button>
+      ) : (
+        <div className="absolute z-[5000] top-8 left-0 w-80 bg-white border border-slate-300 rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+          <div className="flex items-center p-3 border-b border-slate-200 bg-slate-50">
+            <Search size={16} className="text-slate-400 ml-1 mr-2 shrink-0" />
+            <input autoFocus type="text" className="w-full bg-transparent border-none text-sm font-bold text-slate-800 p-1 focus:ring-0 placeholder:text-slate-400 outline-none" placeholder="Search customer..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+          </div>
+          <div className="max-h-60 overflow-y-auto">
+            {filteredCustomers.length > 0 ? (
+              filteredCustomers.map((c) => (
+                <button key={c.id} type="button" className="w-full text-left px-4 py-3 text-sm font-bold text-slate-700 hover:bg-blue-50 border-b border-slate-100 last:border-0 transition-colors" onClick={() => { onChange(c.id); setIsOpen(false); }}>
+                  {c.name}
+                </button>
+              ))
+            ) : (<div className="p-4 text-center text-sm text-slate-400 font-medium">No customers found.</div>)}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ==========================================
+// COMPONENT: LAYOUT CHECK (Generator Preview)
+// ==========================================
+function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBack, onRegister, paymentTerms, subtotal, sys, total, existingInvoice }) {
+  const customerAddress = customer?.address || existingInvoice?.address || '';
+
+  return (
+    <div className="fixed inset-0 z-[3000] overflow-y-auto bg-slate-950/90 print:static print:block print:bg-white print:p-0 print:backdrop-filter-none">
+      
+      <style type="text/css">
+        {`
+          @media print {
+            @page { size: A4; margin: 0 !important; }
+            html, body {
+              margin: 0 !important;
+              padding: 0 !important;
+              background: white !important;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+            body * { visibility: hidden !important; }
+            #printable-invoice-generator, #printable-invoice-generator * { visibility: visible !important; }
+            
+            #printable-invoice-generator {
+              position: absolute !important;
+              left: 0 !important;
+              top: 0 !important;
+              width: 210mm !important; 
+              height: 297mm !important; 
+              padding: 15mm !important;
+              margin: 0 !important;
+              background: white !important;
+              backdrop-filter: none !important;
+              box-sizing: border-box !important;
+            }
+            
+            *, html, body, div, p, span, h1, h2, h3, table, th, td { font-family: ${CJK_FONT} !important; }
+            tr, td, th { page-break-inside: avoid; break-inside: avoid; }
+          }
+        `}
+      </style>
+
+      <div className="flex min-h-full flex-col items-center py-12 print:block print:py-0 print:m-0">
+        
+        <div className="w-full max-w-[210mm] shrink-0 bg-slate-900 px-8 py-4 flex justify-between items-center text-white rounded-t-2xl shadow-2xl print:hidden border-b-4 border-blue-600">
+          <div className="flex items-center">
+            <Eye size={24} className="mr-3 text-blue-400" />
+            <div>
+              <h2 className="text-sm font-black tracking-widest uppercase text-slate-200">Invoice Layout Check</h2>
+              <p className="text-lg font-bold text-white leading-none mt-0.5">#{invoiceNumber}</p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-3">
+            <button className="flex items-center rounded bg-slate-800 px-5 py-2.5 font-bold text-white transition-all hover:bg-slate-700 border border-slate-700 text-sm" onClick={onBack} type="button">
+              <ChevronLeft size={16} className="mr-1" /> Edit Draft
+            </button>
+            <button className="flex items-center rounded bg-white px-5 py-2.5 font-bold text-slate-900 shadow-lg transition-all hover:bg-slate-50 text-sm" onClick={() => onRegister(false)} type="button">
+              <Save className="mr-2" size={16} /> Save Invoice
+            </button>
+          </div>
+        </div>
+
+        <div 
+          id="printable-invoice-generator"
+          lang="zh" 
+          className="flex w-full max-w-[210mm] h-[297mm] flex-col bg-white p-[15mm] text-black shadow-2xl rounded-b-2xl print:w-[210mm] print:h-[297mm] print:max-w-none print:rounded-none print:shadow-none box-border shrink-0"
+          style={{ fontFamily: CJK_FONT }}
+        >
+          <div className="flex w-full mb-4 justify-between">
+            <div className="flex-1 flex flex-col pr-4">
+              <div className="flex items-center mb-5">
+                <div className="w-[110px] shrink-0 mr-4">
+                  <img src={logo} alt="Three Leaves Logo" className="w-full h-auto object-contain" />
+                </div>
+                <div className="flex-1 text-left leading-snug pt-2 whitespace-nowrap overflow-visible">
+                  <h1 className="font-black text-[17px]" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
+                  <h2 className="font-bold text-[16px] mb-1" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
+                  
+                  <div className="text-[#d55e2d] font-bold text-[10.5px] leading-tight tracking-tight">
+                    <p className="whitespace-nowrap">CO.REG NO.53033969B &nbsp;&nbsp; GST REG NO. M90355440L</p>
+                    <p className="whitespace-nowrap">280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
+                    <p className="whitespace-nowrap">HP: 97578869 (Mr Ye) &nbsp;&nbsp; HP: 91113505 (Min) &nbsp;&nbsp; Email: 3leaves.sg@gmail.com</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-between items-end w-full mb-2 text-[14px] font-bold">
+                <div className="flex items-end flex-1 pr-4">
+                  <span className="shrink-0 mr-2 text-black">TO:</span>
+                  <span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[13px] tracking-tight" style={{ fontFamily: CJK_FONT }}>
+                    {customer?.name || existingInvoice?.customer || ''}
+                  </span>
+                </div>
+                <div className="flex items-end w-[35%] pl-2">
+                  <span className="shrink-0 mr-2 text-black">DATE:</span>
+                  <span className="flex-1 text-center border-b border-black pb-0.5">
+                    {invoiceDate && !isNaN(new Date(invoiceDate).getTime()) ? new Date(invoiceDate).toLocaleDateString('en-GB').replace(/\//g, '-') : new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-end w-full text-[14px] font-bold">
+                <span className="shrink-0 mr-2 text-black">ADDRESS:</span>
+                <span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[12px] tracking-tighter" style={{ fontFamily: CJK_FONT }}>
+                  {customerAddress}
+                </span>
+              </div>
+            </div>
+
+            <div className="w-[180px] shrink-0 flex flex-col items-start pl-4 pt-1">
+              <h2 className="text-[22px] font-bold tracking-[0.4em] leading-none mb-1" style={{ fontFamily: CJK_FONT }}>發票</h2>
+              <h3 className="text-[15px] font-black tracking-wide uppercase mb-6 text-black">TAX INVOICE</h3>
+              
+              <div className="w-full flex flex-col gap-3 mt-auto mb-2">
+                <div className="flex items-baseline">
+                  <span className="font-bold w-[50px] shrink-0 text-black text-[15px]">No.</span>
+                  <span className="text-red-600 font-bold tracking-wider text-[17px] leading-none">{invoiceNumber}</span>
+                </div>
+                <div className="flex items-baseline">
+                  <span className="font-bold w-[50px] shrink-0 text-black text-[15px]">Term:</span>
+                  <span className="text-red-600 font-bold text-[16px] leading-none">{paymentTerms === 'cod' ? 'COD' : '30 Days'}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <table className="w-full text-[15px] border-2 border-black text-center mb-0 leading-tight flex-none mt-2" style={{ fontFamily: CJK_FONT }}>
+            <thead className="border-b-2 border-black">
+              <tr className="font-bold bg-white text-[14px]">
+                <th className="py-2 px-1 border-r border-black w-10">NO.</th>
+                <th className="py-2 px-2 border-r border-black text-left">DESCRIPTION</th>
+                <th className="py-2 px-1 border-r border-black w-24">QUANTITY</th>
+                <th className="py-2 px-1 border-r border-black w-32 text-center">UNIT PRICE</th>
+                <th className="py-2 px-1 w-32 text-center">AMOUNT</th>
+              </tr>
+            </thead>
+            <tbody style={{ fontFamily: CJK_FONT }}>
+              {(items || []).map((item, idx) => {
+                const foundProduct = (sys.inventory || []).find((entry) => entry.id === item.itemId);
+                const productName = foundProduct ? (foundProduct.Name || foundProduct.name || foundProduct.Items) : (item.Name || item.name || '-');
+                return (
+                  <tr key={idx} className="h-[25px] align-top" style={{ fontFamily: CJK_FONT }}>
+                    <td className="px-1 py-0.5 border-r border-black font-medium text-center">{idx + 1}</td>
+                    <td className="px-1 py-0.5 border-r border-black text-left pl-2 font-bold leading-none pt-1" style={{ fontFamily: CJK_FONT }}>{productName}</td>
+                    <td className="px-1 py-0.5 border-r border-black font-medium text-center" style={{ fontFamily: CJK_FONT }}>{item.qty || item.quantity} {item.unit || item.Unit}</td>
+                    <td className="px-1 py-0.5 border-r border-black text-center">${formatMoney(item.unitPrice)}</td>
+                    <td className="px-1 py-0.5 text-center font-bold">${formatMoney((Number(item.qty || item.quantity) || 0) * (Number(item.unitPrice) || 0))}</td>
+                  </tr>
+                );
+              })}
+              
+              {items && items.length < 20 && Array.from({ length: 20 - items.length }).map((_, i) => (
+                <tr key={`blank-${i}`} className="h-[25px]">
+                  <td className="border-r border-black"></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td></td>
+                </tr>
+              ))}
+
+              <tr className="border-t-2 border-black font-bold h-[26px]" style={{ fontFamily: CJK_FONT }}>
+                <td colSpan="3" rowSpan="3" className="border-r border-black bg-white"></td>
+                <td className="p-1 border-r border-black border-b border-black text-center text-[14px]">SUBTOTAL</td>
+                <td className="p-1 text-center border-b border-black text-[15px]">${formatMoney(subtotal)}</td>
+              </tr>
+              <tr className="font-bold h-[26px]" style={{ fontFamily: CJK_FONT }}>
+                <td className="p-1 border-r border-black border-b border-black text-center text-[14px]">9% GST</td>
+                <td className="p-1 text-center border-b border-black text-[15px]">${formatMoney(gst)}</td>
+              </tr>
+              <tr className="font-bold h-[30px]" style={{ fontFamily: CJK_FONT }}>
+                <td className="p-1 border-r border-black text-center text-[16px]">TOTAL</td>
+                <td className="p-1 text-center text-[17px]">${formatMoney(total)}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div className="flex w-full mt-auto pt-2 items-end shrink-0">
+            <div className="w-[70%] text-[12px] font-bold leading-snug pr-4">
+              <div style={{ fontFamily: CJK_FONT }}>
+                <p className="text-[12px]">请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
+                <p className="text-[10px] whitespace-nowrap text-slate-800">Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
+                
+                <div className="mt-2 flex items-center">
+                  <div className="w-[65px] h-[65px] shrink-0 mr-3">
+                    <img src={paynowQr} alt="PayNow QR Code" className="w-full h-full object-contain" />
+                  </div>
+                  <div className="flex flex-col justify-center text-[11px]">
+                    <p>UEN: 53033969B</p>
+                    <p>A/C Name: Three Leaves (Singapore) Trading Enterprise</p>
+                    <p>A/C Number: 535-846562-001</p>
+                    <p>Bank Name: OCBC</p>
+                    <p className="mt-0.5 font-normal text-[10px] text-slate-800">All payments must be made payable to Three Leaves (Singapore) Trading Enterprise.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="w-[30%] shrink-0 flex flex-col justify-end pb-1 pl-2">
+              <div className="h-12"></div> 
+              <div className="border-t-2 border-black text-center pt-1.5 text-[12px] font-bold uppercase tracking-widest">Received By</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ==========================================
 // COMPONENT: HISTORY PREVIEW MODAL
@@ -143,7 +465,6 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
             </div>
           </div>
 
-          {/* FIXED: Compressed table rows to allow 20 items to fit in A4 height safely */}
           <table className="w-full text-[15px] border-2 border-black text-center mb-0 leading-tight flex-none mt-2" style={{ fontFamily: CJK_FONT }}>
             <thead className="border-b-2 border-black">
               <tr className="font-bold bg-white text-[14px]">
@@ -171,7 +492,6 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
                 );
               })}
               
-              {/* FIXED: Capacity expanded to 20 items exactly */}
               {invoice.items && invoice.items.length < 20 && Array.from({ length: 20 - invoice.items.length }).map((_, i) => (
                 <tr key={`blank-${i}`} className="h-[25px]">
                   <td className="border-r border-black"></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td></td>
@@ -194,9 +514,7 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
             </tbody>
           </table>
 
-          {/* FIXED: 70/30 Split Layout for Footer ensures text is wide, signature is right-aligned */}
           <div className="flex w-full mt-auto pt-2 items-end shrink-0">
-            {/* 70% Width - Payment Details */}
             <div className="w-[70%] text-[12px] font-bold leading-snug pr-4">
               <div style={{ fontFamily: CJK_FONT }}>
                 <p className="text-[12px]">请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
@@ -217,9 +535,8 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
               </div>
             </div>
 
-            {/* 30% Width - Signature */}
             <div className="w-[30%] shrink-0 flex flex-col justify-end pb-1 pl-2">
-              <div className="h-12"></div> {/* Signature gap */}
+              <div className="h-12"></div> 
               <div className="border-t-2 border-black text-center pt-1.5 text-[12px] font-bold uppercase tracking-widest">Received By</div>
             </div>
           </div>
@@ -237,6 +554,7 @@ export function InvoiceModule({ sys }) {
   const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
   const [filter, setFilter] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
+  const [sortOption, setSortOption] = useState('date_desc'); // NEW: Sort State
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 30;
 
@@ -257,8 +575,8 @@ export function InvoiceModule({ sys }) {
 
   const filteredInvoices = useMemo(() => {
     let result = [...(sys?.invoices || [])];
-    result.sort((a, b) => new Date(b.date) - new Date(a.date));
 
+    // 1. String Search
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase();
       result = result.filter(inv => 
@@ -267,6 +585,7 @@ export function InvoiceModule({ sys }) {
       );
     }
 
+    // 2. Date Filtering
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -287,8 +606,33 @@ export function InvoiceModule({ sys }) {
       return true;
     });
 
+    // 3. Dynamic Sorting
+    result.sort((a, b) => {
+      const dateA = new Date(a.date || 0).getTime();
+      const dateB = new Date(b.date || 0).getTime();
+      const numA = String(a.number || a.id || '');
+      const numB = String(b.number || b.id || '');
+      const totA = Number(a.total) || 0;
+      const totB = Number(b.total) || 0;
+      const custA = String(a.customer || '');
+      const custB = String(b.customer || '');
+
+      switch (sortOption) {
+        case 'date_asc': return dateA - dateB;
+        case 'number_desc': return numB.localeCompare(numA, undefined, { numeric: true });
+        case 'number_asc': return numA.localeCompare(numB, undefined, { numeric: true });
+        case 'total_desc': return totB - totA;
+        case 'total_asc': return totA - totB;
+        case 'customer_asc': return custA.localeCompare(custB);
+        case 'customer_desc': return custB.localeCompare(custA);
+        case 'date_desc':
+        default:
+          return dateB - dateA;
+      }
+    });
+
     return result;
-  }, [sys.invoices, filter, searchTerm]);
+  }, [sys.invoices, filter, searchTerm, sortOption]);
 
   const paginatedInvoices = filteredInvoices.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
@@ -306,7 +650,8 @@ export function InvoiceModule({ sys }) {
         </div>
 
         <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-          <div className="flex justify-between items-center border-b bg-slate-50 p-4">
+          <div className="flex flex-wrap justify-between items-center border-b bg-slate-50 p-4 gap-4">
+            
             <div className="flex bg-white rounded-lg p-1 border">
               {['All', 'Today', 'This Week', 'This Month'].map((opt) => (
                 <button key={opt} onClick={() => setFilter(opt)} className={`px-4 py-1.5 text-[11px] font-black uppercase rounded-md ${filter === opt ? 'bg-slate-800 text-white' : 'text-slate-500'}`}>
@@ -314,10 +659,33 @@ export function InvoiceModule({ sys }) {
                 </button>
               ))}
             </div>
-            <div className="flex items-center bg-white border rounded-xl px-4 py-2 w-72">
-              <Search className="text-slate-400 mr-2" size={18} />
-              <input type="text" placeholder="Search..." className="w-full bg-transparent outline-none text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+
+            <div className="flex items-center space-x-3 w-full sm:w-auto">
+              {/* NEW: Dynamic Sort Dropdown */}
+              <div className="relative flex items-center bg-white border rounded-xl shadow-sm px-3 py-2 w-full sm:w-48 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
+                <ArrowUpDown className="text-slate-400 mr-2 shrink-0" size={16} />
+                <select
+                  className="w-full bg-transparent outline-none text-xs font-bold text-slate-700 cursor-pointer appearance-none"
+                  value={sortOption}
+                  onChange={(e) => setSortOption(e.target.value)}
+                >
+                  <option value="date_desc">Date (Newest First)</option>
+                  <option value="date_asc">Date (Oldest First)</option>
+                  <option value="number_desc">Invoice No. (Highest)</option>
+                  <option value="number_asc">Invoice No. (Lowest)</option>
+                  <option value="total_desc">Amount (Highest)</option>
+                  <option value="total_asc">Amount (Lowest)</option>
+                  <option value="customer_asc">Customer (A-Z)</option>
+                  <option value="customer_desc">Customer (Z-A)</option>
+                </select>
+              </div>
+
+              <div className="flex items-center bg-white border rounded-xl px-4 py-2 w-full sm:w-64 shadow-sm focus-within:ring-2 focus-within:ring-blue-100 transition-all">
+                <Search className="text-slate-400 mr-2 shrink-0" size={16} />
+                <input type="text" placeholder="Search..." className="w-full bg-transparent outline-none text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+              </div>
             </div>
+
           </div>
 
           <table className="w-full text-left border-collapse">
@@ -344,6 +712,13 @@ export function InvoiceModule({ sys }) {
                   </td>
                 </tr>
               ))}
+              {paginatedInvoices.length === 0 && (
+                <tr>
+                  <td colSpan="5" className="p-12 text-center text-sm font-bold text-slate-400">
+                    No invoices match your current search and sorting criteria.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
