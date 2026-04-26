@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { FileText, Printer, Search, Calendar, Download, Loader2 } from 'lucide-react';
-import { formatMoney } from '../../utils/format';
+import { FileText, Printer, Search, Calendar, Download, Loader2, DollarSign, TrendingUp, Users, Crown, Receipt } from 'lucide-react';
+import { formatMoney, formatMoneyWhole } from '../../utils/format';
 import JSZip from 'jszip';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
@@ -18,51 +18,81 @@ export function BillingModule({ sys }) {
   });
   const [searchTerm, setSearchTerm] = useState('');
   
-  // Controls what gets sent to the printer/zipper: 'ALL' or a specific 'customerId'
+  // Controls what gets sent to the printer/zipper: 'ALL', 'ZIP_ALL', or a specific 'customerId'
   const [printTarget, setPrintTarget] = useState(null);
   const [isZipping, setIsZipping] = useState(false);
 
-  // 1. Group all invoices by Customer for the selected month
-  const statementData = useMemo(() => {
-    const data = {};
+  // BULLETPROOF: Safely extract arrays
+  const safeInvoices = Array.isArray(sys?.invoices) ? sys.invoices : [];
+  const safeCustomers = Array.isArray(sys?.customers) ? sys.customers : [];
 
-    // Filter invoices by the selected month (YYYY-MM)
-    const monthInvoices = sys.invoices.filter(inv => {
+  // ==========================================
+  // FINANCIAL ANALYTICS & DATA ENGINE
+  // ==========================================
+  const analytics = useMemo(() => {
+    // 1. Filter invoices strictly by the selected YYYY-MM
+    const monthInvoices = safeInvoices.filter(inv => {
       if (!inv.date) return false;
-      return inv.date.startsWith(selectedMonth);
+      return String(inv.date).startsWith(selectedMonth);
     });
 
+    const dataMap = {};
+    let totalRevenue = 0;
+
+    // 2. Group by Customer and aggregate totals
     monthInvoices.forEach(inv => {
-      if (!data[inv.customerId]) {
-        const customerObj = sys.customers.find(c => c.id === inv.customerId);
-        data[inv.customerId] = {
+      if (!dataMap[inv.customerId]) {
+        const customerObj = safeCustomers.find(c => c.id === inv.customerId);
+        dataMap[inv.customerId] = {
           customer: customerObj,
-          customerName: customerObj?.name || inv.customer || 'Unknown Customer',
+          customerName: String(customerObj?.name || inv.customer || 'Unknown Customer'),
           invoices: [],
           totalBilled: 0,
         };
       }
-
-      data[inv.customerId].invoices.push(inv);
-      data[inv.customerId].totalBilled += (inv.total || 0);
+      dataMap[inv.customerId].invoices.push(inv);
+      const invTotal = Number(inv.total) || 0;
+      dataMap[inv.customerId].totalBilled += invTotal;
+      totalRevenue += invTotal;
     });
 
-    // Convert object to array and sort alphabetically
-    let results = Object.values(data).sort((a, b) => a.customerName.localeCompare(b.customerName));
+    const allCustomerStats = Object.values(dataMap);
+    const activeCustomers = allCustomerStats.length;
+    const totalInvoicesCount = monthInvoices.length;
+    const aov = totalInvoicesCount > 0 ? totalRevenue / totalInvoicesCount : 0;
+    
+    // Sort to find the highest grossing customer for the month
+    const sortedByRevenue = [...allCustomerStats].sort((a, b) => b.totalBilled - a.totalBilled);
+    const topCustomer = sortedByRevenue[0] || null;
 
-    // Apply Search Filter
+    // 3. Apply Search Filter for the Table Display
+    let displayList = [...allCustomerStats].sort((a, b) => a.customerName.localeCompare(b.customerName));
     if (searchTerm) {
-      const lowerSearch = searchTerm.toLowerCase();
-      results = results.filter(row => row.customerName.toLowerCase().includes(lowerSearch));
+      const lowerSearch = String(searchTerm).toLowerCase();
+      displayList = displayList.filter(row => row.customerName.toLowerCase().includes(lowerSearch));
     }
 
-    // Sort the invoices inside each customer by date
-    results.forEach(row => {
-      row.invoices.sort((a, b) => new Date(a.date) - new Date(b.date));
+    // Sort the individual invoices inside each row by date
+    displayList.forEach(row => {
+      row.invoices.sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
     });
 
-    return results;
-  }, [sys.invoices, sys.customers, selectedMonth, searchTerm]);
+    // Sort the hidden zip/print array as well
+    allCustomerStats.forEach(row => {
+      row.invoices.sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
+    });
+
+    return {
+      totalRevenue,
+      activeCustomers,
+      totalInvoicesCount,
+      aov,
+      topCustomer,
+      displayList,
+      allCustomerStats
+    };
+  }, [safeInvoices, safeCustomers, selectedMonth, searchTerm]);
+
 
   // Handle Standard Print Action
   const handlePrint = (target) => {
@@ -77,7 +107,7 @@ export function BillingModule({ sys }) {
   // Handle Download ZIP Action
   const handleDownloadZip = () => {
     setIsZipping(true);
-    setPrintTarget('ALL'); // Force React to render all statements into the DOM temporarily
+    setPrintTarget('ZIP_ALL'); // Force React to render ALL statements into the DOM temporarily
 
     setTimeout(async () => {
       try {
@@ -96,8 +126,8 @@ export function BillingModule({ sys }) {
         const yearShort = String(d.getFullYear()).slice(-2);
 
         // Generate a PDF for each customer statement
-        for (let i = 0; i < statementData.length; i++) {
-          const data = statementData[i];
+        for (let i = 0; i < analytics.allCustomerStats.length; i++) {
+          const data = analytics.allCustomerStats[i];
           const node = statementNodes[i];
           
           if (!node) continue;
@@ -151,10 +181,10 @@ export function BillingModule({ sys }) {
 
   // Determine which statements to render in the hidden print area
   const statementsToPrint = useMemo(() => {
-    if (printTarget === 'ALL') return statementData;
-    if (printTarget) return statementData.filter(data => data.customer?.id === printTarget);
+    if (printTarget === 'ALL' || printTarget === 'ZIP_ALL') return analytics.allCustomerStats;
+    if (printTarget) return analytics.allCustomerStats.filter(data => data.customer?.id === printTarget);
     return [];
-  }, [printTarget, statementData]);
+  }, [printTarget, analytics.allCustomerStats]);
 
   // Format the month nicely for display (e.g., "April 2026")
   const displayMonth = useMemo(() => {
@@ -165,7 +195,7 @@ export function BillingModule({ sys }) {
   }, [selectedMonth]);
 
   return (
-    <div className="p-8 h-full overflow-y-auto relative">
+    <div className="p-8 h-full overflow-y-auto relative bg-slate-50/50">
       
       {/* HARD-INJECTED PRINT STYLES */}
       <style type="text/css">
@@ -210,7 +240,7 @@ export function BillingModule({ sys }) {
             <button
               className="flex items-center rounded-xl bg-indigo-600 px-6 py-2.5 font-medium text-white shadow-lg transition-all hover:bg-indigo-700 active:scale-95 disabled:opacity-50"
               onClick={handleDownloadZip}
-              disabled={statementData.length === 0 || isZipping}
+              disabled={analytics.allCustomerStats.length === 0 || isZipping}
               type="button"
             >
               {isZipping ? (
@@ -223,7 +253,7 @@ export function BillingModule({ sys }) {
             <button
               className="flex items-center rounded-xl bg-blue-600 px-6 py-2.5 font-medium text-white shadow-lg transition-all hover:bg-blue-700 active:scale-95 disabled:opacity-50"
               onClick={() => handlePrint('ALL')}
-              disabled={statementData.length === 0 || isZipping}
+              disabled={analytics.allCustomerStats.length === 0 || isZipping}
               type="button"
             >
               <Printer className="mr-2" size={18} /> Print ALL
@@ -231,15 +261,78 @@ export function BillingModule({ sys }) {
           </div>
         </div>
 
+        {/* ========================================== */}
+        {/* FINANCIAL ANALYTICS DASHBOARD */}
+        {/* ========================================== */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          {/* Total Revenue Card */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex flex-col justify-center relative overflow-hidden">
+            <div className="absolute -right-4 -top-4 opacity-5 text-blue-600">
+              <TrendingUp size={100} />
+            </div>
+            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-1 flex items-center z-10">
+              <DollarSign size={12} className="mr-1" /> Total Monthly Revenue
+            </p>
+            <p className="text-3xl font-black text-blue-600 tracking-tighter z-10">
+              ${formatMoneyWhole(analytics.totalRevenue)}
+            </p>
+          </div>
+
+          {/* Average Order Value (AOV) Card */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex flex-col justify-center">
+            <div className="flex justify-between items-end mb-2">
+              <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 flex items-center">
+                <Receipt size={12} className="mr-1" /> Avg Order Value
+              </p>
+              <p className="text-xs font-bold text-slate-400">{analytics.totalInvoicesCount} Invoices</p>
+            </div>
+            <p className="text-2xl font-bold text-slate-800 tracking-tight">
+              ${formatMoney(analytics.aov)} <span className="text-sm font-medium text-slate-400">/ order</span>
+            </p>
+          </div>
+
+          {/* Active Customers Card */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex flex-col justify-center">
+            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-1 flex items-center">
+              <Users size={12} className="mr-1" /> Active Accounts
+            </p>
+            <p className="text-2xl font-bold text-slate-800 tracking-tight">
+              {analytics.activeCustomers} <span className="text-sm font-medium text-slate-400">entities billed</span>
+            </p>
+          </div>
+
+          {/* Top Performer Card */}
+          <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl border border-amber-200 p-6 shadow-sm flex flex-col justify-center">
+            <p className="text-[11px] font-black uppercase tracking-widest text-amber-600 mb-1 flex items-center">
+              <Crown size={12} className="mr-1" /> Top Customer
+            </p>
+            {analytics.topCustomer ? (
+              <>
+                <p className="text-sm font-bold text-slate-900 truncate leading-tight">
+                  {analytics.topCustomer.customerName}
+                </p>
+                <p className="text-lg font-black text-amber-600 tracking-tight mt-0.5">
+                  ${formatMoneyWhole(analytics.topCustomer.totalBilled)}
+                </p>
+              </>
+            ) : (
+              <p className="text-sm font-medium text-slate-400 mt-1">No data available</p>
+            )}
+          </div>
+        </div>
+
+
+        {/* ========================================== */}
+        {/* STATEMENT TABLE AREA */}
+        {/* ========================================== */}
         <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
           
-          {/* FILTERS */}
           <div className="flex flex-col sm:flex-row justify-between items-center border-b border-slate-100 bg-slate-50 p-4 gap-4">
             <div className="flex items-center bg-white border border-slate-200 rounded-xl px-4 py-2 shadow-sm">
               <Calendar className="text-slate-400 mr-2" size={18} />
               <input
                 type="month"
-                className="bg-transparent border-none focus:ring-0 text-sm font-bold text-slate-700 outline-none"
+                className="bg-transparent border-none focus:ring-0 text-sm font-bold text-slate-700 outline-none cursor-pointer"
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
               />
@@ -257,7 +350,6 @@ export function BillingModule({ sys }) {
             </div>
           </div>
 
-          {/* SUMMARY TABLE */}
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-white border-b border-slate-200 text-xs uppercase tracking-widest text-slate-500 font-semibold">
@@ -268,8 +360,8 @@ export function BillingModule({ sys }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
-              {statementData.map((row) => (
-                <tr className="font-medium hover:bg-slate-50 transition-colors" key={row.customer?.id || row.customerName}>
+              {analytics.displayList.map((row) => (
+                <tr className="font-medium hover:bg-blue-50/50 transition-colors" key={row.customer?.id || row.customerName}>
                   <td className="p-5 pl-8 font-bold text-slate-800">
                     {row.customerName}
                   </td>
@@ -278,14 +370,14 @@ export function BillingModule({ sys }) {
                   <td className="p-5 pr-8 text-right">
                     <button
                       onClick={() => handlePrint(row.customer?.id)}
-                      className="inline-flex items-center text-[10px] font-black uppercase tracking-widest text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors"
+                      className="inline-flex items-center text-[10px] font-black uppercase tracking-widest text-blue-600 bg-blue-50 border border-blue-100 px-3 py-1.5 rounded-lg hover:bg-blue-600 hover:text-white transition-colors"
                     >
                       <Printer size={12} className="mr-1" /> Print
                     </button>
                   </td>
                 </tr>
               ))}
-              {statementData.length === 0 && (
+              {analytics.displayList.length === 0 && (
                 <tr>
                   <td className="p-12 text-center text-sm font-bold text-slate-400" colSpan="4">
                     No transactions found for {displayMonth}.
@@ -369,7 +461,7 @@ export function BillingModule({ sys }) {
               </thead>
               <tbody>
                 {data.invoices.map((inv, idx) => {
-                  const billed = inv.total || 0;
+                  const billed = Number(inv.total) || 0;
 
                   return (
                     <tr key={inv.id} className="h-[32px] align-top" style={{ fontFamily: CJK_FONT }}>
