@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { FileText, Printer, Search, Calendar, Download, Loader2, DollarSign, TrendingUp, Users, Crown, Receipt, CheckCircle, AlertCircle } from 'lucide-react';
+import { FileText, Printer, Search, Calendar, Download, Loader2, DollarSign, TrendingUp, Users, Crown, Receipt, CheckCircle, AlertCircle, ChevronDown } from 'lucide-react';
 import { formatMoney, formatMoneyWhole } from '../../utils/format';
 import JSZip from 'jszip';
 import html2canvas from 'html2canvas';
@@ -112,10 +112,8 @@ export function BillingModule({ sys }) {
     };
   }, [safeInvoices, safeCustomers, selectedMonth, searchTerm]);
 
-  // Handle marking a month as Paid/Unpaid
-  const handleToggleMonthStatus = (customerId, currentStatus) => {
-    const newStatus = currentStatus === 'Paid' ? 'Unpaid' : 'Paid';
-    
+  // FIXED: Changed from toggle to dropdown selection handler
+  const handleStatusChange = (customerId, newStatus) => {
     const updatedInvoices = safeInvoices.map(inv => {
       if (inv.customerId === customerId && String(inv.date).startsWith(selectedMonth)) {
         return { ...inv, status: newStatus };
@@ -299,10 +297,8 @@ export function BillingModule({ sys }) {
             <thead>
               <tr className="bg-white border-b border-slate-200 text-xs uppercase tracking-widest text-slate-500 font-semibold">
                 <th className="p-5 pl-8">Customer Entity</th>
-                <th className="p-5 text-right">This Month</th>
-                <th className="p-5 text-right text-red-500">Prev. Unpaid</th>
-                <th className="p-5 text-right text-slate-900">Overall Due</th>
-                <th className="p-5 text-center">Status</th>
+                <th className="p-5 text-center">Invoices</th>
+                <th className="p-5 text-right text-red-600">Total Amount</th>
                 <th className="p-5 pr-8 text-right">Action</th>
               </tr>
             </thead>
@@ -318,15 +314,26 @@ export function BillingModule({ sys }) {
                   <td className="p-5 text-right font-black text-slate-900 text-base">${formatMoney(row.overallDue)}</td>
                   <td className="p-5 text-center">
                     {row.invoices.length > 0 ? (
-                      <button
-                        onClick={() => handleToggleMonthStatus(row.customer?.id, row.monthStatus)}
-                        className={`inline-flex items-center px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
-                          row.monthStatus === 'Paid' ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-orange-100 text-orange-700 hover:bg-orange-200'
-                        }`}
-                      >
-                        {row.monthStatus === 'Paid' ? <CheckCircle size={12} className="mr-1" /> : <AlertCircle size={12} className="mr-1" />}
-                        {row.monthStatus}
-                      </button>
+                      <div className="relative inline-flex items-center">
+                        <select
+                          value={row.monthStatus}
+                          onChange={(e) => handleStatusChange(row.customer?.id, e.target.value)}
+                          className={`appearance-none cursor-pointer pl-8 pr-8 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest outline-none transition-all ${
+                            row.monthStatus === 'Paid' 
+                              ? 'bg-emerald-100 text-emerald-700 border border-emerald-200 hover:bg-emerald-200' 
+                              : 'bg-orange-100 text-orange-700 border border-orange-200 hover:bg-orange-200'
+                          }`}
+                        >
+                          <option value="Paid">PAID</option>
+                          <option value="Unpaid">UNPAID</option>
+                        </select>
+                        <div className="absolute left-2.5 pointer-events-none">
+                          {row.monthStatus === 'Paid' ? <CheckCircle size={12} className="text-emerald-600" /> : <AlertCircle size={12} className="text-orange-600" />}
+                        </div>
+                        <div className="absolute right-2.5 pointer-events-none">
+                          <ChevronDown size={12} className={row.monthStatus === 'Paid' ? "text-emerald-600" : "text-orange-600"} />
+                        </div>
+                      </div>
                     ) : (
                       <span className="text-xs text-slate-400 font-medium italic">No new invoices</span>
                     )}
