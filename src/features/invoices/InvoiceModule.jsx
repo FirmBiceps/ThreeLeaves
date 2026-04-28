@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
-import { Eye, FileText, MessageSquare, Printer, Save, Sparkles, Trash2, Search, BrainCircuit, ChevronLeft, X, Settings, AlertTriangle, ArrowUpDown, Plus, Edit } from 'lucide-react';
+import { Eye, FileText, MessageSquare, Printer, Save, Sparkles, Trash2, Search, BrainCircuit, ChevronLeft, X, Settings, AlertTriangle, ArrowUpDown, Plus, Edit, Filter } from 'lucide-react';
 import { CompanyHeader } from '../../components/shared/CompanyHeader';
 import { UNIT_OPTIONS } from '../../data/company';
 import { formatMoney } from '../../utils/format';
@@ -789,7 +789,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
       date: String(invoiceDate),
       items: Array.isArray(items) ? items : [],
       total,
-      status: existingInvoice ? String(existingInvoice.status || 'Paid') : 'Paid',
+      status: existingInvoice ? String(existingInvoice.status || 'Unpaid') : 'Unpaid',
       deliveryStatus: existingInvoice ? String(existingInvoice.deliveryStatus || 'Pending') : 'Pending',
       paymentTerms: String(paymentTerms),
     };
@@ -1005,6 +1005,32 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                   const ruleKey = `${item.itemId}|${safeItemUnit}`;
                   const hasCustomPrice = customer?.custom_prices && typeof customer.custom_prices === 'object' && customer.custom_prices[ruleKey] !== undefined;
 
+                  const selectedProduct = safeInventory.find(p => p.id === item.itemId);
+                  let rowUnitOptions = [];
+
+                  if (selectedProduct) {
+                    const defaultUnit = String(selectedProduct.Unit || selectedProduct.unit || '箱');
+                    rowUnitOptions.push({ value: defaultUnit, label: defaultUnit });
+
+                    if (customer?.custom_prices && typeof customer.custom_prices === 'object') {
+                      Object.keys(customer.custom_prices).forEach(key => {
+                        const [pid, pUnit] = key.split('|');
+                        if (pid === selectedProduct.id && pUnit !== defaultUnit) {
+                          rowUnitOptions.push({ value: pUnit, label: `${pUnit} (Custom)` });
+                        }
+                      });
+                    }
+
+                    if (safeItemUnit && !rowUnitOptions.find(opt => opt.value === safeItemUnit)) {
+                      rowUnitOptions.push({ value: safeItemUnit, label: safeItemUnit });
+                    }
+                  } else {
+                    rowUnitOptions = Array.isArray(UNIT_OPTIONS) ? UNIT_OPTIONS : [];
+                    if (safeItemUnit && !rowUnitOptions.find(opt => opt.value === safeItemUnit)) {
+                      rowUnitOptions.push({ value: safeItemUnit, label: safeItemUnit });
+                    }
+                  }
+
                   return (
                     <tr className={`border-b font-bold ${!item.itemId && item.rawSearchString ? 'bg-amber-50/30 border-amber-100' : 'border-gray-100'}`} key={`${item.itemId}-${index}`}>
                       <td className="p-4 text-center font-mono text-xs text-slate-300 align-top pt-5">{index + 1}</td>
@@ -1062,12 +1088,8 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                         )}
                       </td>
                       <td className="p-2 align-top pt-4">
-                        {/* BULLETPROOF: Dynamically add custom units to the dropdown so it doesn't break if it was typed previously */}
-                        <select className="w-full border-none text-center text-xs font-bold focus:ring-0 bg-transparent m-0" onChange={(event) => { const nextItems = [...items]; const newUnit = event.target.value; nextItems[index].unit = newUnit; const product = safeInventory.find(p => p.id === nextItems[index].itemId); if (product) { nextItems[index].unitPrice = getSafePrice(product, newUnit); } setItems(nextItems); }} value={safeItemUnit}>
-                          {Array.isArray(UNIT_OPTIONS) && UNIT_OPTIONS.map((option) => (<option key={option.value} value={option.value}>{option.label}</option>))}
-                          {safeItemUnit && Array.isArray(UNIT_OPTIONS) && !UNIT_OPTIONS.find(opt => opt.value === safeItemUnit) && (
-                            <option value={safeItemUnit}>{safeItemUnit}</option>
-                          )}
+                        <select className="w-full border-none text-center text-xs font-bold focus:ring-0 bg-transparent m-0 cursor-pointer" onChange={(event) => { const nextItems = [...items]; const newUnit = event.target.value; nextItems[index].unit = newUnit; const product = safeInventory.find(p => p.id === nextItems[index].itemId); if (product) { nextItems[index].unitPrice = getSafePrice(product, newUnit); } setItems(nextItems); }} value={safeItemUnit}>
+                          {rowUnitOptions.map((option) => (<option key={option.value} value={option.value}>{option.label}</option>))}
                         </select>
                       </td>
                       <td className="p-2 align-top pt-3">
@@ -1193,6 +1215,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
 export function InvoiceModule({ sys }) {
   const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
   const [filter, setFilter] = useState('All');
+  const [termFilter, setTermFilter] = useState('All'); // NEW: Payment Term Filter
   const [searchTerm, setSearchTerm] = useState('');
   const [sortOption, setSortOption] = useState('date_desc');
   const [currentPage, setCurrentPage] = useState(1);
@@ -1230,6 +1253,11 @@ export function InvoiceModule({ sys }) {
     today.setHours(0, 0, 0, 0);
 
     result = result.filter(inv => {
+      // NEW: Apply Payment Term Filter
+      if (termFilter !== 'All' && String(inv.paymentTerms) !== termFilter) {
+        return false;
+      }
+
       if (filter === 'All') return true;
       const [year, month, day] = String(inv.date || '').split('-').map(Number);
       if (!year || !month || !day) return false;
@@ -1271,7 +1299,7 @@ export function InvoiceModule({ sys }) {
     });
 
     return result;
-  }, [safeInvoices, filter, searchTerm, sortOption]);
+  }, [safeInvoices, filter, termFilter, searchTerm, sortOption]);
 
   const paginatedInvoices = filteredInvoices.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
@@ -1291,7 +1319,7 @@ export function InvoiceModule({ sys }) {
         <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
           <div className="flex flex-wrap justify-between items-center border-b bg-slate-50 p-4 gap-4">
             
-            <div className="flex bg-white rounded-lg p-1 border">
+            <div className="flex bg-white rounded-lg p-1 border shadow-sm">
               {['All', 'Today', 'This Week', 'This Month'].map((opt) => (
                 <button key={opt} onClick={() => setFilter(opt)} className={`px-4 py-1.5 text-[11px] font-black uppercase rounded-md ${filter === opt ? 'bg-slate-800 text-white' : 'text-slate-500'}`}>
                   {opt}
@@ -1299,7 +1327,23 @@ export function InvoiceModule({ sys }) {
               ))}
             </div>
 
-            <div className="flex items-center space-x-3 w-full sm:w-auto">
+            <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+              
+              {/* NEW: Term Filter Dropdown */}
+              <div className="relative flex items-center bg-white border rounded-xl shadow-sm px-3 py-2 w-full sm:w-36 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
+                <Filter className="text-slate-400 mr-2 shrink-0" size={16} />
+                <select
+                  className="w-full bg-transparent outline-none text-xs font-bold text-slate-700 cursor-pointer appearance-none"
+                  value={termFilter}
+                  onChange={(e) => setTermFilter(e.target.value)}
+                >
+                  <option value="All">All Terms</option>
+                  <option value="cod">C.O.D</option>
+                  <option value="30_days">30 Days</option>
+                </select>
+              </div>
+
+              {/* Sort Option Dropdown */}
               <div className="relative flex items-center bg-white border rounded-xl shadow-sm px-3 py-2 w-full sm:w-48 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
                 <ArrowUpDown className="text-slate-400 mr-2 shrink-0" size={16} />
                 <select
@@ -1332,7 +1376,9 @@ export function InvoiceModule({ sys }) {
                 <th className="p-5 pl-8">Invoice No.</th>
                 <th className="p-5">Date</th>
                 <th className="p-5">Customer</th>
+                <th className="p-5 text-center">Terms</th>
                 <th className="p-5 text-right">Total</th>
+                <th className="p-5 text-center">Status</th>
                 <th className="p-5 text-center w-20">Delete</th>
               </tr>
             </thead>
@@ -1342,7 +1388,22 @@ export function InvoiceModule({ sys }) {
                   <td className="p-5 pl-8 font-mono font-bold text-blue-600">#{String(inv.number || inv.id || '')}</td>
                   <td className="p-5 text-slate-500">{String(inv.date || '')}</td>
                   <td className="p-5 text-slate-800">{String(inv.customer || '')}</td>
+                  
+                  {/* NEW: Term Column */}
+                  <td className="p-5 text-center">
+                    <span className="text-xs font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-1 rounded-md whitespace-nowrap">
+                      {inv.paymentTerms === 'cod' ? 'C.O.D' : '30 Days'}
+                    </span>
+                  </td>
+
                   <td className="p-5 text-right font-black text-slate-900">${formatMoney(inv.total)}</td>
+                  
+                  <td className="p-5 text-center">
+                    <span className={`px-3 py-1 rounded-md text-[10px] font-black uppercase tracking-widest ${inv.status === 'Paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700'}`}>
+                      {inv.status || 'Paid'}
+                    </span>
+                  </td>
+
                   <td className="p-5 text-center">
                     <button onClick={(e) => handleDeleteInvoice(e, inv.id)} className="p-2 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all">
                       <Trash2 size={18} />
@@ -1352,7 +1413,7 @@ export function InvoiceModule({ sys }) {
               ))}
               {paginatedInvoices.length === 0 && (
                 <tr>
-                  <td colSpan="5" className="p-12 text-center text-sm font-bold text-slate-400">
+                  <td colSpan="7" className="p-12 text-center text-sm font-bold text-slate-400">
                     No invoices match your current search and sorting criteria.
                   </td>
                 </tr>
