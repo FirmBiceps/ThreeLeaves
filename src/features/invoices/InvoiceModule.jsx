@@ -153,7 +153,7 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
               top: 0 !important;
               width: 210mm !important; 
               height: 297mm !important; 
-              padding: 15mm !important;
+              padding: 15mm 10mm !important; 
               margin: 0 !important;
               background: white !important;
               backdrop-filter: none !important;
@@ -189,10 +189,10 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
         <div 
           id="printable-invoice-generator"
           lang="zh" 
-          className="flex w-full max-w-[210mm] h-[297mm] flex-col bg-white p-[15mm] text-black shadow-2xl rounded-b-2xl print:w-[210mm] print:h-[297mm] print:max-w-none print:rounded-none print:shadow-none box-border shrink-0"
+          className="flex w-full max-w-[210mm] h-[297mm] flex-col bg-white py-[15mm] px-[10mm] text-black shadow-2xl rounded-b-2xl print:w-[210mm] print:h-[297mm] print:max-w-none print:rounded-none print:shadow-none box-border shrink-0"
           style={{ fontFamily: CJK_FONT }}
         >
-          <div className="flex w-full mb-4 justify-between">
+          <div className="flex w-full mb-4 justify-between shrink-0">
             <div className="flex-1 flex flex-col pr-4">
               <div className="flex items-center mb-5">
                 <div className="w-[110px] shrink-0 mr-4">
@@ -250,13 +250,14 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
             </div>
           </div>
 
-          <table className="w-full text-[15px] border-2 border-black text-center mb-0 leading-tight flex-none mt-2" style={{ fontFamily: CJK_FONT }}>
+          {/* TABLE AREA - NO INNER BORDERS, STRETCHES TO FILL SPACE */}
+          <table className="w-full h-full flex-grow text-[15px] border-2 border-black text-center mb-0 leading-tight mt-2" style={{ fontFamily: CJK_FONT }}>
             <thead className="border-b-2 border-black">
               <tr className="font-bold bg-white text-[14px]">
-                <th className="py-2 px-1 border-r border-black w-10">NO.</th>
-                <th className="py-2 px-2 border-r border-black text-left">DESCRIPTION</th>
-                <th className="py-2 px-1 border-r border-black w-24">QUANTITY</th>
-                <th className="py-2 px-1 border-r border-black w-32 text-center">UNIT PRICE</th>
+                <th className="py-2 px-1 w-12 text-center">NO.</th>
+                <th className="py-2 px-2 text-left">DESCRIPTION</th>
+                <th className="py-2 px-1 w-24 text-center">QUANTITY</th>
+                <th className="py-2 px-1 w-32 text-center">UNIT PRICE</th>
                 <th className="py-2 px-1 w-32 text-center">AMOUNT</th>
               </tr>
             </thead>
@@ -265,47 +266,48 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
                 const foundProduct = safeInventory.find((entry) => entry.id === item.itemId);
                 const productName = foundProduct ? String(foundProduct.Name || foundProduct.name || foundProduct.Items || '') : String(item.Name || item.name || '-');
                 return (
-                  <tr key={idx} className="h-[25px] align-top" style={{ fontFamily: CJK_FONT }}>
-                    <td className="px-1 py-0.5 border-r border-black font-medium text-center">{idx + 1}</td>
-                    <td className="px-1 py-0.5 border-r border-black text-left pl-2 font-bold leading-none pt-1" style={{ fontFamily: CJK_FONT }}>{productName}</td>
-                    <td className="px-1 py-0.5 border-r border-black font-medium text-center" style={{ fontFamily: CJK_FONT }}>{String(item.qty || item.quantity || 0)} {String(item.unit || item.Unit || '')}</td>
-                    <td className="px-1 py-0.5 border-r border-black text-center">${formatMoney(item.unitPrice)}</td>
-                    <td className="px-1 py-0.5 text-center font-bold">${formatMoney((Number(item.qty || item.quantity) || 0) * (Number(item.unitPrice) || 0))}</td>
+                  <tr key={idx} className="align-top" style={{ fontFamily: CJK_FONT }}>
+                    <td className="px-1 py-1 font-medium text-center">{idx + 1}</td>
+                    <td className="px-1 py-1 text-left pl-2 font-bold leading-none pt-1.5" style={{ fontFamily: CJK_FONT }}>{productName}</td>
+                    <td className="px-1 py-1 font-medium text-center" style={{ fontFamily: CJK_FONT }}>{String(item.qty || item.quantity || 0)} {String(item.unit || item.Unit || '')}</td>
+                    <td className="px-1 py-1 text-center">${formatMoney(item.unitPrice)}</td>
+                    <td className="px-1 py-1 text-center font-bold">${formatMoney((Number(item.qty || item.quantity) || 0) * (Number(item.unitPrice) || 0))}</td>
                   </tr>
                 );
               })}
               
-              {Array.isArray(items) && items.length < 20 && Array.from({ length: 20 - items.length }).map((_, i) => (
-                <tr key={`blank-${i}`} className="h-[25px]">
-                  <td className="border-r border-black"></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td></td>
-                </tr>
-              ))}
+              {/* STRETCHER ROW: Absorbs remaining table height to push footer down */}
+              <tr className="h-full">
+                <td></td><td></td><td></td><td></td><td></td>
+              </tr>
 
-              <tr className="border-t-2 border-black font-bold h-[26px]" style={{ fontFamily: CJK_FONT }}>
-                <td colSpan="3" rowSpan="3" className="border-r border-black bg-white"></td>
-                <td className="p-1 border-r border-black border-b border-black text-center text-[14px]">SUBTOTAL</td>
-                <td className="p-1 text-center border-b border-black text-[15px]">${formatMoney(subtotal)}</td>
+              {/* TOTALS AREA */}
+              <tr className="border-t-2 border-black font-bold h-[28px]">
+                <td colSpan="3" rowSpan="3" className="bg-white border-r-2 border-black"></td>
+                <td className="p-1 text-center text-[14px]">SUBTOTAL</td>
+                <td className="p-1 text-center text-[15px]">${formatMoney(subtotal)}</td>
               </tr>
-              <tr className="font-bold h-[26px]" style={{ fontFamily: CJK_FONT }}>
-                <td className="p-1 border-r border-black border-b border-black text-center text-[14px]">9% GST</td>
-                <td className="p-1 text-center border-b border-black text-[15px]">${formatMoney(gst)}</td>
+              <tr className="font-bold h-[28px] border-t border-black">
+                <td className="p-1 text-center text-[14px]">9% GST</td>
+                <td className="p-1 text-center text-[15px]">${formatMoney(gst)}</td>
               </tr>
-              <tr className="font-bold h-[30px]" style={{ fontFamily: CJK_FONT }}>
-                <td className="p-1 border-r border-black text-center text-[16px]">TOTAL</td>
+              <tr className="font-bold h-[32px] border-t-2 border-black">
+                <td className="p-1 text-center text-[16px]">TOTAL</td>
                 <td className="p-1 text-center text-[17px]">${formatMoney(total)}</td>
               </tr>
             </tbody>
           </table>
 
-          <div className="flex w-full mt-auto pt-2 items-end shrink-0">
+          {/* FOOTER - NARROW MARGINS */}
+          <div className="flex w-full mt-4 pt-2 items-end shrink-0">
             <div className="w-[70%] text-[12px] font-bold leading-snug pr-4">
               <div style={{ fontFamily: CJK_FONT }}>
                 <p className="text-[12px]">请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
                 <p className="text-[10px] whitespace-nowrap text-slate-800">Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
                 
                 <div className="mt-2 flex items-center">
-                  <div className="w-[65px] h-[65px] shrink-0 mr-3">
-                    <img src={paynowQr} alt="PayNow QR Code" className="w-full h-full object-contain" />
+                  <div className="w-[80px] h-[80px] shrink-0 mr-3 flex items-center justify-center">
+                    <img src={paynowQr} alt="PayNow QR Code" className="w-[80px] h-[80px] object-contain" />
                   </div>
                   <div className="flex flex-col justify-center text-[11px]">
                     <p>UEN: 53033969B</p>
@@ -369,7 +371,7 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
               top: 0 !important;
               width: 210mm !important; 
               height: 297mm !important; 
-              padding: 15mm !important; 
+              padding: 15mm 10mm !important; 
               box-sizing: border-box !important;
               background: white !important;
               backdrop-filter: none !important;
@@ -407,10 +409,10 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
         <div 
           id="printable-invoice-history"
           lang="zh" 
-          className="flex w-full max-w-[210mm] h-[297mm] flex-col bg-white p-[15mm] text-black shadow-2xl rounded-b-2xl print:w-[210mm] print:h-[297mm] print:max-w-none print:rounded-none print:shadow-none box-border shrink-0"
+          className="flex w-full max-w-[210mm] h-[297mm] flex-col bg-white py-[15mm] px-[10mm] text-black shadow-2xl rounded-b-2xl print:w-[210mm] print:h-[297mm] print:max-w-none print:rounded-none print:shadow-none box-border shrink-0"
           style={{ fontFamily: CJK_FONT }}
         >
-          <div className="flex w-full mb-4 justify-between">
+          <div className="flex w-full mb-4 justify-between shrink-0">
             <div className="flex-1 flex flex-col pr-4">
               <div className="flex items-center mb-5">
                 <div className="w-[110px] shrink-0 mr-4">
@@ -470,13 +472,13 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
             </div>
           </div>
 
-          <table className="w-full text-[15px] border-2 border-black text-center mb-0 leading-tight flex-none mt-2" style={{ fontFamily: CJK_FONT }}>
+          <table className="w-full h-full flex-grow text-[15px] border-2 border-black text-center mb-0 leading-tight mt-2" style={{ fontFamily: CJK_FONT }}>
             <thead className="border-b-2 border-black">
               <tr className="font-bold bg-white text-[14px]">
-                <th className="py-2 px-1 border-r border-black w-10">NO.</th>
-                <th className="py-2 px-2 border-r border-black text-left">DESCRIPTION</th>
-                <th className="py-2 px-1 border-r border-black w-24">QUANTITY</th>
-                <th className="py-2 px-1 border-r border-black w-32 text-center">UNIT PRICE</th>
+                <th className="py-2 px-1 w-12 text-center">NO.</th>
+                <th className="py-2 px-2 text-left">DESCRIPTION</th>
+                <th className="py-2 px-1 w-24 text-center">QUANTITY</th>
+                <th className="py-2 px-1 w-32 text-center">UNIT PRICE</th>
                 <th className="py-2 px-1 w-32 text-center">AMOUNT</th>
               </tr>
             </thead>
@@ -485,49 +487,47 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
                 const productName = String(item.name || item.Items || '-');
 
                 return (
-                  <tr key={idx} className="h-[25px] align-top" style={{ fontFamily: CJK_FONT }}>
-                    <td className="px-1 py-0.5 border-r border-black font-medium text-center">{idx + 1}</td>
-                    <td className="px-1 py-0.5 border-r border-black text-left pl-2 font-bold leading-none pt-1" style={{ fontFamily: CJK_FONT }}>{productName}</td>
-                    <td className="px-1 py-0.5 border-r border-black font-medium text-center" style={{ fontFamily: CJK_FONT }}>{String(item.qty || item.quantity || 0)} {String(item.unit || '')}</td>
-                    <td className="px-1 py-0.5 border-r border-black text-center">${formatMoney(item.unitPrice)}</td>
-                    <td className="px-1 py-0.5 text-center font-bold">
+                  <tr key={idx} className="align-top" style={{ fontFamily: CJK_FONT }}>
+                    <td className="px-1 py-1 font-medium text-center">{idx + 1}</td>
+                    <td className="px-1 py-1 text-left pl-2 font-bold leading-none pt-1.5" style={{ fontFamily: CJK_FONT }}>{productName}</td>
+                    <td className="px-1 py-1 font-medium text-center" style={{ fontFamily: CJK_FONT }}>{String(item.qty || item.quantity || 0)} {String(item.unit || '')}</td>
+                    <td className="px-1 py-1 text-center">${formatMoney(item.unitPrice)}</td>
+                    <td className="px-1 py-1 text-center font-bold">
                       ${formatMoney((Number(item.qty || item.quantity) || 0) * (Number(item.unitPrice) || 0))}
                     </td>
                   </tr>
                 );
               })}
               
-              {safeItems.length < 20 && Array.from({ length: 20 - safeItems.length }).map((_, i) => (
-                <tr key={`blank-${i}`} className="h-[25px]">
-                  <td className="border-r border-black"></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td className="border-r border-black"></td><td></td>
-                </tr>
-              ))}
+              <tr className="h-full">
+                <td></td><td></td><td></td><td></td><td></td>
+              </tr>
 
-              <tr className="border-t-2 border-black font-bold h-[26px]" style={{ fontFamily: CJK_FONT }}>
-                <td colSpan="3" rowSpan="3" className="border-r border-black bg-white"></td>
-                <td className="p-1 border-r border-black border-b border-black text-center text-[14px]">SUBTOTAL</td>
-                <td className="p-1 text-center border-b border-black text-[15px]">${formatMoney(subtotal)}</td>
+              <tr className="border-t-2 border-black font-bold h-[28px]">
+                <td colSpan="3" rowSpan="3" className="bg-white border-r-2 border-black"></td>
+                <td className="p-1 text-center text-[14px]">SUBTOTAL</td>
+                <td className="p-1 text-center text-[15px]">${formatMoney(subtotal)}</td>
               </tr>
-              <tr className="font-bold h-[26px]" style={{ fontFamily: CJK_FONT }}>
-                <td className="p-1 border-r border-black border-b border-black text-center text-[14px]">9% GST</td>
-                <td className="p-1 text-center border-b border-black text-[15px]">${formatMoney(gst)}</td>
+              <tr className="font-bold h-[28px] border-t border-black">
+                <td className="p-1 text-center text-[14px]">9% GST</td>
+                <td className="p-1 text-center text-[15px]">${formatMoney(gst)}</td>
               </tr>
-              <tr className="font-bold h-[30px]" style={{ fontFamily: CJK_FONT }}>
-                <td className="p-1 border-r border-black text-center text-[16px]">TOTAL</td>
+              <tr className="font-bold h-[32px] border-t-2 border-black">
+                <td className="p-1 text-center text-[16px]">TOTAL</td>
                 <td className="p-1 text-center text-[17px]">${formatMoney(total)}</td>
               </tr>
             </tbody>
           </table>
 
-          <div className="flex w-full mt-auto pt-2 items-end shrink-0">
+          <div className="flex w-full mt-4 pt-2 items-end shrink-0">
             <div className="w-[70%] text-[12px] font-bold leading-snug pr-4">
               <div style={{ fontFamily: CJK_FONT }}>
                 <p className="text-[12px]">请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
                 <p className="text-[10px] whitespace-nowrap text-slate-800">Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
                 
                 <div className="mt-2 flex items-center">
-                  <div className="w-[65px] h-[65px] shrink-0 mr-3">
-                    <img src={paynowQr} alt="PayNow QR Code" className="w-full h-full object-contain" />
+                  <div className="w-[80px] h-[80px] shrink-0 mr-3 flex items-center justify-center">
+                    <img src={paynowQr} alt="PayNow QR Code" className="w-[80px] h-[80px] object-contain" />
                   </div>
                   <div className="flex flex-col justify-center text-[11px]">
                     <p>UEN: 53033969B</p>
@@ -1215,7 +1215,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
 export function InvoiceModule({ sys }) {
   const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
   const [filter, setFilter] = useState('All');
-  const [termFilter, setTermFilter] = useState('All'); // NEW: Payment Term Filter
+  const [termFilter, setTermFilter] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
   const [sortOption, setSortOption] = useState('date_desc');
   const [currentPage, setCurrentPage] = useState(1);
@@ -1253,7 +1253,6 @@ export function InvoiceModule({ sys }) {
     today.setHours(0, 0, 0, 0);
 
     result = result.filter(inv => {
-      // NEW: Apply Payment Term Filter
       if (termFilter !== 'All' && String(inv.paymentTerms) !== termFilter) {
         return false;
       }
@@ -1329,7 +1328,6 @@ export function InvoiceModule({ sys }) {
 
             <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
               
-              {/* NEW: Term Filter Dropdown */}
               <div className="relative flex items-center bg-white border rounded-xl shadow-sm px-3 py-2 w-full sm:w-36 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
                 <Filter className="text-slate-400 mr-2 shrink-0" size={16} />
                 <select
@@ -1343,7 +1341,6 @@ export function InvoiceModule({ sys }) {
                 </select>
               </div>
 
-              {/* Sort Option Dropdown */}
               <div className="relative flex items-center bg-white border rounded-xl shadow-sm px-3 py-2 w-full sm:w-48 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
                 <ArrowUpDown className="text-slate-400 mr-2 shrink-0" size={16} />
                 <select
@@ -1389,7 +1386,6 @@ export function InvoiceModule({ sys }) {
                   <td className="p-5 text-slate-500">{String(inv.date || '')}</td>
                   <td className="p-5 text-slate-800">{String(inv.customer || '')}</td>
                   
-                  {/* NEW: Term Column */}
                   <td className="p-5 text-center">
                     <span className="text-xs font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-1 rounded-md whitespace-nowrap">
                       {inv.paymentTerms === 'cod' ? 'C.O.D' : '30 Days'}
