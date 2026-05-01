@@ -141,7 +141,7 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
   const safeInventory = Array.isArray(sys?.inventory) ? sys.inventory : [];
   const safeItems = Array.isArray(items) ? items.filter(Boolean) : [];
 
-  // DYNAMIC A4 FONT SIZING ENGINE
+  // DYNAMIC A4 FONT SIZING ENGINE - AGGRESSIVE SHRINK
   const itemCount = safeItems.length;
   let baseText = "text-[15px]";
   let cellPad = "py-1";
@@ -150,14 +150,21 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
   let subtotalText = "text-[15px]";
   let gstText = "text-[14px]";
 
-  if (itemCount > 20) {
+  if (itemCount > 22) {
+    baseText = "text-[9px] leading-none";
+    cellPad = "py-0";
+    descPad = "pt-0.5";
+    totalText = "text-[12px]";
+    subtotalText = "text-[11px]";
+    gstText = "text-[10px]";
+  } else if (itemCount > 16) {
     baseText = "text-[11px] leading-tight";
     cellPad = "py-0";
     descPad = "pt-0.5";
     totalText = "text-[14px]";
     subtotalText = "text-[12px]";
     gstText = "text-[12px]";
-  } else if (itemCount > 14) {
+  } else if (itemCount > 13) {
     baseText = "text-[13px] leading-tight";
     cellPad = "py-0.5";
     descPad = "pt-1";
@@ -227,15 +234,14 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
               </div>
             </div>
           </div>
-          
-          <table className={`w-full h-full flex-grow border-2 border-black text-center mb-0 mt-2 ${baseText}`} style={{ fontFamily: CJK_FONT }}>
+          <table className={`w-full flex-grow border-2 border-black text-center mb-0 mt-2 ${baseText}`} style={{ fontFamily: CJK_FONT }}>
             <thead className="border-b-2 border-black">
               <tr className="font-bold bg-white text-[14px]"><th className="py-2 px-1 w-12 text-center">NO.</th><th className="py-2 px-2 text-left">DESCRIPTION</th><th className="py-2 px-1 w-24 text-center">QUANTITY</th><th className="py-2 px-1 w-32 text-center">UNIT PRICE</th><th className="py-2 px-1 w-32 text-center">AMOUNT</th></tr>
             </thead>
             <tbody style={{ fontFamily: CJK_FONT }}>
               {safeItems.map((item, idx) => {
                 const foundProduct = safeInventory.find((entry) => entry?.id === item?.itemId);
-                const productName = foundProduct ? String(foundProduct.Name || foundProduct.name || foundProduct.Items || '') : String(item?.name || item?.Items || '-');
+                const productName = foundProduct ? String(foundProduct.Name || foundProduct.name || foundProduct.Items || '') : String(item?.name || item?.Items || item?.rawSearchString || '-');
                 return (
                   <tr key={idx} className="align-top text-slate-900" style={{ fontFamily: CJK_FONT }}>
                     <td className={`px-1 text-center font-normal ${cellPad}`}>{idx + 1}</td>
@@ -308,14 +314,21 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
   let subtotalText = "text-[15px]";
   let gstText = "text-[14px]";
 
-  if (itemCount > 20) {
+  if (itemCount > 22) {
+    baseText = "text-[9px] leading-none";
+    cellPad = "py-0";
+    descPad = "pt-0.5";
+    totalText = "text-[12px]";
+    subtotalText = "text-[11px]";
+    gstText = "text-[10px]";
+  } else if (itemCount > 16) {
     baseText = "text-[11px] leading-tight";
     cellPad = "py-0";
     descPad = "pt-0.5";
     totalText = "text-[14px]";
     subtotalText = "text-[12px]";
     gstText = "text-[12px]";
-  } else if (itemCount > 14) {
+  } else if (itemCount > 13) {
     baseText = "text-[13px] leading-tight";
     cellPad = "py-0.5";
     descPad = "pt-1";
@@ -386,15 +399,13 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
               </div>
             </div>
           </div>
-          
-          <table className={`w-full h-full flex-grow border-2 border-black text-center mb-0 mt-2 ${baseText}`} style={{ fontFamily: CJK_FONT }}>
+          <table className={`w-full flex-grow border-2 border-black text-center mb-0 mt-2 ${baseText}`} style={{ fontFamily: CJK_FONT }}>
             <thead className="border-b-2 border-black">
               <tr className="font-bold bg-white text-[14px]"><th className="py-2 px-1 w-12 text-center">NO.</th><th className="py-2 px-2 text-left">DESCRIPTION</th><th className="py-2 px-1 w-24 text-center">QUANTITY</th><th className="py-2 px-1 w-32 text-center">UNIT PRICE</th><th className="py-2 px-1 w-32 text-center">AMOUNT</th></tr>
             </thead>
             <tbody style={{ fontFamily: CJK_FONT }}>
               {safeItems.map((item, idx) => {
-                const foundProduct = safeInventory.find((entry) => entry?.id === item?.itemId);
-                const productName = foundProduct ? String(foundProduct.Name || foundProduct.name || foundProduct.Items || '') : String(item?.name || item?.Items || '-');
+                const productName = String(item?.name || item?.Items || item?.rawSearchString || '-');
                 return (
                   <tr key={idx} className="align-top text-slate-900" style={{ fontFamily: CJK_FONT }}>
                     <td className={`px-1 text-center font-normal ${cellPad}`}>{idx + 1}</td>
@@ -408,7 +419,6 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
                 );
               })}
               <tr className="h-full"><td></td><td></td><td></td><td></td><td></td></tr>
-              
               <tr className="border-t-2 border-black font-bold h-[28px]">
                 <td colSpan="3" rowSpan="3" className="bg-white border-r-2 border-black p-2 align-top text-left">
                   {isSpecialFormat && carPlateNo && (
@@ -615,44 +625,50 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
 
       if (bestMatch && bestMatch.score >= 10) {
         const determinedUnit = String(bestMatch.item.Unit || bestMatch.item.unit || '箱');
-        nextDraftItems.push({ itemId: bestMatch.item.id, name: String(bestMatch.item.Name || bestMatch.item.name || bestMatch.item.Items || ''), unit: determinedUnit, qty, unitPrice: getSafePrice(bestMatch.item, determinedUnit), picked: false, rawSearchString: searchString, originalPredictedId: bestMatch.item.id, suggestions: [] });
+        nextDraftItems.push({ itemId: bestMatch.item.id, name: String(bestMatch.item.Name || bestMatch.item.name || bestMatch.item.Items || ''), unit: determinedUnit, qty, unitPrice: getSafePrice(bestMatch.item, determinedUnit), picked: false, rawSearchString: searchString, originalPredictedId: bestMatch.item.id, suggestions: [], isAutoFilled: true });
       } else {
         const topSuggestions = scoredItems.filter(si => si.score > 0).slice(0, 3).map(si => si.item);
-        nextDraftItems.push({ itemId: '', name: '', unit: '箱', qty, unitPrice: 0, picked: false, rawSearchString: searchString, originalPredictedId: null, suggestions: topSuggestions });
+        nextDraftItems.push({ itemId: '', name: '', unit: '箱', qty, unitPrice: 0, picked: false, rawSearchString: searchString, originalPredictedId: null, suggestions: topSuggestions, isAutoFilled: true });
       }
     });
     setItems(nextDraftItems); setIsParsing(false); setParseText('');
   };
 
-  const handleRegister = (printAfter = false) => {
-    // BUG FIX: Strip away all bloated AI-suggestion objects to prevent payload truncation
+  const handleRegister = async (printAfter = false) => {
+    // FIX 1: NEVER strip `rawSearchString` or `isAutoFilled`. Only strip heavy `suggestions` to prevent payload overload.
     const cleanItems = (Array.isArray(items) ? items.filter(Boolean) : []).map(item => { 
-      const { isAutoFilled, suggestions, rawSearchString, originalPredictedId, ...rest } = item; 
+      const { suggestions, originalPredictedId, ...rest } = item; 
       return rest; 
     });
+
+    // Strip entirely empty placeholder rows the user added but didn't fill out
+    const finalItems = cleanItems.filter(item => item.itemId || item.rawSearchString || item.name);
 
     const invoice = {
       id: existingInvoice ? existingInvoice.id : `INV-${invoiceNumber}`,
       number: String(invoiceNumber), customerId, customer: String(customer?.name || existingInvoice?.customer || 'Unknown Customer'),
-      region: String(customer?.region || existingInvoice?.region || ''), date: String(invoiceDate), items: cleanItems, total,
+      region: String(customer?.region || existingInvoice?.region || ''), date: String(invoiceDate), items: finalItems, total,
       status: invoiceStatus, deliveryStatus: existingInvoice ? String(existingInvoice.deliveryStatus || 'Pending') : 'Pending', paymentTerms: String(paymentTerms),
-      isSpecialFormat, poNumber, carPlateNo
+      isSpecialFormat, poNumber, carPlateNo 
     };
 
-    const nextInventory = [...safeInventory];
-    cleanItems.forEach((item) => {
-      if (!existingInvoice && item.itemId) {
-        const stockIndex = nextInventory.findIndex((entry) => entry?.id === item.itemId);
-        if (stockIndex > -1) { nextInventory[stockIndex].stock -= Number(item.qty || item.quantity) || 0; }
+    try {
+      // FIX 2: EXPLICIT DIRECT DATABASE SAVE FOR INVOICES (Prevents Refresh Data Loss)
+      const { error } = await supabase.from('invoices').upsert([invoice]);
+      if (error) throw error;
+
+      // Update local state after successful save
+      if (existingInvoice) { 
+        sys.setInvoices(safeInvoices.map(inv => inv?.id === existingInvoice.id ? invoice : inv)); 
+      } else { 
+        sys.setInvoices([...safeInvoices, invoice]); 
       }
       
-      // Removed the learned_phrases mutation from here as rawSearchString is stripped, 
-      // preventing accidental mutation of global inventory state that wasn't being saved to DB anyway.
-    });
+      if (printAfter) { setTimeout(() => { window.print(); onClose(); }, 500); } else { onClose(); }
 
-    sys.setInventory(nextInventory);
-    if (existingInvoice) { sys.setInvoices(safeInvoices.map(inv => inv?.id === existingInvoice.id ? invoice : inv)); } else { sys.setInvoices([...safeInvoices, invoice]); }
-    if (printAfter) { setTimeout(() => { window.print(); onClose(); }, 500); } else { onClose(); }
+    } catch (err) {
+      alert(`CRITICAL ERROR: Failed to save invoice to database.\n\n${err.message}`);
+    }
   };
 
   const executePriceSave = async (type, newPriceStr) => {
@@ -849,12 +865,12 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
                       <td className="p-2 relative align-top pt-3">
                         <div className="flex items-center space-x-2">
                           <input checked={item.picked || false} className="h-4 w-4 cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500 shrink-0" onChange={(event) => { const nextItems = [...items]; if (nextItems[index]) nextItems[index].picked = event.target.checked; setItems(nextItems); }} type="checkbox" />
-                          <ProductSearchSelect value={item.itemId} inventory={safeInventory} isAutoFilled={isPredicted} onChange={(selectedId) => { const product = safeInventory.find((entry) => entry?.id === selectedId); if (!product) return; const nextItems = [...items]; const determinedUnit = String(product.Unit || product.unit || '箱'); if (nextItems[index]) { nextItems[index] = { ...nextItems[index], itemId: selectedId, name: String(product.Name || product.name || product.Items || ''), unit: determinedUnit, unitPrice: getSafePrice(product, determinedUnit), suggestions: [] }; } setItems(nextItems); }} />
+                          <ProductSearchSelect value={item.itemId} inventory={safeInventory} isAutoFilled={isPredicted} onChange={(selectedId) => { const product = safeInventory.find((entry) => entry?.id === selectedId); if (!product) return; const nextItems = [...items]; const determinedUnit = String(product.Unit || product.unit || '箱'); if (nextItems[index]) { nextItems[index] = { ...nextItems[index], itemId: selectedId, name: String(product.Name || product.name || product.Items || ''), unit: determinedUnit, unitPrice: getSafePrice(product, determinedUnit), suggestions: [], isAutoFilled: false, rawSearchString: null }; } setItems(nextItems); }} />
                         </div>
                         
                         {isPredicted && (
                           <div className="ml-6 mt-1 flex items-center">
-                            <button onClick={() => { const next = [...items]; if(next[index]) next[index].isAutoFilled = false; setItems(next); }} className="text-[9px] font-black uppercase tracking-widest bg-indigo-200 text-indigo-800 px-2 py-1 rounded shadow-sm hover:bg-indigo-300 transition-colors flex items-center" type="button"><Check size={10} className="mr-1" /> Verify Match</button>
+                            <button onClick={() => { const next = [...items]; if(next[index]) { next[index].isAutoFilled = false; next[index].rawSearchString = null; } setItems(next); }} className="text-[9px] font-black uppercase tracking-widest bg-indigo-200 text-indigo-800 px-2 py-1 rounded shadow-sm hover:bg-indigo-300 transition-colors flex items-center" type="button"><Check size={10} className="mr-1" /> Verify Match</button>
                           </div>
                         )}
                         {item.rawSearchString && item.itemId && !isPredicted && (<p className="text-[9px] text-blue-400 font-medium ml-6 mt-1 flex items-center"><BrainCircuit size={10} className="mr-1" /> Predicted from: "{item.rawSearchString}"</p>)}
@@ -865,7 +881,7 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
                               {item.suggestions.map((sugg) => {
                                 const suggName = String(sugg?.Name || sugg?.name || sugg?.Items || '');
                                 const suggUnit = String(sugg?.Unit || sugg?.unit || '箱');
-                                return (<button key={sugg.id} type="button" onClick={() => { const nextItems = [...items]; if(nextItems[index]) { nextItems[index] = { ...nextItems[index], itemId: sugg.id, name: suggName, unit: suggUnit, unitPrice: getSafePrice(sugg, suggUnit), suggestions: [], originalPredictedId: sugg.id }; } setItems(nextItems); }} className="text-[11px] bg-white border border-amber-300 text-amber-900 font-bold px-2 py-1 rounded shadow-sm hover:bg-amber-200 transition-colors">{suggName}</button>);
+                                return (<button key={sugg.id} type="button" onClick={() => { const nextItems = [...items]; if(nextItems[index]) { nextItems[index] = { ...nextItems[index], itemId: sugg.id, name: suggName, unit: suggUnit, unitPrice: getSafePrice(sugg, suggUnit), suggestions: [], originalPredictedId: sugg.id, isAutoFilled: false, rawSearchString: null }; } setItems(nextItems); }} className="text-[11px] bg-white border border-amber-300 text-amber-900 font-bold px-2 py-1 rounded shadow-sm hover:bg-amber-200 transition-colors">{suggName}</button>);
                               })}
                             </div>
                           </div>
@@ -1012,15 +1028,27 @@ export function InvoiceModule({ sys }) {
   const handleDeleteInvoice = async (e, invoiceId) => {
     e.stopPropagation(); 
     if (window.confirm("Are you sure you want to permanently delete this invoice? This cannot be undone.")) {
-      const updatedInvoices = safeInvoices.filter(inv => inv?.id !== invoiceId);
-      sys.setInvoices(updatedInvoices);
-      if (sys.deleteRecord) { await sys.deleteRecord('invoices', invoiceId); }
+      try {
+        // EXPLICIT DATABASE DELETE
+        const { error } = await supabase.from('invoices').delete().eq('id', invoiceId);
+        if (error) throw error;
+        
+        const updatedInvoices = safeInvoices.filter(inv => inv?.id !== invoiceId);
+        sys.setInvoices(updatedInvoices);
+        if (sys.deleteRecord) { await sys.deleteRecord('invoices', invoiceId); }
+      } catch (err) { alert(`Failed to delete invoice: ${err.message}`); }
     }
   };
 
-  const handleStatusChange = (invoiceId, newStatus) => {
-    const updatedInvoices = safeInvoices.map(inv => { if (inv?.id === invoiceId) { return { ...inv, status: newStatus }; } return inv; });
-    sys.setInvoices(updatedInvoices);
+  const handleStatusChange = async (invoiceId, newStatus) => {
+    try {
+      // EXPLICIT DATABASE UPDATE
+      const { error } = await supabase.from('invoices').update({ status: newStatus }).eq('id', invoiceId);
+      if (error) throw error;
+
+      const updatedInvoices = safeInvoices.map(inv => { if (inv?.id === invoiceId) { return { ...inv, status: newStatus }; } return inv; });
+      sys.setInvoices(updatedInvoices);
+    } catch (err) { alert(`Failed to update status: ${err.message}`); }
   };
 
   const filteredInvoices = useMemo(() => {
