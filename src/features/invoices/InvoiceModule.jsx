@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
-import { Eye, FileText, MessageSquare, Printer, Save, Sparkles, Trash2, Search, BrainCircuit, ChevronLeft, X, Settings, AlertTriangle, ArrowUpDown, Plus, Edit, Filter, CheckCircle, AlertCircle, ChevronDown, Check, Layers, User } from 'lucide-react';
+import { Eye, FileText, MessageSquare, Printer, Save, Sparkles, Trash2, Search, BrainCircuit, ChevronLeft, X, Settings, AlertTriangle, ArrowUpDown, Plus, Edit, Filter, CheckCircle, AlertCircle, ChevronDown, Check, Layers, User, ScanBarcode } from 'lucide-react';
 import { CompanyHeader } from '../../components/shared/CompanyHeader';
 import { UNIT_OPTIONS } from '../../data/company';
 import { formatMoney } from '../../utils/format';
@@ -127,7 +127,7 @@ function CustomerSearchSelect({ value, customers, onChange, disabled }) {
 // ==========================================
 // COMPONENT: LAYOUT CHECK (Generator Preview)
 // ==========================================
-function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBack, onRegister, paymentTerms, subtotal, sys, total, existingInvoice }) {
+function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBack, onRegister, paymentTerms, subtotal, sys, total, existingInvoice, isSpecialFormat, poNumber, carPlateNo }) {
   const customerAddress = customer?.address || existingInvoice?.address || '';
   const safeInventory = Array.isArray(sys?.inventory) ? sys.inventory : [];
   const safeItems = Array.isArray(items) ? items.filter(Boolean) : [];
@@ -158,12 +158,20 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
         <div id="printable-invoice-generator" lang="zh" className="flex w-full max-w-[210mm] h-[297mm] flex-col bg-white py-[15mm] px-[10mm] text-black shadow-2xl rounded-b-2xl print:w-[210mm] print:h-[297mm] print:max-w-none print:rounded-none print:shadow-none box-border shrink-0" style={{ fontFamily: CJK_FONT }}>
           <div className="flex w-full mb-4 justify-between shrink-0">
             <div className="flex-1 flex flex-col pr-4">
-              <div className="flex items-center mb-5">
-                <div className="w-[110px] shrink-0 mr-4"><img src={logo} alt="Three Leaves Logo" className="w-full h-auto object-contain" /></div>
-                <div className="flex-1 text-left leading-snug pt-2 whitespace-nowrap overflow-visible">
-                  <h1 className="font-black text-[17px]" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1><h2 className="font-bold text-[16px] mb-1" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
-                  <div className="text-[#d55e2d] font-bold text-[10.5px] leading-tight tracking-tight"><p className="whitespace-nowrap">CO.REG NO.53033969B &nbsp;&nbsp; GST REG NO. M90355440L</p><p className="whitespace-nowrap">280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p><p className="whitespace-nowrap">HP: 97578869 (Mr Ye) &nbsp;&nbsp; HP: 91113505 (Min) &nbsp;&nbsp; Email: 3leaves.sg@gmail.com</p></div>
+              <div className="flex items-start justify-between mb-5">
+                <div className="flex items-center">
+                  <div className="w-[110px] shrink-0 mr-4"><img src={logo} alt="Three Leaves Logo" className="w-full h-auto object-contain" /></div>
+                  <div className="flex-1 text-left leading-snug pt-2 whitespace-nowrap overflow-visible">
+                    <h1 className="font-black text-[17px]" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1><h2 className="font-bold text-[16px] mb-1" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
+                    <div className="text-[#d55e2d] font-bold text-[10.5px] leading-tight tracking-tight"><p className="whitespace-nowrap">CO.REG NO.53033969B &nbsp;&nbsp; GST REG NO. M90355440L</p><p className="whitespace-nowrap">280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p><p className="whitespace-nowrap">HP: 97578869 (Mr Ye) &nbsp;&nbsp; HP: 91113505 (Min) &nbsp;&nbsp; Email: 3leaves.sg@gmail.com</p></div>
+                  </div>
                 </div>
+                {/* NEW: PO Number injected top right of company section if special format */}
+                {isSpecialFormat && poNumber && (
+                  <div className="text-[14px] font-bold tracking-tight text-slate-800 pt-2 whitespace-nowrap">
+                    PO NO. {poNumber}
+                  </div>
+                )}
               </div>
               <div className="flex justify-between items-end w-full mb-2 text-[14px] font-bold">
                 <div className="flex items-end flex-1 pr-4"><span className="shrink-0 mr-2 text-black">TO:</span><span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[13px] tracking-tight" style={{ fontFamily: CJK_FONT }}>{String(customer?.name || existingInvoice?.customer || '')}</span></div>
@@ -172,7 +180,16 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
               <div className="flex items-end w-full text-[14px] font-bold"><span className="shrink-0 mr-2 text-black">ADDRESS:</span><span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[12px] tracking-tighter" style={{ fontFamily: CJK_FONT }}>{String(customerAddress)}</span></div>
             </div>
             <div className="w-[180px] shrink-0 flex flex-col items-start pl-4 pt-1">
-              <h2 className="text-[22px] font-bold tracking-[0.4em] leading-none mb-1" style={{ fontFamily: CJK_FONT }}>發票</h2><h3 className="text-[15px] font-black tracking-wide uppercase mb-6 text-black">TAX INVOICE</h3>
+              <h2 className="text-[22px] font-bold tracking-[0.4em] leading-none mb-1" style={{ fontFamily: CJK_FONT }}>發票</h2>
+              <h3 className="text-[15px] font-black tracking-wide uppercase mb-2 text-black">TAX INVOICE</h3>
+              
+              {/* NEW: Dynamic Barcode Injection */}
+              {isSpecialFormat && (
+                <div className="w-full flex justify-start mb-4">
+                  <img src={`https://bwipjs-api.metafloor.com/?bcid=code128&text=${invoiceNumber}&scale=3&includetext=true&textxalign=center&textsize=10`} alt="Barcode" className="max-w-full h-[40px] object-contain" />
+                </div>
+              )}
+
               <div className="w-full flex flex-col gap-3 mt-auto mb-2">
                 <div className="flex items-baseline"><span className="font-bold w-[50px] shrink-0 text-black text-[15px]">No.</span><span className="text-red-600 font-bold tracking-wider text-[17px] leading-none">{String(invoiceNumber)}</span></div>
                 <div className="flex items-baseline"><span className="font-bold w-[50px] shrink-0 text-black text-[15px]">Term:</span><span className="text-red-600 font-bold text-[16px] leading-none">{paymentTerms === 'cod' ? 'COD' : '30 Days'}</span></div>
@@ -198,7 +215,16 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
                 );
               })}
               <tr className="h-full"><td></td><td></td><td></td><td></td><td></td></tr>
-              <tr className="border-t-2 border-black font-bold h-[28px]"><td colSpan="3" rowSpan="3" className="bg-white border-r-2 border-black"></td><td className="p-1 text-center text-[14px]">SUBTOTAL</td><td className="p-1 text-center text-[15px]">${formatMoney(subtotal)}</td></tr>
+              
+              <tr className="border-t-2 border-black font-bold h-[28px]">
+                {/* NEW: Car Plate Box inserted into the previously empty bottom-left space */}
+                <td colSpan="3" rowSpan="3" className="bg-white border-r-2 border-black p-2 align-top text-left">
+                  {isSpecialFormat && carPlateNo && (
+                    <div className="font-bold text-[14px] leading-tight">Car<br/>Plate No: <span className="font-normal">{carPlateNo}</span></div>
+                  )}
+                </td>
+                <td className="p-1 text-center text-[14px]">SUBTOTAL</td><td className="p-1 text-center text-[15px]">${formatMoney(subtotal)}</td>
+              </tr>
               <tr className="font-bold h-[28px] border-t border-black"><td className="p-1 text-center text-[14px]">9% GST</td><td className="p-1 text-center text-[15px]">${formatMoney(gst)}</td></tr>
               <tr className="font-bold h-[32px] border-t-2 border-black"><td className="p-1 text-center text-[16px]">TOTAL</td><td className="p-1 text-center text-[17px]">${formatMoney(total)}</td></tr>
             </tbody>
@@ -237,6 +263,12 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
   const gst = subtotal * 0.09;
   const total = subtotal + gst;
 
+  // Extract special fields
+  const isSpecialFormat = invoice.isSpecialFormat;
+  const poNumber = invoice.poNumber;
+  const carPlateNo = invoice.carPlateNo;
+  const invoiceNumber = String(invoice?.number || invoice?.id || '');
+
   return (
     <div className="fixed inset-0 z-[5000] overflow-y-auto bg-slate-950/90 print:static print:block print:bg-white print:p-0 print:backdrop-filter-none">
       <style type="text/css">
@@ -254,7 +286,7 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
       </style>
       <div className="flex min-h-full flex-col items-center py-12 print:block print:py-0 print:m-0">
         <div className="w-full max-w-[210mm] shrink-0 bg-slate-900 px-8 py-4 flex justify-between items-center text-white rounded-t-2xl shadow-2xl print:hidden border-b-4 border-blue-600">
-          <div className="flex items-center"><FileText size={24} className="mr-3 text-blue-400" /><div><h2 className="text-sm font-black tracking-widest uppercase text-slate-200">A4 Print Preview</h2><p className="text-lg font-bold text-white leading-none mt-0.5">#{String(invoice?.number || invoice?.id || '')}</p></div></div>
+          <div className="flex items-center"><FileText size={24} className="mr-3 text-blue-400" /><div><h2 className="text-sm font-black tracking-widest uppercase text-slate-200">A4 Print Preview</h2><p className="text-lg font-bold text-white leading-none mt-0.5">#{invoiceNumber}</p></div></div>
           <div className="flex items-center space-x-3">
             <button onClick={() => window.print()} className="flex items-center text-sm font-bold bg-blue-600 hover:bg-blue-500 px-5 py-2.5 rounded-xl transition-colors shadow-lg"><Printer size={18} className="mr-2" /> Print Document</button>
             <button onClick={() => onEdit(invoice)} className="flex items-center text-sm font-bold bg-slate-800 hover:bg-slate-700 px-5 py-2.5 rounded-xl transition-colors border border-slate-700"><Edit size={16} className="mr-2" /> Edit</button>
@@ -264,12 +296,20 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
         <div id="printable-invoice-history" lang="zh" className="flex w-full max-w-[210mm] h-[297mm] flex-col bg-white py-[15mm] px-[10mm] text-black shadow-2xl rounded-b-2xl print:w-[210mm] print:h-[297mm] print:max-w-none print:rounded-none print:shadow-none box-border shrink-0" style={{ fontFamily: CJK_FONT }}>
           <div className="flex w-full mb-4 justify-between shrink-0">
             <div className="flex-1 flex flex-col pr-4">
-              <div className="flex items-center mb-5">
-                <div className="w-[110px] shrink-0 mr-4"><img src={logo} alt="Three Leaves Logo" className="w-full h-auto object-contain" /></div>
-                <div className="flex-1 text-left leading-snug pt-2 whitespace-nowrap overflow-visible">
-                  <h1 className="font-black text-[17px]" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1><h2 className="font-bold text-[16px] mb-1" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
-                  <div className="text-[#d55e2d] font-bold text-[10.5px] leading-tight tracking-tight"><p className="whitespace-nowrap">CO.REG NO.53033969B &nbsp;&nbsp; GST REG NO. M90355440L</p><p className="whitespace-nowrap">280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p><p className="whitespace-nowrap">HP: 97578869 (Mr Ye) &nbsp;&nbsp; HP: 91113505 (Min) &nbsp;&nbsp; Email: 3leaves.sg@gmail.com</p></div>
+              <div className="flex items-start justify-between mb-5">
+                <div className="flex items-center">
+                  <div className="w-[110px] shrink-0 mr-4"><img src={logo} alt="Three Leaves Logo" className="w-full h-auto object-contain" /></div>
+                  <div className="flex-1 text-left leading-snug pt-2 whitespace-nowrap overflow-visible">
+                    <h1 className="font-black text-[17px]" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1><h2 className="font-bold text-[16px] mb-1" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
+                    <div className="text-[#d55e2d] font-bold text-[10.5px] leading-tight tracking-tight"><p className="whitespace-nowrap">CO.REG NO.53033969B &nbsp;&nbsp; GST REG NO. M90355440L</p><p className="whitespace-nowrap">280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p><p className="whitespace-nowrap">HP: 97578869 (Mr Ye) &nbsp;&nbsp; HP: 91113505 (Min) &nbsp;&nbsp; Email: 3leaves.sg@gmail.com</p></div>
+                  </div>
                 </div>
+                {/* NEW: PO Number injected top right of company section if special format */}
+                {isSpecialFormat && poNumber && (
+                  <div className="text-[14px] font-bold tracking-tight text-slate-800 pt-2 whitespace-nowrap">
+                    PO NO. {poNumber}
+                  </div>
+                )}
               </div>
               <div className="flex justify-between items-end w-full mb-2 text-[14px] font-bold">
                 <div className="flex items-end flex-1 pr-4"><span className="shrink-0 mr-2 text-black">TO:</span><span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[13px] tracking-tight" style={{ fontFamily: CJK_FONT }}>{String(invoice?.customer || '')}</span></div>
@@ -278,9 +318,17 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
               <div className="flex items-end w-full text-[14px] font-bold"><span className="shrink-0 mr-2 text-black">ADDRESS:</span><span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[12px] tracking-tighter" style={{ fontFamily: CJK_FONT }}>{customerAddress}</span></div>
             </div>
             <div className="w-[180px] shrink-0 flex flex-col items-start pl-4 pt-1">
-              <h2 className="text-[22px] font-bold tracking-[0.4em] leading-none mb-1" style={{ fontFamily: CJK_FONT }}>發票</h2><h3 className="text-[15px] font-black tracking-wide uppercase mb-6 text-black">TAX INVOICE</h3>
+              <h2 className="text-[22px] font-bold tracking-[0.4em] leading-none mb-1" style={{ fontFamily: CJK_FONT }}>發票</h2><h3 className="text-[15px] font-black tracking-wide uppercase mb-2 text-black">TAX INVOICE</h3>
+              
+              {/* NEW: Dynamic Barcode Injection */}
+              {isSpecialFormat && (
+                <div className="w-full flex justify-start mb-4">
+                  <img src={`https://bwipjs-api.metafloor.com/?bcid=code128&text=${invoiceNumber}&scale=3&includetext=true&textxalign=center&textsize=10`} alt="Barcode" className="max-w-full h-[40px] object-contain" />
+                </div>
+              )}
+
               <div className="w-full flex flex-col gap-3 mt-auto mb-2">
-                <div className="flex items-baseline"><span className="font-bold w-[50px] shrink-0 text-black text-[15px]">No.</span><span className="text-red-600 font-bold tracking-wider text-[17px] leading-none">{String(invoice?.number || invoice?.id || '')}</span></div>
+                <div className="flex items-baseline"><span className="font-bold w-[50px] shrink-0 text-black text-[15px]">No.</span><span className="text-red-600 font-bold tracking-wider text-[17px] leading-none">{invoiceNumber}</span></div>
                 <div className="flex items-baseline"><span className="font-bold w-[50px] shrink-0 text-black text-[15px]">Term:</span><span className="text-red-600 font-bold text-[16px] leading-none">{invoice?.paymentTerms === 'cod' ? 'COD' : '30 Days'}</span></div>
               </div>
             </div>
@@ -305,7 +353,15 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
                 );
               })}
               <tr className="h-full"><td></td><td></td><td></td><td></td><td></td></tr>
-              <tr className="border-t-2 border-black font-bold h-[28px]"><td colSpan="3" rowSpan="3" className="bg-white border-r-2 border-black"></td><td className="p-1 text-center text-[14px]">SUBTOTAL</td><td className="p-1 text-center text-[15px]">${formatMoney(subtotal)}</td></tr>
+              <tr className="border-t-2 border-black font-bold h-[28px]">
+                {/* NEW: Car Plate Box inserted into the previously empty bottom-left space */}
+                <td colSpan="3" rowSpan="3" className="bg-white border-r-2 border-black p-2 align-top text-left">
+                  {isSpecialFormat && carPlateNo && (
+                    <div className="font-bold text-[14px] leading-tight">Car<br/>Plate No: <span className="font-normal">{carPlateNo}</span></div>
+                  )}
+                </td>
+                <td className="p-1 text-center text-[14px]">SUBTOTAL</td><td className="p-1 text-center text-[15px]">${formatMoney(subtotal)}</td>
+              </tr>
               <tr className="font-bold h-[28px] border-t border-black"><td className="p-1 text-center text-[14px]">9% GST</td><td className="p-1 text-center text-[15px]">${formatMoney(gst)}</td></tr>
               <tr className="font-bold h-[32px] border-t-2 border-black"><td className="p-1 text-center text-[16px]">TOTAL</td><td className="p-1 text-center text-[17px]">${formatMoney(total)}</td></tr>
             </tbody>
@@ -336,6 +392,11 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
   const [customerId, setCustomerId] = useState(existingInvoice?.customerId || '');
   const [isAutofillEnabled, setIsAutofillEnabled] = useState(false);
   const [invoiceStatus, setInvoiceStatus] = useState(existingInvoice?.status || 'Unpaid');
+
+  // NEW: Special Format State Variables
+  const [isSpecialFormat, setIsSpecialFormat] = useState(existingInvoice?.isSpecialFormat || false);
+  const [poNumber, setPoNumber] = useState(existingInvoice?.poNumber || '');
+  const [carPlateNo, setCarPlateNo] = useState(existingInvoice?.carPlateNo || '');
 
   const safeInventory = Array.isArray(sys?.inventory) ? sys.inventory : [];
   const safeCustomers = Array.isArray(sys?.customers) ? sys.customers : [];
@@ -394,21 +455,15 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
   const getSafePrice = (product, unit = '箱') => {
     if (!product) return 0;
     const ruleKey = `${product.id}|${unit}`;
-    
-    // 1. Individual Price Check
     if (customer?.custom_prices && typeof customer.custom_prices === 'object' && customer.custom_prices[ruleKey] !== undefined) {
       return Number(customer.custom_prices[ruleKey]) || 0;
     }
-    
-    // 2. Group Price Check
     if (customer?.pricing_group_id) {
       const assignedGroup = safeGroups.find(g => g.id === customer.pricing_group_id);
       if (assignedGroup?.prices && typeof assignedGroup.prices === 'object' && assignedGroup.prices[ruleKey] !== undefined) {
         return Number(assignedGroup.prices[ruleKey]) || 0;
       }
     }
-    
-    // 3. Global Check
     let price = product.Price || product.unitPrice || product['Unit Price (SG)'] || 0;
     return Number(price) || 0;
   };
@@ -520,6 +575,7 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
       number: String(invoiceNumber), customerId, customer: String(customer?.name || existingInvoice?.customer || 'Unknown Customer'),
       region: String(customer?.region || existingInvoice?.region || ''), date: String(invoiceDate), items: cleanItems, total,
       status: invoiceStatus, deliveryStatus: existingInvoice ? String(existingInvoice.deliveryStatus || 'Pending') : 'Pending', paymentTerms: String(paymentTerms),
+      isSpecialFormat, poNumber, carPlateNo // NEW: Inject special format data into the database save
     };
 
     const nextInventory = [...safeInventory];
@@ -608,6 +664,7 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
         customer={customer} gst={gst} invoiceNumber={invoiceNumber} invoiceDate={invoiceDate} items={items}
         onBack={() => setPreviewMode(false)} onRegister={handleRegister} paymentTerms={paymentTerms} setItems={setItems}
         subtotal={subtotal} sys={sys} total={total} existingInvoice={existingInvoice}
+        isSpecialFormat={isSpecialFormat} poNumber={poNumber} carPlateNo={carPlateNo} // Pass new special fields to preview
       />
     );
   }
@@ -641,7 +698,7 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
 
           <div className="mx-auto mb-12 w-full max-w-[800px] border-b-8 border-blue-600 bg-white p-12 text-sm text-gray-800 shadow-xl">
             <CompanyHeader />
-            <div className="mb-12 flex justify-between">
+            <div className="mb-6 flex justify-between">
               <div className="w-[35%] border-r border-slate-100 pr-6">
                 <div className="flex justify-between items-end mb-1">
                   <label className="text-[10px] font-black uppercase text-gray-400">Customer Account:</label>
@@ -673,6 +730,26 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
                 </div>
                 {isDuplicateNumber && (<p className="text-[10px] font-black text-red-500 uppercase mt-1">Number Already Exists!</p>)}
               </div>
+            </div>
+
+            {/* NEW: SPECIAL FORMAT TOGGLE ROW */}
+            <div className="flex flex-col mb-8 bg-slate-50 p-4 rounded-xl border border-slate-200">
+              <label className="flex items-center space-x-2 cursor-pointer w-max">
+                <input type="checkbox" checked={isSpecialFormat} onChange={e => setIsSpecialFormat(e.target.checked)} className="rounded border-slate-300 text-purple-600 focus:ring-purple-500 w-4 h-4" />
+                <span className="text-xs font-bold uppercase tracking-widest text-slate-700 flex items-center"><ScanBarcode size={14} className="mr-1 text-purple-500"/> Enable Special Format (Barcode & Car Plate)</span>
+              </label>
+              {isSpecialFormat && (
+                <div className="flex space-x-6 mt-4 pt-4 border-t border-slate-200">
+                  <div className="flex-1">
+                    <label className="text-[10px] font-black uppercase text-gray-400 mb-1 block">PO Number</label>
+                    <input type="text" placeholder="e.g. POC121950" value={poNumber} onChange={e => setPoNumber(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg p-2 text-sm font-bold outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500" />
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-[10px] font-black uppercase text-gray-400 mb-1 block">Car Plate No.</label>
+                    <input type="text" placeholder="e.g. GBF4684U" value={carPlateNo} onChange={e => setCarPlateNo(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg p-2 text-sm font-bold outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500" />
+                  </div>
+                </div>
+              )}
             </div>
 
             {suggestions.length > 0 && !existingInvoice && (
@@ -809,7 +886,7 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
       </div>
 
       {/* ========================================== */}
-      {/* PRICING MANAGER MODAL - UPDATED CASCADE */}
+      {/* PRICING MANAGER MODAL */}
       {/* ========================================== */}
       {priceModal && (
         <div className="fixed inset-0 z-[6000] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
@@ -873,7 +950,6 @@ export function InvoiceModule({ sys }) {
   const [previewInvoice, setPreviewInvoice] = useState(null);
   const [editingInvoice, setEditingInvoice] = useState(null);
 
-  // INDEPENDENT PRICING GROUPS STATE FOR CASCADE
   const [pricingGroups, setPricingGroups] = useState([]);
   
   useEffect(() => {
@@ -989,7 +1065,10 @@ export function InvoiceModule({ sys }) {
             <tbody className="divide-y divide-slate-100 text-sm">
               {paginatedInvoices.map((inv) => (
                 <tr key={inv?.id} className="hover:bg-blue-50 cursor-pointer transition-colors group" onClick={() => setPreviewInvoice(inv)}>
-                  <td className="p-5 pl-8 font-mono font-bold text-blue-600">#{String(inv?.number || inv?.id || '')}</td>
+                  <td className="p-5 pl-8 font-mono font-bold text-blue-600">
+                    #{String(inv?.number || inv?.id || '')}
+                    {inv?.isSpecialFormat && <span className="ml-2 bg-purple-100 text-purple-700 border border-purple-200 px-1.5 py-0.5 rounded text-[8px] uppercase tracking-widest font-black inline-flex items-center"><ScanBarcode size={8} className="mr-0.5" /> Spec</span>}
+                  </td>
                   <td className="p-5 text-slate-500">{String(inv?.date || '')}</td>
                   <td className="p-5 text-slate-800">{String(inv?.customer || '')}</td>
                   <td className="p-5 text-center"><span className="text-xs font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-1 rounded-md whitespace-nowrap">{inv?.paymentTerms === 'cod' ? 'C.O.D' : '30 Days'}</span></td>
