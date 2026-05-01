@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import {
   Activity, AlertTriangle, ArrowRight, Clock, MapPin, Phone, Plus, TrendingDown,
-  TrendingUp, User, Tag, Trash2, Save, Edit, Search, Filter, Layers, X, Sparkles
+  TrendingUp, User, Tag, Trash2, Save, Edit, Search, Filter, Layers, X, Sparkles, UserPlus, UserMinus, Users as UsersIcon
 } from 'lucide-react';
 import { EntityModal } from '../../components/shared/EntityModal';
 import { formatMoney, formatMoneyWhole } from '../../utils/format';
@@ -79,11 +79,12 @@ function ProductSearchSelect({ value, inventory, onChange }) {
 }
 
 // ==========================================
-// PRICING GROUP MANAGER MODAL (NEW)
+// PRICING GROUP MANAGER MODAL (NEW MEMBER ASSIGNMENT)
 // ==========================================
 function PricingGroupManager({ sys, onClose }) {
   const safeGroups = Array.isArray(sys?.pricingGroups) ? sys.pricingGroups : [];
   const safeInventory = Array.isArray(sys?.inventory) ? sys.inventory : [];
+  const safeCustomers = Array.isArray(sys?.customers) ? sys.customers : [];
   
   const [activeGroupId, setActiveGroupId] = useState(safeGroups[0]?.id || null);
   const [isCreating, setIsCreating] = useState(false);
@@ -93,7 +94,19 @@ function PricingGroupManager({ sys, onClose }) {
   const [pricingUnit, setPricingUnit] = useState('箱');
   const [pricingValue, setPricingValue] = useState('');
 
+  // NEW: State to toggle between "Rules" and "Members" tab
+  const [activeTab, setActiveTab] = useState('rules'); 
+  const [memberSearch, setMemberSearch] = useState('');
+
   const activeGroup = safeGroups.find(g => g.id === activeGroupId);
+
+  // Group Member Calculations
+  const groupMembers = safeCustomers.filter(c => c.pricing_group_id === activeGroupId);
+  const unassignedCustomers = safeCustomers.filter(c => c.pricing_group_id !== activeGroupId);
+
+  const filteredUnassigned = unassignedCustomers.filter(c => 
+    String(c.name || '').toLowerCase().includes(memberSearch.toLowerCase())
+  );
 
   const handleCreateGroup = async () => {
     if (!newGroupName.trim()) return;
@@ -106,6 +119,7 @@ function PricingGroupManager({ sys, onClose }) {
       setActiveGroupId(newGroup.id);
       setIsCreating(false);
       setNewGroupName('');
+      setActiveTab('members'); // Auto-switch to members so they can add people instantly
     } catch (err) { alert(`Error creating group: ${err.message}`); }
   };
 
@@ -142,12 +156,40 @@ function PricingGroupManager({ sys, onClose }) {
   const handleDeleteGroup = async (groupId) => {
     if(!window.confirm("Delete this pricing group entirely? Customers assigned to it will revert to catalog prices.")) return;
     try {
+      // 1. Delete group
       const { error } = await supabase.from('pricing_groups').delete().eq('id', groupId);
       if (error) throw error;
       
+      // 2. Clear pricing_group_id from all affected customers
+      const affectedCustomers = safeCustomers.filter(c => c.pricing_group_id === groupId);
+      for (const cust of affectedCustomers) {
+        await supabase.from('customers').update({ pricing_group_id: null }).eq('id', cust.id);
+      }
+
+      // 3. Update local state
       if (sys.setPricingGroups) sys.setPricingGroups(safeGroups.filter(g => g.id !== groupId));
+      sys.setCustomers(safeCustomers.map(c => c.pricing_group_id === groupId ? { ...c, pricing_group_id: null } : c));
+      
       if (activeGroupId === groupId) setActiveGroupId(null);
     } catch (err) { alert(`Error deleting group: ${err.message}`); }
+  };
+
+  // NEW: Add customer to group
+  const handleAddMember = async (customerId) => {
+    try {
+      const { error } = await supabase.from('customers').update({ pricing_group_id: activeGroupId }).eq('id', customerId);
+      if (error) throw error;
+      sys.setCustomers(safeCustomers.map(c => c.id === customerId ? { ...c, pricing_group_id: activeGroupId } : c));
+    } catch (err) { alert(`Failed to add member: ${err.message}`); }
+  };
+
+  // NEW: Remove customer from group
+  const handleRemoveMember = async (customerId) => {
+    try {
+      const { error } = await supabase.from('customers').update({ pricing_group_id: null }).eq('id', customerId);
+      if (error) throw error;
+      sys.setCustomers(safeCustomers.map(c => c.id === customerId ? { ...c, pricing_group_id: null } : c));
+    } catch (err) { alert(`Failed to remove member: ${err.message}`); }
   };
 
   return (
@@ -179,75 +221,162 @@ function PricingGroupManager({ sys, onClose }) {
               )}
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-2">
-              {safeGroups.map(group => (
-                <div key={group.id} onClick={() => setActiveGroupId(group.id)} className={`w-full text-left px-4 py-3 rounded-xl font-bold text-sm cursor-pointer transition-colors flex justify-between items-center group/btn ${activeGroupId === group.id ? 'bg-blue-600 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-700 hover:border-blue-300 hover:bg-blue-50'}`}>
-                  <span>{group.name}</span>
-                  <button onClick={(e) => { e.stopPropagation(); handleDeleteGroup(group.id); }} className={`p-1.5 rounded-lg transition-colors ${activeGroupId === group.id ? 'hover:bg-blue-700 text-blue-200 hover:text-white' : 'opacity-0 group-hover/btn:opacity-100 hover:bg-red-100 text-slate-400 hover:text-red-600'}`}><Trash2 size={14}/></button>
-                </div>
-              ))}
+              {safeGroups.map(group => {
+                const memberCount = safeCustomers.filter(c => c.pricing_group_id === group.id).length;
+                return (
+                  <div key={group.id} onClick={() => setActiveGroupId(group.id)} className={`w-full text-left px-4 py-3 rounded-xl cursor-pointer transition-colors flex justify-between items-center group/btn ${activeGroupId === group.id ? 'bg-blue-600 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-700 hover:border-blue-300 hover:bg-blue-50'}`}>
+                    <div>
+                      <p className="font-bold text-sm">{group.name}</p>
+                      <p className={`text-[10px] font-black uppercase tracking-widest mt-0.5 ${activeGroupId === group.id ? 'text-blue-200' : 'text-slate-400'}`}>
+                        {memberCount} Member{memberCount !== 1 ? 's' : ''}
+                      </p>
+                    </div>
+                    <button onClick={(e) => { e.stopPropagation(); handleDeleteGroup(group.id); }} className={`p-1.5 rounded-lg transition-colors ${activeGroupId === group.id ? 'hover:bg-blue-700 text-blue-200 hover:text-white' : 'opacity-0 group-hover/btn:opacity-100 hover:bg-red-100 text-slate-400 hover:text-red-600'}`}><Trash2 size={14}/></button>
+                  </div>
+                )
+              })}
               {safeGroups.length === 0 && !isCreating && <p className="text-center text-xs font-bold text-slate-400 mt-4 uppercase tracking-widest">No Groups Found</p>}
             </div>
           </div>
 
           {/* RIGHT SIDEBAR - GROUP EDITOR */}
-          <div className="flex-1 bg-white p-8 overflow-y-auto">
+          <div className="flex-1 bg-white flex flex-col h-full overflow-hidden">
             {activeGroup ? (
               <>
-                <div className="mb-8 border-b border-slate-100 pb-4">
-                  <h3 className="text-2xl font-black text-slate-900">{activeGroup.name}</h3>
-                  <p className="text-sm text-slate-500 font-medium">Any customer assigned to this group will automatically inherit these locked rates.</p>
-                </div>
-
-                <div className="flex space-x-3 mb-8 bg-slate-50 p-4 rounded-xl border border-slate-200 items-center shadow-sm">
-                  <ProductSearchSelect value={pricingItem} inventory={safeInventory} onChange={(selectedId) => { setPricingItem(selectedId); const product = safeInventory.find((entry) => entry.id === selectedId); if (product) setPricingUnit(product.Unit || product.unit || '箱'); }} />
-                  <select className="w-24 rounded-lg border border-slate-200 p-2 text-sm font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 shrink-0 bg-white" value={pricingUnit} onChange={(e) => setPricingUnit(e.target.value)}>
-                    {UNIT_OPTIONS.map((option) => (<option key={option.value} value={option.value}>{option.label}</option>))}
-                    {pricingUnit && !UNIT_OPTIONS.find(opt => opt.value === pricingUnit) && (<option value={pricingUnit}>{pricingUnit}</option>)}
-                  </select>
-                  <div className="relative w-32 shrink-0">
-                    <span className="absolute left-3 top-2.5 font-bold text-slate-400">$</span>
-                    <input type="number" step="0.01" placeholder="0.00" className="w-full rounded-lg border border-slate-200 p-2 pl-7 text-sm font-bold text-slate-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white" value={pricingValue} onChange={(e) => setPricingValue(e.target.value)} />
+                <div className="p-8 border-b border-slate-100 shrink-0">
+                  <h3 className="text-2xl font-black text-slate-900 mb-1">{activeGroup.name}</h3>
+                  <p className="text-sm text-slate-500 font-medium mb-6">Manage pricing rules and assign customers to this tier.</p>
+                  
+                  {/* TAB NAVIGATION */}
+                  <div className="flex space-x-2">
+                    <button onClick={() => setActiveTab('rules')} className={`px-4 py-2 text-xs font-black uppercase tracking-widest rounded-lg transition-all ${activeTab === 'rules' ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+                      <Tag className="inline mr-1.5" size={14}/> Pricing Rules ({Object.keys(activeGroup.prices || {}).length})
+                    </button>
+                    <button onClick={() => setActiveTab('members')} className={`px-4 py-2 text-xs font-black uppercase tracking-widest rounded-lg transition-all ${activeTab === 'members' ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+                      <UsersIcon className="inline mr-1.5" size={14}/> Group Members ({groupMembers.length})
+                    </button>
                   </div>
-                  <button onClick={handleAddGroupPrice} disabled={!pricingItem || !pricingValue} className="flex items-center rounded-lg bg-indigo-600 px-5 py-2.5 text-xs font-black uppercase tracking-widest text-white shadow-md hover:bg-indigo-700 disabled:opacity-50 transition-colors shrink-0">
-                    <Plus className="mr-2" size={14} /> Add Rule
-                  </button>
                 </div>
 
-                <div className="space-y-3">
-                  {Object.keys(activeGroup.prices || {}).length === 0 ? (
-                    <div className="text-center p-8 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50">
-                      <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">No group pricing rules active</p>
-                    </div>
-                  ) : (
-                    Object.entries(activeGroup.prices).map(([ruleKey, price]) => {
-                      const [itemId, unit] = ruleKey.includes('|') ? ruleKey.split('|') : [ruleKey, '箱'];
-                      const product = safeInventory.find(i => i.id === itemId);
-                      const defaultPrice = product?.Price || product?.unitPrice || product?.['Unit Price (SG)'] || 0;
-                      const productName = product?.Name || product?.name || product?.Items || 'Unknown Product';
-                      
-                      return (
-                        <div key={ruleKey} className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl shadow-sm hover:border-indigo-200 transition-colors">
-                          <div>
-                            <p className="text-sm font-bold text-slate-800 flex items-center">
-                              {productName} <span className="ml-3 px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded text-xs font-black border border-indigo-100">{unit}</span>
-                            </p>
-                            <p className="text-xs font-medium text-slate-500 mt-1">Catalog Default: <span className="line-through">${formatMoney(defaultPrice)}</span></p>
-                          </div>
-                          <div className="flex items-center space-x-6">
-                            <div className="text-right">
-                              <p className="text-[10px] font-black uppercase tracking-widest text-emerald-500">Group Rate</p>
-                              <p className="text-lg font-black text-slate-900">${formatMoney(price)}</p>
-                            </div>
-                            <button onClick={() => handleRemoveGroupPrice(ruleKey)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={18} /></button>
-                          </div>
+                <div className="flex-1 overflow-y-auto p-8 bg-slate-50">
+                  {/* TAB: PRICING RULES */}
+                  {activeTab === 'rules' && (
+                    <div className="max-w-2xl mx-auto">
+                      <div className="flex space-x-3 mb-8 bg-white p-4 rounded-xl border border-slate-200 items-center shadow-sm">
+                        <ProductSearchSelect value={pricingItem} inventory={safeInventory} onChange={(selectedId) => { setPricingItem(selectedId); const product = safeInventory.find((entry) => entry.id === selectedId); if (product) setPricingUnit(product.Unit || product.unit || '箱'); }} />
+                        <select className="w-24 rounded-lg border border-slate-200 p-2 text-sm font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 shrink-0 bg-white" value={pricingUnit} onChange={(e) => setPricingUnit(e.target.value)}>
+                          {UNIT_OPTIONS.map((option) => (<option key={option.value} value={option.value}>{option.label}</option>))}
+                          {pricingUnit && !UNIT_OPTIONS.find(opt => opt.value === pricingUnit) && (<option value={pricingUnit}>{pricingUnit}</option>)}
+                        </select>
+                        <div className="relative w-32 shrink-0">
+                          <span className="absolute left-3 top-2.5 font-bold text-slate-400">$</span>
+                          <input type="number" step="0.01" placeholder="0.00" className="w-full rounded-lg border border-slate-200 p-2 pl-7 text-sm font-bold text-slate-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white" value={pricingValue} onChange={(e) => setPricingValue(e.target.value)} />
                         </div>
-                      );
-                    })
+                        <button onClick={handleAddGroupPrice} disabled={!pricingItem || !pricingValue} className="flex items-center rounded-lg bg-indigo-600 px-5 py-2.5 text-xs font-black uppercase tracking-widest text-white shadow-md hover:bg-indigo-700 disabled:opacity-50 transition-colors shrink-0">
+                          <Plus className="mr-2" size={14} /> Add Rule
+                        </button>
+                      </div>
+
+                      <div className="space-y-3">
+                        {Object.keys(activeGroup.prices || {}).length === 0 ? (
+                          <div className="text-center p-8 border-2 border-dashed border-slate-200 rounded-xl bg-white">
+                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">No group pricing rules active</p>
+                          </div>
+                        ) : (
+                          Object.entries(activeGroup.prices).map(([ruleKey, price]) => {
+                            const [itemId, unit] = ruleKey.includes('|') ? ruleKey.split('|') : [ruleKey, '箱'];
+                            const product = safeInventory.find(i => i.id === itemId);
+                            const defaultPrice = product?.Price || product?.unitPrice || product?.['Unit Price (SG)'] || 0;
+                            const productName = product?.Name || product?.name || product?.Items || 'Unknown Product';
+                            
+                            return (
+                              <div key={ruleKey} className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl shadow-sm hover:border-indigo-200 transition-colors">
+                                <div>
+                                  <p className="text-sm font-bold text-slate-800 flex items-center">
+                                    {productName} <span className="ml-3 px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded text-xs font-black border border-indigo-100">{unit}</span>
+                                  </p>
+                                  <p className="text-xs font-medium text-slate-500 mt-1">Catalog Default: <span className="line-through">${formatMoney(defaultPrice)}</span></p>
+                                </div>
+                                <div className="flex items-center space-x-6">
+                                  <div className="text-right">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-emerald-500">Group Rate</p>
+                                    <p className="text-lg font-black text-slate-900">${formatMoney(price)}</p>
+                                  </div>
+                                  <button onClick={() => handleRemoveGroupPrice(ruleKey)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={18} /></button>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TAB: MEMBERS */}
+                  {activeTab === 'members' && (
+                    <div className="grid grid-cols-2 gap-8 h-full">
+                      
+                      {/* Enrolled Members */}
+                      <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col overflow-hidden">
+                        <div className="bg-slate-900 text-white p-3 font-bold text-xs uppercase tracking-widest flex justify-between items-center shrink-0">
+                          <span>Enrolled Entities</span>
+                          <span className="bg-slate-700 px-2 py-0.5 rounded">{groupMembers.length}</span>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                          {groupMembers.length === 0 ? (
+                            <p className="text-center text-xs font-bold text-slate-400 mt-8 uppercase tracking-widest">No Members Yet</p>
+                          ) : (
+                            groupMembers.map(member => (
+                              <div key={member.id} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-100 rounded-lg group/mem hover:border-slate-300 transition-colors">
+                                <div>
+                                  <p className="text-sm font-bold text-slate-800">{member.name}</p>
+                                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-0.5">{member.region || 'No Region'}</p>
+                                </div>
+                                <button onClick={() => handleRemoveMember(member.id)} className="text-red-400 hover:text-red-600 bg-white hover:bg-red-50 border border-slate-200 px-2 py-1.5 rounded flex items-center text-[10px] font-bold uppercase transition-colors shadow-sm">
+                                  <UserMinus size={12} className="mr-1" /> Remove
+                                </button>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Add New Members */}
+                      <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col overflow-hidden">
+                        <div className="bg-slate-100 border-b border-slate-200 p-3 font-bold text-xs uppercase tracking-widest text-slate-600 shrink-0">
+                          Add Customers
+                        </div>
+                        <div className="p-3 border-b border-slate-100 bg-slate-50 shrink-0 relative">
+                          <Search size={14} className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" />
+                          <input type="text" placeholder="Search available customers..." value={memberSearch} onChange={(e) => setMemberSearch(e.target.value)} className="w-full text-sm font-bold border border-slate-200 rounded-lg py-2 pl-8 outline-none focus:border-blue-500 shadow-sm" />
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                          {filteredUnassigned.length === 0 ? (
+                            <p className="text-center text-xs font-bold text-slate-400 mt-8 uppercase tracking-widest">All matched customers assigned</p>
+                          ) : (
+                            filteredUnassigned.map(member => (
+                              <div key={member.id} className="flex items-center justify-between p-3 hover:bg-slate-50 border border-transparent border-b-slate-100 transition-colors">
+                                <div className="truncate pr-2">
+                                  <p className="text-sm font-bold text-slate-800 truncate">{member.name}</p>
+                                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-0.5 truncate">
+                                    {member.pricing_group_id ? `Currently in: ${safeGroups.find(g => g.id === member.pricing_group_id)?.name || 'Unknown'}` : 'No Group Assigned'}
+                                  </p>
+                                </div>
+                                <button onClick={() => handleAddMember(member.id)} className="shrink-0 text-blue-600 hover:text-white bg-blue-50 hover:bg-blue-600 border border-blue-200 px-3 py-1.5 rounded flex items-center text-[10px] font-bold uppercase transition-all shadow-sm">
+                                  <Plus size={12} className="mr-1" /> Add
+                                </button>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+
+                    </div>
                   )}
                 </div>
               </>
             ) : (
-              <div className="h-full flex flex-col items-center justify-center text-slate-400">
+              <div className="h-full flex flex-col items-center justify-center text-slate-400 bg-slate-50">
                 <Layers size={48} className="mb-4 opacity-20" />
                 <p className="text-sm font-bold uppercase tracking-widest">Select or Create a Pricing Group</p>
               </div>
@@ -283,8 +412,9 @@ function CustomerFormModal({ initialValue, onClose, onSave, sys }) {
           <select className="w-full rounded-xl border border-gray-200 p-3 text-sm bg-white cursor-pointer" onChange={(event) => setForm((current) => ({ ...current, payment_terms: event.target.value }))} value={form.payment_terms || '30_days'}>
             <option value="30_days">30 Days Credit</option><option value="cod">C.O.D</option>
           </select>
-          <select className="w-full rounded-xl border border-gray-200 p-3 text-sm bg-white cursor-pointer" onChange={(event) => setForm((current) => ({ ...current, pricing_group_id: event.target.value }))} value={form.pricing_group_id || ''}>
-            <option value="">No Pricing Group (Catalog)</option>
+          {/* NEW: Group Pricing Selector on Profile */}
+          <select className="w-full rounded-xl border border-indigo-200 text-indigo-800 bg-indigo-50 p-3 text-sm font-bold cursor-pointer outline-none focus:ring-2 focus:ring-indigo-500" onChange={(event) => setForm((current) => ({ ...current, pricing_group_id: event.target.value }))} value={form.pricing_group_id || ''}>
+            <option value="">No Pricing Group</option>
             {safeGroups.map(g => (<option key={g.id} value={g.id}>{g.name}</option>))}
           </select>
         </div>
@@ -439,8 +569,6 @@ export function CustomerModule({ sys }) {
   if (selectedCustomer) {
     const statusStyle = STATUS_STYLES[selectedCustomer.status] || STATUS_STYLES.inactive;
     const customPrices = selectedCustomer.customer.custom_prices || {};
-    
-    // Determine the customer's assigned group and its prices
     const assignedGroup = safeGroups.find(g => g.id === selectedCustomer.customer.pricing_group_id);
     const groupPrices = assignedGroup?.prices || {};
 
@@ -453,7 +581,6 @@ export function CustomerModule({ sys }) {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div className="space-y-6 lg:col-span-2">
             
-            {/* MAIN PROFILE CARD */}
             <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
               <div className="mb-6 flex items-start justify-between">
                 <div>
@@ -494,7 +621,6 @@ export function CustomerModule({ sys }) {
               </div>
             </div>
 
-            {/* SPECIAL PRICING AGREEMENTS CARD */}
             <div className="rounded-2xl border border-blue-200 bg-white p-8 shadow-sm">
               <h3 className="mb-6 flex items-center text-sm font-black uppercase tracking-widest text-blue-800">
                 <Tag className="mr-2 text-blue-500" size={18} /> Pricing Agreements (Cascade)
@@ -523,7 +649,6 @@ export function CustomerModule({ sys }) {
                   </div>
                 ) : (
                   <>
-                    {/* Render Individual Overrides First (Highest Priority) */}
                     {Object.entries(customPrices).map(([ruleKey, price]) => {
                       const [itemId, unit] = ruleKey.includes('|') ? ruleKey.split('|') : [ruleKey, '箱'];
                       const product = safeInventory.find(i => i.id === itemId);
@@ -550,9 +675,7 @@ export function CustomerModule({ sys }) {
                       );
                     })}
 
-                    {/* Render Group Inherited Prices (Second Priority) */}
                     {Object.entries(groupPrices).map(([ruleKey, price]) => {
-                      // If the customer has an individual override for this exact item+unit, the group price is hidden/overridden
                       if (customPrices[ruleKey] !== undefined) return null;
 
                       const [itemId, unit] = ruleKey.includes('|') ? ruleKey.split('|') : [ruleKey, '箱'];
@@ -574,7 +697,7 @@ export function CustomerModule({ sys }) {
                               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Group Rate</p>
                               <p className="text-lg font-black text-indigo-600">${formatMoney(price)}</p>
                             </div>
-                            <div className="w-[34px]"></div> {/* Spacing to align with trash can above */}
+                            <div className="w-[34px]"></div>
                           </div>
                         </div>
                       );
@@ -584,7 +707,6 @@ export function CustomerModule({ sys }) {
               </div>
             </div>
 
-            {/* BEHAVIORAL ANALYSIS CARD */}
             <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
               <h3 className="mb-4 text-sm font-black uppercase tracking-widest text-slate-700">Behavioral Analysis & Actions</h3>
               <div className="space-y-4">
@@ -629,7 +751,6 @@ export function CustomerModule({ sys }) {
   return (
     <div className="flex h-full flex-col rounded-xl border border-gray-200 bg-white shadow-sm">
       
-      {/* HEADER */}
       <div className="flex shrink-0 items-center justify-between rounded-t-xl border-b border-gray-100 bg-gray-50 p-5">
         <div>
           <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">Customer Intelligence</h3>
