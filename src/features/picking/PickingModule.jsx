@@ -4,7 +4,7 @@ import logo from '../invoices/three_leaves_logo.png'; // Re-using your existing 
 
 const CJK_FONT = '"Microsoft YaHei", "微软雅黑", "PingFang SC", "Hiragino Sans GB", "SimHei", "黑体", "SimSun", "宋体", serif';
 
-export function PickListModule({ sys }) {
+export function PickingModule({ sys }) {
   // Default to today's date
   const [selectedDate, setSelectedDate] = useState(() => {
     return new Date().toISOString().split('T')[0];
