@@ -141,7 +141,7 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
   const safeInventory = Array.isArray(sys?.inventory) ? sys.inventory : [];
   const safeItems = Array.isArray(items) ? items.filter(Boolean) : [];
 
-  // DYNAMIC A4 FONT SIZING ENGINE - AGGRESSIVE SHRINK
+  // DYNAMIC A4 SIZING ENGINE - VERTICAL SPACING FOCUS
   const itemCount = safeItems.length;
   let baseText = "text-[15px]";
   let cellPad = "py-1";
@@ -150,26 +150,19 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
   let subtotalText = "text-[15px]";
   let gstText = "text-[14px]";
 
-  if (itemCount > 22) {
-    baseText = "text-[9px] leading-none";
-    cellPad = "py-0";
+  if (itemCount > 20) {
+    baseText = "text-[13px] leading-none"; // Keep font readable, tighten line height
+    cellPad = "py-0"; // aggressively strip vertical padding
     descPad = "pt-0.5";
-    totalText = "text-[12px]";
-    subtotalText = "text-[11px]";
-    gstText = "text-[10px]";
-  } else if (itemCount > 16) {
-    baseText = "text-[11px] leading-tight";
-    cellPad = "py-0";
-    descPad = "pt-0.5";
-    totalText = "text-[14px]";
-    subtotalText = "text-[12px]";
-    gstText = "text-[12px]";
-  } else if (itemCount > 13) {
-    baseText = "text-[13px] leading-tight";
-    cellPad = "py-0.5";
-    descPad = "pt-1";
     totalText = "text-[15px]";
     subtotalText = "text-[13px]";
+    gstText = "text-[12px]";
+  } else if (itemCount > 14) {
+    baseText = "text-[14px] leading-tight";
+    cellPad = "py-0.5";
+    descPad = "pt-1";
+    totalText = "text-[16px]";
+    subtotalText = "text-[14px]";
     gstText = "text-[13px]";
   }
 
@@ -305,7 +298,7 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
   const carPlateNo = invoice.carPlateNo;
   const invoiceNumber = String(invoice?.number || invoice?.id || '');
 
-  // DYNAMIC A4 FONT SIZING ENGINE
+  // DYNAMIC A4 SIZING ENGINE - VERTICAL SPACING FOCUS
   const itemCount = safeItems.length;
   let baseText = "text-[15px]";
   let cellPad = "py-1";
@@ -314,26 +307,19 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
   let subtotalText = "text-[15px]";
   let gstText = "text-[14px]";
 
-  if (itemCount > 22) {
-    baseText = "text-[9px] leading-none";
-    cellPad = "py-0";
+  if (itemCount > 20) {
+    baseText = "text-[13px] leading-none"; 
+    cellPad = "py-0"; 
     descPad = "pt-0.5";
-    totalText = "text-[12px]";
-    subtotalText = "text-[11px]";
-    gstText = "text-[10px]";
-  } else if (itemCount > 16) {
-    baseText = "text-[11px] leading-tight";
-    cellPad = "py-0";
-    descPad = "pt-0.5";
-    totalText = "text-[14px]";
-    subtotalText = "text-[12px]";
-    gstText = "text-[12px]";
-  } else if (itemCount > 13) {
-    baseText = "text-[13px] leading-tight";
-    cellPad = "py-0.5";
-    descPad = "pt-1";
     totalText = "text-[15px]";
     subtotalText = "text-[13px]";
+    gstText = "text-[12px]";
+  } else if (itemCount > 14) {
+    baseText = "text-[14px] leading-tight";
+    cellPad = "py-0.5";
+    descPad = "pt-1";
+    totalText = "text-[16px]";
+    subtotalText = "text-[14px]";
     gstText = "text-[13px]";
   }
 
@@ -635,13 +621,12 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
   };
 
   const handleRegister = async (printAfter = false) => {
-    // FIX 1: NEVER strip `rawSearchString` or `isAutoFilled`. Only strip heavy `suggestions` to prevent payload overload.
+    // BUG FIX: Retain rawSearchString for unassigned items. Only strip suggestions to keep payload small.
     const cleanItems = (Array.isArray(items) ? items.filter(Boolean) : []).map(item => { 
       const { suggestions, originalPredictedId, ...rest } = item; 
       return rest; 
     });
 
-    // Strip entirely empty placeholder rows the user added but didn't fill out
     const finalItems = cleanItems.filter(item => item.itemId || item.rawSearchString || item.name);
 
     const invoice = {
@@ -649,15 +634,14 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
       number: String(invoiceNumber), customerId, customer: String(customer?.name || existingInvoice?.customer || 'Unknown Customer'),
       region: String(customer?.region || existingInvoice?.region || ''), date: String(invoiceDate), items: finalItems, total,
       status: invoiceStatus, deliveryStatus: existingInvoice ? String(existingInvoice.deliveryStatus || 'Pending') : 'Pending', paymentTerms: String(paymentTerms),
-      isSpecialFormat, poNumber, carPlateNo 
+      isSpecialFormat: !!isSpecialFormat, poNumber: poNumber || null, carPlateNo: carPlateNo || null 
     };
 
     try {
-      // FIX 2: EXPLICIT DIRECT DATABASE SAVE FOR INVOICES (Prevents Refresh Data Loss)
+      // EXPLICIT DATABASE SAVE TO PREVENT REFRESH WIPE
       const { error } = await supabase.from('invoices').upsert([invoice]);
       if (error) throw error;
 
-      // Update local state after successful save
       if (existingInvoice) { 
         sys.setInvoices(safeInvoices.map(inv => inv?.id === existingInvoice.id ? invoice : inv)); 
       } else { 
@@ -726,7 +710,7 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
         customer={customer} gst={gst} invoiceNumber={invoiceNumber} invoiceDate={invoiceDate} items={items}
         onBack={() => setPreviewMode(false)} onRegister={handleRegister} paymentTerms={paymentTerms} setItems={setItems}
         subtotal={subtotal} sys={sys} total={total} existingInvoice={existingInvoice}
-        isSpecialFormat={isSpecialFormat} poNumber={poNumber} carPlateNo={carPlateNo}
+        isSpecialFormat={isSpecialFormat} poNumber={poNumber} carPlateNo={carPlateNo} 
       />
     );
   }
@@ -1029,7 +1013,6 @@ export function InvoiceModule({ sys }) {
     e.stopPropagation(); 
     if (window.confirm("Are you sure you want to permanently delete this invoice? This cannot be undone.")) {
       try {
-        // EXPLICIT DATABASE DELETE
         const { error } = await supabase.from('invoices').delete().eq('id', invoiceId);
         if (error) throw error;
         
@@ -1042,7 +1025,6 @@ export function InvoiceModule({ sys }) {
 
   const handleStatusChange = async (invoiceId, newStatus) => {
     try {
-      // EXPLICIT DATABASE UPDATE
       const { error } = await supabase.from('invoices').update({ status: newStatus }).eq('id', invoiceId);
       if (error) throw error;
 
