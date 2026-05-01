@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
-import { Eye, FileText, MessageSquare, Printer, Save, Sparkles, Trash2, Search, BrainCircuit, ChevronLeft, X, Settings, AlertTriangle, ArrowUpDown, Plus, Edit, Filter, CheckCircle, AlertCircle, ChevronDown, Check, Layers } from 'lucide-react';
+import { Eye, FileText, MessageSquare, Printer, Save, Sparkles, Trash2, Search, BrainCircuit, ChevronLeft, X, Settings, AlertTriangle, ArrowUpDown, Plus, Edit, Filter, CheckCircle, AlertCircle, ChevronDown, Check, Layers, User } from 'lucide-react';
 import { CompanyHeader } from '../../components/shared/CompanyHeader';
 import { UNIT_OPTIONS } from '../../data/company';
 import { formatMoney } from '../../utils/format';
@@ -298,7 +298,9 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
                     <td className="px-1 py-1 text-left pl-2 leading-none pt-1.5 font-normal" style={{ fontFamily: CJK_FONT }}>{productName}</td>
                     <td className="px-1 py-1 text-center font-normal" style={{ fontFamily: CJK_FONT }}>{String(item?.qty || item?.quantity || 0)} {String(item?.unit || '')}</td>
                     <td className="px-1 py-1 text-center font-normal">${formatMoney(item?.unitPrice)}</td>
-                    <td className="px-1 py-1 text-center font-normal">${formatMoney((Number(item?.qty || item?.quantity) || 0) * (Number(item?.unitPrice) || 0))}</td>
+                    <td className="px-1 py-1 text-center font-normal">
+                      ${formatMoney((Number(item?.qty || item?.quantity) || 0) * (Number(item?.unitPrice) || 0))}
+                    </td>
                   </tr>
                 );
               })}
@@ -329,12 +331,8 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
 // ==========================================
 // MAIN EXPORT: INVOICE GENERATOR WORKSPACE
 // ==========================================
-export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
-  
-  const [invoiceDate, setInvoiceDate] = useState(
-    existingInvoice ? String(existingInvoice.date || '') : new Date().toISOString().split('T')[0]
-  );
-  
+export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = null, onClose }) {
+  const [invoiceDate, setInvoiceDate] = useState(existingInvoice ? String(existingInvoice.date || '') : new Date().toISOString().split('T')[0]);
   const [customerId, setCustomerId] = useState(existingInvoice?.customerId || '');
   const [isAutofillEnabled, setIsAutofillEnabled] = useState(false);
   const [invoiceStatus, setInvoiceStatus] = useState(existingInvoice?.status || 'Unpaid');
@@ -342,7 +340,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
   const safeInventory = Array.isArray(sys?.inventory) ? sys.inventory : [];
   const safeCustomers = Array.isArray(sys?.customers) ? sys.customers : [];
   const safeInvoices = Array.isArray(sys?.invoices) ? sys.invoices : [];
-  const safeGroups = Array.isArray(sys?.pricingGroups) ? sys.pricingGroups : []; // NEW
+  const safeGroups = Array.isArray(groups) ? groups : []; 
 
   const [items, setItems] = useState(() => {
     if (existingInvoice && Array.isArray(existingInvoice.items)) {
@@ -393,17 +391,16 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
   const gst = subtotal * 0.09;
   const total = subtotal + gst;
 
-  // NEW: UPDATED SAFE PRICE CASCADE
   const getSafePrice = (product, unit = '箱') => {
     if (!product) return 0;
     const ruleKey = `${product.id}|${unit}`;
     
-    // 1. Check Individual Customer Price
+    // 1. Individual Price Check
     if (customer?.custom_prices && typeof customer.custom_prices === 'object' && customer.custom_prices[ruleKey] !== undefined) {
       return Number(customer.custom_prices[ruleKey]) || 0;
     }
     
-    // 2. Check Pricing Group Price
+    // 2. Group Price Check
     if (customer?.pricing_group_id) {
       const assignedGroup = safeGroups.find(g => g.id === customer.pricing_group_id);
       if (assignedGroup?.prices && typeof assignedGroup.prices === 'object' && assignedGroup.prices[ruleKey] !== undefined) {
@@ -411,7 +408,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
       }
     }
     
-    // 3. Check Global Catalog Price
+    // 3. Global Check
     let price = product.Price || product.unitPrice || product['Unit Price (SG)'] || 0;
     return Number(price) || 0;
   };
@@ -556,7 +553,6 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
     if (printAfter) { setTimeout(() => { window.print(); onClose(); }, 500); } else { onClose(); }
   };
 
-  // NEW: UPDATED PRICING CASCADE SAVE LOGIC
   const executePriceSave = async (type, newPriceStr) => {
     const { index, item, product, assignedGroup } = priceModal;
     const newPrice = Number(newPriceStr) || 0;
@@ -573,7 +569,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
         const updatedGroupPrices = { ...(assignedGroup.prices || {}), [ruleKey]: newPrice };
         const { error } = await supabase.from('pricing_groups').update({ prices: updatedGroupPrices }).eq('id', assignedGroup.id);
         if (error) throw error;
-        if (sys.setPricingGroups) sys.setPricingGroups(safeGroups.map(g => g.id === assignedGroup.id ? { ...g, prices: updatedGroupPrices } : g));
+        setGroups(safeGroups.map(g => g.id === assignedGroup.id ? { ...g, prices: updatedGroupPrices } : g));
       }
       else if (type === 'GLOBAL') {
         const isUUID = product.id && String(product.id).length === 36 && String(product.id).includes('-');
@@ -590,8 +586,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
         if (error) throw error;
         sys.setCustomers(safeCustomers.map(c => c?.id === customer.id ? { ...c, custom_prices: updatedCustomPrices } : c));
         
-        // When individual is cleared, it might fallback to group. Re-evaluate using getSafePrice.
-        const fallbackPrice = getSafePrice(product, item.unit); // Re-run to see if group applies
+        const fallbackPrice = getSafePrice(product, item.unit); 
         const nextItems = [...(Array.isArray(items) ? items : [])];
         if (nextItems[index]) nextItems[index].unitPrice = fallbackPrice;
         setItems(nextItems);
@@ -704,11 +699,9 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                   const safeItemUnit = String(item.unit || '');
                   const ruleKey = `${item.itemId}|${safeItemUnit}`;
                   
-                  // NEW PRICING CASCADE CHECK
                   const hasIndividualPrice = customer?.custom_prices && typeof customer.custom_prices === 'object' && customer.custom_prices[ruleKey] !== undefined;
                   const assignedGroup = customer?.pricing_group_id ? safeGroups.find(g => g.id === customer.pricing_group_id) : null;
                   const hasGroupPrice = assignedGroup?.prices && typeof assignedGroup.prices === 'object' && assignedGroup.prices[ruleKey] !== undefined;
-                  const hasAnyCustomPrice = hasIndividualPrice || hasGroupPrice;
 
                   const selectedProduct = safeInventory.find(p => p?.id === item.itemId);
                   let rowUnitOptions = [];
@@ -880,6 +873,19 @@ export function InvoiceModule({ sys }) {
   const [previewInvoice, setPreviewInvoice] = useState(null);
   const [editingInvoice, setEditingInvoice] = useState(null);
 
+  // INDEPENDENT PRICING GROUPS STATE FOR CASCADE
+  const [pricingGroups, setPricingGroups] = useState([]);
+  
+  useEffect(() => {
+    const fetchGroups = async () => {
+      try {
+        const { data, error } = await supabase.from('pricing_groups').select('*');
+        if (!error && data) setPricingGroups(data);
+      } catch (err) { console.error("Error fetching pricing groups:", err); }
+    };
+    fetchGroups();
+  }, [isGeneratorOpen]);
+
   const safeInvoices = Array.isArray(sys?.invoices) ? sys.invoices : [];
 
   const handleDeleteInvoice = async (e, invoiceId) => {
@@ -1007,7 +1013,7 @@ export function InvoiceModule({ sys }) {
       </div>
 
       {previewInvoice && <InvoicePreviewModal invoice={previewInvoice} onClose={() => setPreviewInvoice(null)} sys={sys} onEdit={(inv) => { setEditingInvoice(inv); setIsGeneratorOpen(true); setPreviewInvoice(null); }} />}
-      {isGeneratorOpen && <InvoiceGenerator sys={sys} existingInvoice={editingInvoice} onClose={() => { setIsGeneratorOpen(false); setEditingInvoice(null); }} />}
+      {isGeneratorOpen && <InvoiceGenerator sys={sys} groups={pricingGroups} setGroups={setPricingGroups} existingInvoice={editingInvoice} onClose={() => { setIsGeneratorOpen(false); setEditingInvoice(null); }} />}
     </div>
   );
 }
