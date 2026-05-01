@@ -266,12 +266,12 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
                 const foundProduct = safeInventory.find((entry) => entry.id === item.itemId);
                 const productName = foundProduct ? String(foundProduct.Name || foundProduct.name || foundProduct.Items || '') : String(item.Name || item.name || '-');
                 return (
-                  <tr key={idx} className="align-top" style={{ fontFamily: CJK_FONT }}>
-                    <td className="px-1 py-1 font-medium text-center">{idx + 1}</td>
-                    <td className="px-1 py-1 text-left pl-2 font-bold leading-none pt-1.5" style={{ fontFamily: CJK_FONT }}>{productName}</td>
-                    <td className="px-1 py-1 font-medium text-center" style={{ fontFamily: CJK_FONT }}>{String(item.qty || item.quantity || 0)} {String(item.unit || item.Unit || '')}</td>
-                    <td className="px-1 py-1 text-center">${formatMoney(item.unitPrice)}</td>
-                    <td className="px-1 py-1 text-center font-bold">${formatMoney((Number(item.qty || item.quantity) || 0) * (Number(item.unitPrice) || 0))}</td>
+                  <tr key={idx} className="align-top text-slate-900" style={{ fontFamily: CJK_FONT }}>
+                    <td className="px-1 py-1 text-center font-normal">{idx + 1}</td>
+                    <td className="px-1 py-1 text-left pl-2 leading-none pt-1.5 font-normal" style={{ fontFamily: CJK_FONT }}>{productName}</td>
+                    <td className="px-1 py-1 text-center font-normal" style={{ fontFamily: CJK_FONT }}>{String(item.qty || item.quantity || 0)} {String(item.unit || item.Unit || '')}</td>
+                    <td className="px-1 py-1 text-center font-normal">${formatMoney(item.unitPrice)}</td>
+                    <td className="px-1 py-1 text-center font-normal">${formatMoney((Number(item.qty || item.quantity) || 0) * (Number(item.unitPrice) || 0))}</td>
                   </tr>
                 );
               })}
@@ -487,12 +487,12 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
                 const productName = String(item.name || item.Items || '-');
 
                 return (
-                  <tr key={idx} className="align-top" style={{ fontFamily: CJK_FONT }}>
-                    <td className="px-1 py-1 font-medium text-center">{idx + 1}</td>
-                    <td className="px-1 py-1 text-left pl-2 font-bold leading-none pt-1.5" style={{ fontFamily: CJK_FONT }}>{productName}</td>
-                    <td className="px-1 py-1 font-medium text-center" style={{ fontFamily: CJK_FONT }}>{String(item.qty || item.quantity || 0)} {String(item.unit || '')}</td>
-                    <td className="px-1 py-1 text-center">${formatMoney(item.unitPrice)}</td>
-                    <td className="px-1 py-1 text-center font-bold">
+                  <tr key={idx} className="align-top text-slate-900" style={{ fontFamily: CJK_FONT }}>
+                    <td className="px-1 py-1 text-center font-normal">{idx + 1}</td>
+                    <td className="px-1 py-1 text-left pl-2 leading-none pt-1.5 font-normal" style={{ fontFamily: CJK_FONT }}>{productName}</td>
+                    <td className="px-1 py-1 text-center font-normal" style={{ fontFamily: CJK_FONT }}>{String(item.qty || item.quantity || 0)} {String(item.unit || '')}</td>
+                    <td className="px-1 py-1 text-center font-normal">${formatMoney(item.unitPrice)}</td>
+                    <td className="px-1 py-1 text-center font-normal">
                       ${formatMoney((Number(item.qty || item.quantity) || 0) * (Number(item.unitPrice) || 0))}
                     </td>
                   </tr>
