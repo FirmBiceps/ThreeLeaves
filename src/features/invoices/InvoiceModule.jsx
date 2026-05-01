@@ -141,8 +141,10 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
   const safeInventory = Array.isArray(sys?.inventory) ? sys.inventory : [];
   const safeItems = Array.isArray(items) ? items.filter(Boolean) : [];
 
-  // DYNAMIC A4 SIZING ENGINE - VERTICAL SPACING FOCUS
+  // DYNAMIC A4 SIZING ENGINE
   const itemCount = safeItems.length;
+  
+  // STANDARD LAYOUT SIZING
   let baseText = "text-[15px]";
   let cellPad = "py-1";
   let descPad = "pt-1.5";
@@ -150,13 +152,20 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
   let subtotalText = "text-[15px]";
   let gstText = "text-[14px]";
 
+  // SPECIAL LAYOUT SIZING
+  let spBaseText = "text-[14px]";
+  let spCellPad = "py-1.5";
+
   if (itemCount > 20) {
-    baseText = "text-[13px] leading-none"; // Keep font readable, tighten line height
-    cellPad = "py-0"; // aggressively strip vertical padding
+    baseText = "text-[13px] leading-none"; 
+    cellPad = "py-0"; 
     descPad = "pt-0.5";
     totalText = "text-[15px]";
     subtotalText = "text-[13px]";
     gstText = "text-[12px]";
+    
+    spBaseText = "text-[11px] leading-tight";
+    spCellPad = "py-0";
   } else if (itemCount > 14) {
     baseText = "text-[14px] leading-tight";
     cellPad = "py-0.5";
@@ -164,6 +173,9 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
     totalText = "text-[16px]";
     subtotalText = "text-[14px]";
     gstText = "text-[13px]";
+    
+    spBaseText = "text-[12px] leading-tight";
+    spCellPad = "py-0.5";
   }
 
   return (
@@ -175,7 +187,7 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
             html, body { margin: 0 !important; padding: 0 !important; background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             body * { visibility: hidden !important; }
             #printable-invoice-generator, #printable-invoice-generator * { visibility: visible !important; }
-            #printable-invoice-generator { position: absolute !important; left: 0 !important; top: 0 !important; width: 210mm !important; height: 297mm !important; padding: 15mm 10mm !important; margin: 0 !important; background: white !important; backdrop-filter: none !important; box-sizing: border-box !important; }
+            #printable-invoice-generator { position: absolute !important; left: 0 !important; top: 0 !important; width: 210mm !important; height: 297mm !important; padding: 15mm 10mm !important; margin: 0 !important; background: white !important; backdrop-filter: none !important; box-sizing: border-box !important; display: flex !important; flex-direction: column !important;}
             *, html, body, div, p, span, h1, h2, h3, table, th, td { font-family: ${CJK_FONT} !important; }
             tr, td, th { page-break-inside: avoid; break-inside: avoid; }
           }
@@ -189,108 +201,215 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
             <button className="flex items-center rounded bg-white px-5 py-2.5 font-bold text-slate-900 shadow-lg transition-all hover:bg-slate-50 text-sm" onClick={() => onRegister(false)} type="button"><Save className="mr-2" size={16} /> Save Invoice</button>
           </div>
         </div>
-        <div id="printable-invoice-generator" lang="zh" className="flex w-full max-w-[210mm] h-[297mm] flex-col bg-white py-[15mm] px-[10mm] text-black shadow-2xl rounded-b-2xl print:w-[210mm] print:h-[297mm] print:max-w-none print:rounded-none print:shadow-none box-border shrink-0" style={{ fontFamily: CJK_FONT }}>
-          <div className="flex w-full mb-4 justify-between shrink-0">
-            <div className="flex-1 flex flex-col pr-4">
-              <div className="flex items-center mb-5">
-                <div className="w-[110px] shrink-0 mr-4"><img src={logo} alt="Three Leaves Logo" className="w-full h-auto object-contain" /></div>
-                <div className="flex-1 text-left leading-snug pt-2 whitespace-nowrap overflow-visible">
-                  <h1 className="font-black text-[17px]" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1><h2 className="font-bold text-[16px] mb-1" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
-                  <div className="text-[#d55e2d] font-bold text-[10.5px] leading-tight tracking-tight"><p className="whitespace-nowrap">CO.REG NO.53033969B &nbsp;&nbsp; GST REG NO. M90355440L</p><p className="whitespace-nowrap">280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p><p className="whitespace-nowrap">HP: 97578869 (Mr Ye) &nbsp;&nbsp; HP: 91113505 (Min) &nbsp;&nbsp; Email: 3leaves.sg@gmail.com</p></div>
-                </div>
-              </div>
-              <div className="flex justify-between items-end w-full mb-2 text-[14px] font-bold">
-                <div className="flex items-end flex-1 pr-4"><span className="shrink-0 mr-2 text-black">TO:</span><span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[13px] tracking-tight" style={{ fontFamily: CJK_FONT }}>{String(customer?.name || existingInvoice?.customer || '')}</span></div>
-                <div className="flex items-end w-[35%] pl-2"><span className="shrink-0 mr-2 text-black">DATE:</span><span className="flex-1 text-center border-b border-black pb-0.5">{invoiceDate && !isNaN(new Date(invoiceDate).getTime()) ? new Date(invoiceDate).toLocaleDateString('en-GB').replace(/\//g, '-') : new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}</span></div>
-              </div>
-              <div className="flex items-end w-full text-[14px] font-bold"><span className="shrink-0 mr-2 text-black">ADDRESS:</span><span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[12px] tracking-tighter" style={{ fontFamily: CJK_FONT }}>{String(customerAddress)}</span></div>
-            </div>
-            
-            {/* UPDATED RIGHT HEADER: Reorganized to prevent overlap */}
-            <div className={`${isSpecialFormat ? 'w-[250px]' : 'w-[180px]'} shrink-0 flex flex-col items-end pl-4 pt-1 text-right`}>
-              <h2 className="text-[22px] font-bold tracking-[0.4em] leading-none mb-1" style={{ fontFamily: CJK_FONT }}>發票</h2>
-              <h3 className="text-[15px] font-black tracking-wide uppercase mb-2 text-black">TAX INVOICE</h3>
+        <div id="printable-invoice-generator" lang="zh" className="flex w-full max-w-[210mm] h-[297mm] flex-col bg-white py-[15mm] px-[10mm] text-black shadow-2xl rounded-b-2xl print:w-[210mm] print:h-[297mm] print:max-w-none print:rounded-none print:shadow-none box-border" style={{ fontFamily: CJK_FONT }}>
+          
+          {isSpecialFormat ? (
+            // ==========================================
+            // SPECIAL FORMAT LAYOUT (BARCODE + CENTER PLATE)
+            // ==========================================
+            <div className="flex flex-col h-full w-full">
               
-              {isSpecialFormat && (
-                <div className="w-full flex justify-end mb-3">
-                  <img src={`https://bwipjs-api.metafloor.com/?bcid=code128&text=${invoiceNumber}&scale=2&includetext=true&textxalign=center&textsize=10`} alt="Barcode" className="max-w-full h-[35px] object-contain" />
+              {/* TOP HEADER */}
+              <div className="flex justify-between items-start border-b-2 border-slate-800 pb-4 mb-3 shrink-0">
+                <div className="flex items-center gap-4 w-[60%]">
+                  <img src={logo} className="w-[85px] h-auto object-contain shrink-0" alt="Logo" />
+                  <div className="leading-snug">
+                    <h1 className="font-black text-[16px]">THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
+                    <h2 className="font-bold text-[14px] mb-1">三叶（新加坡） 贸易公司</h2>
+                    <div className="text-[9px] text-slate-700 tracking-tight font-medium">
+                      <p>CO.REG NO.53033969B &nbsp;&nbsp; GST REG NO. M90355440L</p>
+                      <p>280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
+                      <p>HP: 97578869 (Mr Ye) &nbsp;&nbsp; HP: 91113505 (Min) &nbsp;&nbsp; Email: 3leaves.sg@gmail.com</p>
+                    </div>
+                  </div>
                 </div>
-              )}
+                
+                <div className="flex flex-col items-end w-[40%] text-right">
+                  <img src={`https://bwipjs-api.metafloor.com/?bcid=code128&text=${invoiceNumber}&scale=2&includetext=true&textxalign=center&textsize=10`} alt="Barcode" className="h-[40px] mb-3 object-contain" />
+                  <h2 className="text-[18px] font-black tracking-widest leading-none mb-1 text-slate-900">TAX INVOICE</h2>
+                  <div className="text-[12px] font-bold text-slate-800 w-full flex flex-col items-end">
+                    <p className="flex justify-between w-full max-w-[140px]"><span className="text-slate-500">NO:</span> <span className="text-red-600">{invoiceNumber}</span></p>
+                    <p className="flex justify-between w-full max-w-[140px]"><span className="text-slate-500">TERM:</span> <span>{paymentTerms === 'cod' ? 'COD' : '30 Days'}</span></p>
+                    {poNumber && <p className="flex justify-between w-full max-w-[140px]"><span className="text-slate-500">PO NO:</span> <span>{poNumber}</span></p>}
+                  </div>
+                </div>
+              </div>
 
-              <div className="w-full flex flex-col gap-2 mt-auto mb-2 items-end">
-                {isSpecialFormat && poNumber && (
-                  <div className="flex items-baseline justify-end w-full">
-                    <span className="font-bold w-[60px] shrink-0 text-black text-[13px] text-right mr-2">PO NO.</span>
-                    <span className="text-slate-800 font-bold tracking-wider text-[15px] leading-none">{poNumber}</span>
+              {/* BILL TO & DATE */}
+              <div className="flex justify-between items-end mb-3 shrink-0 text-[12px] font-bold">
+                <div className="w-[65%] leading-relaxed">
+                  <div className="flex items-start">
+                    <span className="w-[45px] shrink-0 text-slate-500">TO:</span>
+                    <span className="flex-1 uppercase border-b border-slate-800 pb-0.5">{String(customer?.name || existingInvoice?.customer || '')}</span>
+                  </div>
+                  <div className="flex items-start mt-1">
+                    <span className="w-[45px] shrink-0 text-slate-500">ADD:</span>
+                    <span className="flex-1 uppercase border-b border-slate-800 pb-0.5 truncate">{String(customerAddress)}</span>
+                  </div>
+                </div>
+                <div className="w-[30%] flex items-end">
+                  <span className="w-[45px] shrink-0 text-slate-500">DATE:</span>
+                  <span className="flex-1 border-b border-slate-800 pb-0.5 text-right">{invoiceDate && !isNaN(new Date(invoiceDate).getTime()) ? new Date(invoiceDate).toLocaleDateString('en-GB').replace(/\//g, '-') : new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}</span>
+                </div>
+              </div>
+
+              {/* CLEAN ITEMS TABLE */}
+              <div className="border border-slate-800 rounded-sm overflow-hidden shrink-0">
+                <table className={`w-full text-center ${spBaseText}`}>
+                  <thead className="border-b border-slate-800 bg-slate-100">
+                    <tr className="font-bold text-[12px] text-slate-700">
+                      <th className="py-2 px-2 w-12 border-r border-slate-300">NO.</th>
+                      <th className="py-2 px-2 text-left border-r border-slate-300">DESCRIPTION</th>
+                      <th className="py-2 px-2 w-24 border-r border-slate-300">QTY</th>
+                      <th className="py-2 px-2 w-28 border-r border-slate-300">PRICE</th>
+                      <th className="py-2 px-2 w-28">AMOUNT</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {safeItems.map((item, idx) => {
+                      const foundProduct = safeInventory.find((entry) => entry?.id === item?.itemId);
+                      const productName = foundProduct ? String(foundProduct.Name || foundProduct.name || foundProduct.Items || '') : String(item?.name || item?.Items || item?.rawSearchString || '-');
+                      return (
+                        <tr key={idx}>
+                          <td className={`${spCellPad} px-2 border-r border-slate-300 text-slate-500`}>{idx + 1}</td>
+                          <td className={`${spCellPad} px-2 text-left border-r border-slate-300 font-bold text-slate-900`}>{productName}</td>
+                          <td className={`${spCellPad} px-2 border-r border-slate-300 font-medium`}>{String(item?.qty || item?.quantity || 0)} {String(item?.unit || '')}</td>
+                          <td className={`${spCellPad} px-2 border-r border-slate-300 font-medium`}>${formatMoney(item?.unitPrice)}</td>
+                          <td className={`${spCellPad} px-2 font-bold`}>${formatMoney((Number(item?.qty || item?.quantity) || 0) * (Number(item?.unitPrice) || 0))}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* CENTERED CAR PLATE (Flex Grow fills empty middle space) */}
+              <div className="flex-grow flex flex-col items-center justify-center min-h-[60px] py-4 relative">
+                {carPlateNo && (
+                  <div className="text-center">
+                    <p className="text-[12px] font-black uppercase tracking-widest text-slate-400 mb-1">Assigned Vehicle</p>
+                    <div className="border-2 border-dashed border-slate-300 rounded-2xl px-12 py-3 text-[36px] font-black uppercase tracking-widest text-slate-800 bg-slate-50 shadow-sm">
+                      {carPlateNo}
+                    </div>
                   </div>
                 )}
-                <div className="flex items-baseline justify-end w-full">
-                  <span className="font-bold w-[60px] shrink-0 text-black text-[13px] text-right mr-2">NO.</span>
-                  <span className="text-red-600 font-bold tracking-wider text-[16px] leading-none">{String(invoiceNumber)}</span>
-                </div>
-                <div className="flex items-baseline justify-end w-full">
-                  <span className="font-bold w-[60px] shrink-0 text-black text-[13px] text-right mr-2">TERM:</span>
-                  <span className="text-red-600 font-bold text-[15px] leading-none">{paymentTerms === 'cod' ? 'COD' : '30 Days'}</span>
-                </div>
               </div>
-            </div>
-          </div>
-          
-          <table className={`w-full h-full flex-grow border-2 border-black text-center mb-0 mt-2 ${baseText}`} style={{ fontFamily: CJK_FONT }}>
-            <thead className="border-b-2 border-black">
-              <tr className="font-bold bg-white text-[14px]"><th className="py-2 px-1 w-12 text-center">NO.</th><th className="py-2 px-2 text-left">DESCRIPTION</th><th className="py-2 px-1 w-24 text-center">QUANTITY</th><th className="py-2 px-1 w-32 text-center">UNIT PRICE</th><th className="py-2 px-1 w-32 text-center">AMOUNT</th></tr>
-            </thead>
-            <tbody style={{ fontFamily: CJK_FONT }}>
-              {safeItems.map((item, idx) => {
-                const foundProduct = safeInventory.find((entry) => entry?.id === item?.itemId);
-                const productName = foundProduct ? String(foundProduct.Name || foundProduct.name || foundProduct.Items || '') : String(item?.name || item?.Items || item?.rawSearchString || '-');
-                return (
-                  <tr key={idx} className="align-top text-slate-900" style={{ fontFamily: CJK_FONT }}>
-                    <td className={`px-1 text-center font-normal ${cellPad}`}>{idx + 1}</td>
-                    <td className={`px-1 text-left pl-2 font-normal ${cellPad} ${descPad}`} style={{ fontFamily: CJK_FONT }}>{productName}</td>
-                    <td className={`px-1 text-center font-normal ${cellPad}`} style={{ fontFamily: CJK_FONT }}>{String(item?.qty || item?.quantity || 0)} {String(item?.unit || item?.Unit || '')}</td>
-                    <td className={`px-1 text-center font-normal ${cellPad}`}>${formatMoney(item?.unitPrice)}</td>
-                    <td className={`px-1 text-center font-normal ${cellPad}`}>${formatMoney((Number(item?.qty || item?.quantity) || 0) * (Number(item?.unitPrice) || 0))}</td>
-                  </tr>
-                );
-              })}
-              
-              {/* NEW: Car Plate injected dead center of the empty space rows */}
-              <tr className="h-full">
-                <td></td>
-                <td className="text-center align-middle py-8">
-                  {isSpecialFormat && carPlateNo && (
-                    <div className="inline-block border-2 border-slate-400 px-8 py-4 rounded-2xl opacity-80">
-                      <p className="text-[12px] font-black uppercase tracking-widest text-slate-500 mb-1">Assigned Vehicle</p>
-                      <p className="text-[32px] font-black uppercase tracking-widest text-slate-900 leading-none">{carPlateNo}</p>
+
+              {/* TOTALS & FOOTER */}
+              <div className="flex justify-between items-end border-t-2 border-slate-800 pt-4 shrink-0">
+                <div className="w-[60%] text-[10px] leading-tight pr-4">
+                  <p className="font-bold mb-1">请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
+                  <p className="text-slate-600 mb-3">Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
+                  
+                  <div className="flex items-center bg-slate-50 p-2 rounded border border-slate-200">
+                    <img src={paynowQr} alt="PayNow QR Code" className="w-[50px] h-[50px] object-contain mr-3" />
+                    <div>
+                      <p className="font-bold text-slate-900">Three Leaves (Singapore) Trading Enterprise</p>
+                      <p className="text-slate-600">UEN: 53033969B &nbsp;|&nbsp; OCBC A/C: 535-846562-001</p>
                     </div>
-                  )}
-                </td>
-                <td></td><td></td><td></td>
-              </tr>
-              
-              <tr className="border-t-2 border-black font-bold h-[28px]">
-                <td colSpan="3" rowSpan="3" className="bg-white border-r-2 border-black p-2 align-top text-left">
-                  {/* Bottom left intentionally left empty to ensure cleanliness */}
-                </td>
-                <td className={`p-1 text-center ${gstText}`}>SUBTOTAL</td><td className={`p-1 text-center ${subtotalText}`}>${formatMoney(subtotal)}</td>
-              </tr>
-              <tr className="font-bold h-[28px] border-t border-black"><td className={`p-1 text-center ${gstText}`}>9% GST</td><td className={`p-1 text-center ${subtotalText}`}>${formatMoney(gst)}</td></tr>
-              <tr className="font-bold h-[32px] border-t-2 border-black"><td className="p-1 text-center text-[16px]">TOTAL</td><td className={`p-1 text-center ${totalText}`}>${formatMoney(total)}</td></tr>
-            </tbody>
-          </table>
-          <div className="flex w-full mt-4 pt-2 items-end shrink-0">
-            <div className="w-[70%] text-[12px] font-bold leading-snug pr-4">
-              <div style={{ fontFamily: CJK_FONT }}>
-                <p className="text-[12px]">请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p><p className="text-[10px] whitespace-nowrap text-slate-800">Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
-                <div className="mt-2 flex items-center">
-                  <div className="w-[80px] h-[80px] shrink-0 mr-3 flex items-center justify-center"><img src={paynowQr} alt="PayNow QR Code" className="w-[80px] h-[80px] object-contain" /></div>
-                  <div className="flex flex-col justify-center text-[11px]"><p>UEN: 53033969B</p><p>A/C Name: Three Leaves (Singapore) Trading Enterprise</p><p>A/C Number: 535-846562-001</p><p>Bank Name: OCBC</p><p className="mt-0.5 font-normal text-[10px] text-slate-800">All payments must be made payable to Three Leaves (Singapore) Trading Enterprise.</p></div>
+                  </div>
+                </div>
+                
+                <div className="w-[35%] flex flex-col items-end">
+                  <table className="w-full font-bold text-[13px] border border-slate-800 rounded-sm overflow-hidden mb-4">
+                    <tbody>
+                      <tr className="border-b border-slate-800">
+                        <td className="p-1.5 bg-slate-100 text-left pl-3 border-r border-slate-800 w-[50%]">SUBTOTAL</td>
+                        <td className="p-1.5 text-right pr-3">${formatMoney(subtotal)}</td>
+                      </tr>
+                      <tr className="border-b border-slate-800">
+                        <td className="p-1.5 bg-slate-100 text-left pl-3 border-r border-slate-800">9% GST</td>
+                        <td className="p-1.5 text-right pr-3">${formatMoney(gst)}</td>
+                      </tr>
+                      <tr className="text-[16px] text-slate-900">
+                        <td className="p-2 bg-slate-200 text-left pl-3 border-r border-slate-800">TOTAL</td>
+                        <td className="p-2 text-right pr-3 font-black">${formatMoney(total)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  
+                  <div className="w-full border-t border-slate-800 pt-1 text-center font-bold text-[11px] text-slate-500 uppercase tracking-widest mt-2">
+                    Received By / Company Stamp
+                  </div>
                 </div>
               </div>
+
             </div>
-            <div className="w-[30%] shrink-0 flex flex-col justify-end pb-1 pl-2"><div className="h-12"></div><div className="border-t-2 border-black text-center pt-1.5 text-[12px] font-bold uppercase tracking-widest">Received By</div></div>
-          </div>
+          ) : (
+            // ==========================================
+            // STANDARD FORMAT LAYOUT
+            // ==========================================
+            <div className="flex flex-col w-full h-full">
+              <div className="flex w-full mb-4 justify-between shrink-0">
+                <div className="flex-1 flex flex-col pr-4">
+                  <div className="flex items-start justify-between mb-5">
+                    <div className="flex items-center">
+                      <div className="w-[110px] shrink-0 mr-4"><img src={logo} alt="Three Leaves Logo" className="w-full h-auto object-contain" /></div>
+                      <div className="flex-1 text-left leading-snug pt-2 whitespace-nowrap overflow-visible">
+                        <h1 className="font-black text-[17px]" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1><h2 className="font-bold text-[16px] mb-1" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
+                        <div className="text-[#d55e2d] font-bold text-[10.5px] leading-tight tracking-tight"><p className="whitespace-nowrap">CO.REG NO.53033969B &nbsp;&nbsp; GST REG NO. M90355440L</p><p className="whitespace-nowrap">280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p><p className="whitespace-nowrap">HP: 97578869 (Mr Ye) &nbsp;&nbsp; HP: 91113505 (Min) &nbsp;&nbsp; Email: 3leaves.sg@gmail.com</p></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-end w-full mb-2 text-[14px] font-bold">
+                    <div className="flex items-end flex-1 pr-4"><span className="shrink-0 mr-2 text-black">TO:</span><span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[13px] tracking-tight" style={{ fontFamily: CJK_FONT }}>{String(customer?.name || existingInvoice?.customer || '')}</span></div>
+                    <div className="flex items-end w-[35%] pl-2"><span className="shrink-0 mr-2 text-black">DATE:</span><span className="flex-1 text-center border-b border-black pb-0.5">{invoiceDate && !isNaN(new Date(invoiceDate).getTime()) ? new Date(invoiceDate).toLocaleDateString('en-GB').replace(/\//g, '-') : new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}</span></div>
+                  </div>
+                  <div className="flex items-end w-full text-[14px] font-bold"><span className="shrink-0 mr-2 text-black">ADDRESS:</span><span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[12px] tracking-tighter" style={{ fontFamily: CJK_FONT }}>{String(customerAddress)}</span></div>
+                </div>
+                <div className="w-[180px] shrink-0 flex flex-col items-start pl-4 pt-1">
+                  <h2 className="text-[22px] font-bold tracking-[0.4em] leading-none mb-1" style={{ fontFamily: CJK_FONT }}>發票</h2><h3 className="text-[15px] font-black tracking-wide uppercase mb-2 text-black">TAX INVOICE</h3>
+                  <div className="w-full flex flex-col gap-3 mt-auto mb-2">
+                    <div className="flex items-baseline"><span className="font-bold w-[50px] shrink-0 text-black text-[15px]">No.</span><span className="text-red-600 font-bold tracking-wider text-[17px] leading-none">{String(invoiceNumber)}</span></div>
+                    <div className="flex items-baseline"><span className="font-bold w-[50px] shrink-0 text-black text-[15px]">Term:</span><span className="text-red-600 font-bold text-[16px] leading-none">{paymentTerms === 'cod' ? 'COD' : '30 Days'}</span></div>
+                  </div>
+                </div>
+              </div>
+              
+              <table className={`w-full h-full flex-grow border-2 border-black text-center mb-0 mt-2 ${baseText}`} style={{ fontFamily: CJK_FONT }}>
+                <thead className="border-b-2 border-black">
+                  <tr className="font-bold bg-white text-[14px]"><th className="py-2 px-1 w-12 text-center">NO.</th><th className="py-2 px-2 text-left">DESCRIPTION</th><th className="py-2 px-1 w-24 text-center">QUANTITY</th><th className="py-2 px-1 w-32 text-center">UNIT PRICE</th><th className="py-2 px-1 w-32 text-center">AMOUNT</th></tr>
+                </thead>
+                <tbody style={{ fontFamily: CJK_FONT }}>
+                  {safeItems.map((item, idx) => {
+                    const foundProduct = safeInventory.find((entry) => entry?.id === item?.itemId);
+                    const productName = foundProduct ? String(foundProduct.Name || foundProduct.name || foundProduct.Items || '') : String(item?.name || item?.Items || item?.rawSearchString || '-');
+                    return (
+                      <tr key={idx} className="align-top text-slate-900" style={{ fontFamily: CJK_FONT }}>
+                        <td className={`px-1 text-center font-normal ${cellPad}`}>{idx + 1}</td>
+                        <td className={`px-1 text-left pl-2 font-normal ${cellPad} ${descPad}`} style={{ fontFamily: CJK_FONT }}>{productName}</td>
+                        <td className={`px-1 text-center font-normal ${cellPad}`} style={{ fontFamily: CJK_FONT }}>{String(item?.qty || item?.quantity || 0)} {String(item?.unit || '')}</td>
+                        <td className={`px-1 text-center font-normal ${cellPad}`}>${formatMoney(item?.unitPrice)}</td>
+                        <td className={`px-1 text-center font-normal ${cellPad}`}>
+                          ${formatMoney((Number(item?.qty || item?.quantity) || 0) * (Number(item?.unitPrice) || 0))}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  <tr className="h-full"><td></td><td></td><td></td><td></td><td></td></tr>
+                  <tr className="border-t-2 border-black font-bold h-[28px]">
+                    <td colSpan="3" rowSpan="3" className="bg-white border-r-2 border-black p-2 align-top text-left"></td>
+                    <td className={`p-1 text-center ${gstText}`}>SUBTOTAL</td><td className={`p-1 text-center ${subtotalText}`}>${formatMoney(subtotal)}</td>
+                  </tr>
+                  <tr className="font-bold h-[28px] border-t border-black"><td className={`p-1 text-center ${gstText}`}>9% GST</td><td className={`p-1 text-center ${subtotalText}`}>${formatMoney(gst)}</td></tr>
+                  <tr className="font-bold h-[32px] border-t-2 border-black"><td className="p-1 text-center text-[16px]">TOTAL</td><td className={`p-1 text-center ${totalText}`}>${formatMoney(total)}</td></tr>
+                </tbody>
+              </table>
+              <div className="flex w-full mt-4 pt-2 items-end shrink-0">
+                <div className="w-[70%] text-[12px] font-bold leading-snug pr-4">
+                  <div style={{ fontFamily: CJK_FONT }}>
+                    <p className="text-[12px]">请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p><p className="text-[10px] whitespace-nowrap text-slate-800">Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
+                    <div className="mt-2 flex items-center">
+                      <div className="w-[80px] h-[80px] shrink-0 mr-3 flex items-center justify-center"><img src={paynowQr} alt="PayNow QR Code" className="w-[80px] h-[80px] object-contain" /></div>
+                      <div className="flex flex-col justify-center text-[11px]"><p>UEN: 53033969B</p><p>A/C Name: Three Leaves (Singapore) Trading Enterprise</p><p>A/C Number: 535-846562-001</p><p>Bank Name: OCBC</p><p className="mt-0.5 font-normal text-[10px] text-slate-800">All payments must be made payable to Three Leaves (Singapore) Trading Enterprise.</p></div>
+                    </div>
+                  </div>
+                </div>
+                <div className="w-[30%] shrink-0 flex flex-col justify-end pb-1 pl-2"><div className="h-12"></div><div className="border-t-2 border-black text-center pt-1.5 text-[12px] font-bold uppercase tracking-widest">Received By</div></div>
+              </div>
+            </div>
+          )}
+
         </div>
       </div>
     </div>
@@ -318,14 +437,20 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
   const carPlateNo = invoice.carPlateNo;
   const invoiceNumber = String(invoice?.number || invoice?.id || '');
 
-  // DYNAMIC A4 SIZING ENGINE - VERTICAL SPACING FOCUS
+  // DYNAMIC A4 SIZING ENGINE
   const itemCount = safeItems.length;
+  
+  // STANDARD LAYOUT SIZING
   let baseText = "text-[15px]";
   let cellPad = "py-1";
   let descPad = "pt-1.5";
   let totalText = "text-[17px]";
   let subtotalText = "text-[15px]";
   let gstText = "text-[14px]";
+
+  // SPECIAL LAYOUT SIZING
+  let spBaseText = "text-[14px]";
+  let spCellPad = "py-1.5";
 
   if (itemCount > 20) {
     baseText = "text-[13px] leading-none"; 
@@ -334,6 +459,9 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
     totalText = "text-[15px]";
     subtotalText = "text-[13px]";
     gstText = "text-[12px]";
+    
+    spBaseText = "text-[11px] leading-tight";
+    spCellPad = "py-0";
   } else if (itemCount > 14) {
     baseText = "text-[14px] leading-tight";
     cellPad = "py-0.5";
@@ -341,6 +469,9 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
     totalText = "text-[16px]";
     subtotalText = "text-[14px]";
     gstText = "text-[13px]";
+    
+    spBaseText = "text-[12px] leading-tight";
+    spCellPad = "py-0.5";
   }
 
   return (
@@ -352,7 +483,7 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
             html, body { margin: 0 !important; padding: 0 !important; background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             body * { visibility: hidden !important; }
             #printable-invoice-history, #printable-invoice-history * { visibility: visible !important; }
-            #printable-invoice-history { position: absolute !important; left: 0 !important; top: 0 !important; width: 210mm !important; height: 297mm !important; padding: 15mm 10mm !important; box-sizing: border-box !important; background: white !important; backdrop-filter: none !important; }
+            #printable-invoice-history { position: absolute !important; left: 0 !important; top: 0 !important; width: 210mm !important; height: 297mm !important; padding: 15mm 10mm !important; box-sizing: border-box !important; background: white !important; backdrop-filter: none !important; display: flex !important; flex-direction: column !important; }
             *, html, body, div, p, span, h1, h2, h3, table, th, td { font-family: ${CJK_FONT} !important; }
             tr, td, th { page-break-inside: avoid; break-inside: avoid; }
           }
@@ -367,107 +498,204 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
             <button onClick={onClose} className="hover:bg-slate-700 p-2.5 rounded-full transition-colors ml-2 bg-slate-800"><X size={20} /></button>
           </div>
         </div>
-        <div id="printable-invoice-history" lang="zh" className="flex w-full max-w-[210mm] h-[297mm] flex-col bg-white py-[15mm] px-[10mm] text-black shadow-2xl rounded-b-2xl print:w-[210mm] print:h-[297mm] print:max-w-none print:rounded-none print:shadow-none box-border shrink-0" style={{ fontFamily: CJK_FONT }}>
-          <div className="flex w-full mb-4 justify-between shrink-0">
-            <div className="flex-1 flex flex-col pr-4">
-              <div className="flex items-center mb-5">
-                <div className="w-[110px] shrink-0 mr-4"><img src={logo} alt="Three Leaves Logo" className="w-full h-auto object-contain" /></div>
-                <div className="flex-1 text-left leading-snug pt-2 whitespace-nowrap overflow-visible">
-                  <h1 className="font-black text-[17px]" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1><h2 className="font-bold text-[16px] mb-1" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
-                  <div className="text-[#d55e2d] font-bold text-[10.5px] leading-tight tracking-tight"><p className="whitespace-nowrap">CO.REG NO.53033969B &nbsp;&nbsp; GST REG NO. M90355440L</p><p className="whitespace-nowrap">280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p><p className="whitespace-nowrap">HP: 97578869 (Mr Ye) &nbsp;&nbsp; HP: 91113505 (Min) &nbsp;&nbsp; Email: 3leaves.sg@gmail.com</p></div>
+        <div id="printable-invoice-history" lang="zh" className="flex w-full max-w-[210mm] h-[297mm] flex-col bg-white py-[15mm] px-[10mm] text-black shadow-2xl rounded-b-2xl print:w-[210mm] print:h-[297mm] print:max-w-none print:rounded-none print:shadow-none box-border" style={{ fontFamily: CJK_FONT }}>
+          
+          {isSpecialFormat ? (
+            // ==========================================
+            // SPECIAL FORMAT LAYOUT (BARCODE + CENTER PLATE)
+            // ==========================================
+            <div className="flex flex-col h-full w-full">
+              <div className="flex justify-between items-start border-b-2 border-slate-800 pb-4 mb-3 shrink-0">
+                <div className="flex items-center gap-4 w-[60%]">
+                  <img src={logo} className="w-[85px] h-auto object-contain shrink-0" alt="Logo" />
+                  <div className="leading-snug">
+                    <h1 className="font-black text-[16px]">THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
+                    <h2 className="font-bold text-[14px] mb-1">三叶（新加坡） 贸易公司</h2>
+                    <div className="text-[9px] text-slate-700 tracking-tight font-medium">
+                      <p>CO.REG NO.53033969B &nbsp;&nbsp; GST REG NO. M90355440L</p>
+                      <p>280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
+                      <p>HP: 97578869 (Mr Ye) &nbsp;&nbsp; HP: 91113505 (Min) &nbsp;&nbsp; Email: 3leaves.sg@gmail.com</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-col items-end w-[40%] text-right">
+                  <img src={`https://bwipjs-api.metafloor.com/?bcid=code128&text=${invoiceNumber}&scale=2&includetext=true&textxalign=center&textsize=10`} alt="Barcode" className="h-[40px] mb-3 object-contain" />
+                  <h2 className="text-[18px] font-black tracking-widest leading-none mb-1 text-slate-900">TAX INVOICE</h2>
+                  <div className="text-[12px] font-bold text-slate-800 w-full flex flex-col items-end">
+                    <p className="flex justify-between w-full max-w-[140px]"><span className="text-slate-500">NO:</span> <span className="text-red-600">{invoiceNumber}</span></p>
+                    <p className="flex justify-between w-full max-w-[140px]"><span className="text-slate-500">TERM:</span> <span>{invoice?.paymentTerms === 'cod' ? 'COD' : '30 Days'}</span></p>
+                    {poNumber && <p className="flex justify-between w-full max-w-[140px]"><span className="text-slate-500">PO NO:</span> <span>{poNumber}</span></p>}
+                  </div>
                 </div>
               </div>
-              <div className="flex justify-between items-end w-full mb-2 text-[14px] font-bold">
-                <div className="flex items-end flex-1 pr-4"><span className="shrink-0 mr-2 text-black">TO:</span><span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[13px] tracking-tight" style={{ fontFamily: CJK_FONT }}>{String(invoice?.customer || '')}</span></div>
-                <div className="flex items-end w-[35%] pl-2"><span className="shrink-0 mr-2 text-black">DATE:</span><span className="flex-1 text-center border-b border-black pb-0.5">{invoice?.date && !isNaN(new Date(invoice.date).getTime()) ? new Date(invoice.date).toLocaleDateString('en-GB').replace(/\//g, '-') : new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}</span></div>
-              </div>
-              <div className="flex items-end w-full text-[14px] font-bold"><span className="shrink-0 mr-2 text-black">ADDRESS:</span><span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[12px] tracking-tighter" style={{ fontFamily: CJK_FONT }}>{customerAddress}</span></div>
-            </div>
-            
-            {/* UPDATED RIGHT HEADER: Reorganized to prevent overlap */}
-            <div className={`${isSpecialFormat ? 'w-[250px]' : 'w-[180px]'} shrink-0 flex flex-col items-end pl-4 pt-1 text-right`}>
-              <h2 className="text-[22px] font-bold tracking-[0.4em] leading-none mb-1" style={{ fontFamily: CJK_FONT }}>發票</h2>
-              <h3 className="text-[15px] font-black tracking-wide uppercase mb-2 text-black">TAX INVOICE</h3>
-              
-              {isSpecialFormat && (
-                <div className="w-full flex justify-end mb-3">
-                  <img src={`https://bwipjs-api.metafloor.com/?bcid=code128&text=${invoiceNumber}&scale=2&includetext=true&textxalign=center&textsize=10`} alt="Barcode" className="max-w-full h-[35px] object-contain" />
-                </div>
-              )}
 
-              <div className="w-full flex flex-col gap-2 mt-auto mb-2 items-end">
-                {isSpecialFormat && poNumber && (
-                  <div className="flex items-baseline justify-end w-full">
-                    <span className="font-bold w-[60px] shrink-0 text-black text-[13px] text-right mr-2">PO NO.</span>
-                    <span className="text-slate-800 font-bold tracking-wider text-[15px] leading-none">{poNumber}</span>
+              <div className="flex justify-between items-end mb-3 shrink-0 text-[12px] font-bold">
+                <div className="w-[65%] leading-relaxed">
+                  <div className="flex items-start">
+                    <span className="w-[45px] shrink-0 text-slate-500">TO:</span>
+                    <span className="flex-1 uppercase border-b border-slate-800 pb-0.5">{String(invoice?.customer || '')}</span>
+                  </div>
+                  <div className="flex items-start mt-1">
+                    <span className="w-[45px] shrink-0 text-slate-500">ADD:</span>
+                    <span className="flex-1 uppercase border-b border-slate-800 pb-0.5 truncate">{String(customerAddress)}</span>
+                  </div>
+                </div>
+                <div className="w-[30%] flex items-end">
+                  <span className="w-[45px] shrink-0 text-slate-500">DATE:</span>
+                  <span className="flex-1 border-b border-slate-800 pb-0.5 text-right">{invoice?.date && !isNaN(new Date(invoice.date).getTime()) ? new Date(invoice.date).toLocaleDateString('en-GB').replace(/\//g, '-') : new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}</span>
+                </div>
+              </div>
+
+              <div className="border border-slate-800 rounded-sm overflow-hidden shrink-0">
+                <table className={`w-full text-center ${spBaseText}`}>
+                  <thead className="border-b border-slate-800 bg-slate-100">
+                    <tr className="font-bold text-[12px] text-slate-700">
+                      <th className="py-2 px-2 w-12 border-r border-slate-300">NO.</th>
+                      <th className="py-2 px-2 text-left border-r border-slate-300">DESCRIPTION</th>
+                      <th className="py-2 px-2 w-24 border-r border-slate-300">QTY</th>
+                      <th className="py-2 px-2 w-28 border-r border-slate-300">PRICE</th>
+                      <th className="py-2 px-2 w-28">AMOUNT</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {safeItems.map((item, idx) => {
+                      const productName = String(item?.name || item?.Items || item?.rawSearchString || '-');
+                      return (
+                        <tr key={idx}>
+                          <td className={`${spCellPad} px-2 border-r border-slate-300 text-slate-500`}>{idx + 1}</td>
+                          <td className={`${spCellPad} px-2 text-left border-r border-slate-300 font-bold text-slate-900`}>{productName}</td>
+                          <td className={`${spCellPad} px-2 border-r border-slate-300 font-medium`}>{String(item?.qty || item?.quantity || 0)} {String(item?.unit || '')}</td>
+                          <td className={`${spCellPad} px-2 border-r border-slate-300 font-medium`}>${formatMoney(item?.unitPrice)}</td>
+                          <td className={`${spCellPad} px-2 font-bold`}>${formatMoney((Number(item?.qty || item?.quantity) || 0) * (Number(item?.unitPrice) || 0))}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex-grow flex flex-col items-center justify-center min-h-[60px] py-4 relative">
+                {carPlateNo && (
+                  <div className="text-center">
+                    <p className="text-[12px] font-black uppercase tracking-widest text-slate-400 mb-1">Assigned Vehicle</p>
+                    <div className="border-2 border-dashed border-slate-300 rounded-2xl px-12 py-3 text-[36px] font-black uppercase tracking-widest text-slate-800 bg-slate-50 shadow-sm">
+                      {carPlateNo}
+                    </div>
                   </div>
                 )}
-                <div className="flex items-baseline justify-end w-full">
-                  <span className="font-bold w-[60px] shrink-0 text-black text-[13px] text-right mr-2">NO.</span>
-                  <span className="text-red-600 font-bold tracking-wider text-[16px] leading-none">{String(invoiceNumber)}</span>
-                </div>
-                <div className="flex items-baseline justify-end w-full">
-                  <span className="font-bold w-[60px] shrink-0 text-black text-[13px] text-right mr-2">TERM:</span>
-                  <span className="text-red-600 font-bold text-[15px] leading-none">{invoice?.paymentTerms === 'cod' ? 'COD' : '30 Days'}</span>
-                </div>
               </div>
-            </div>
-          </div>
-          <table className={`w-full h-full flex-grow border-2 border-black text-center mb-0 mt-2 ${baseText}`} style={{ fontFamily: CJK_FONT }}>
-            <thead className="border-b-2 border-black">
-              <tr className="font-bold bg-white text-[14px]"><th className="py-2 px-1 w-12 text-center">NO.</th><th className="py-2 px-2 text-left">DESCRIPTION</th><th className="py-2 px-1 w-24 text-center">QUANTITY</th><th className="py-2 px-1 w-32 text-center">UNIT PRICE</th><th className="py-2 px-1 w-32 text-center">AMOUNT</th></tr>
-            </thead>
-            <tbody style={{ fontFamily: CJK_FONT }}>
-              {safeItems.map((item, idx) => {
-                const productName = String(item?.name || item?.Items || item?.rawSearchString || '-');
-                return (
-                  <tr key={idx} className="align-top text-slate-900" style={{ fontFamily: CJK_FONT }}>
-                    <td className={`px-1 text-center font-normal ${cellPad}`}>{idx + 1}</td>
-                    <td className={`px-1 text-left pl-2 font-normal ${cellPad} ${descPad}`} style={{ fontFamily: CJK_FONT }}>{productName}</td>
-                    <td className={`px-1 text-center font-normal ${cellPad}`} style={{ fontFamily: CJK_FONT }}>{String(item?.qty || item?.quantity || 0)} {String(item?.unit || '')}</td>
-                    <td className={`px-1 text-center font-normal ${cellPad}`}>${formatMoney(item?.unitPrice)}</td>
-                    <td className={`px-1 text-center font-normal ${cellPad}`}>
-                      ${formatMoney((Number(item?.qty || item?.quantity) || 0) * (Number(item?.unitPrice) || 0))}
-                    </td>
-                  </tr>
-                );
-              })}
-              
-              <tr className="h-full">
-                <td></td>
-                <td className="text-center align-middle py-8">
-                  {isSpecialFormat && carPlateNo && (
-                    <div className="inline-block border-2 border-slate-400 px-8 py-4 rounded-2xl opacity-80">
-                      <p className="text-[12px] font-black uppercase tracking-widest text-slate-500 mb-1">Assigned Vehicle</p>
-                      <p className="text-[32px] font-black uppercase tracking-widest text-slate-900 leading-none">{carPlateNo}</p>
+
+              <div className="flex justify-between items-end border-t-2 border-slate-800 pt-4 shrink-0">
+                <div className="w-[60%] text-[10px] leading-tight pr-4">
+                  <p className="font-bold mb-1">请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
+                  <p className="text-slate-600 mb-3">Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
+                  <div className="flex items-center bg-slate-50 p-2 rounded border border-slate-200">
+                    <img src={paynowQr} alt="PayNow QR Code" className="w-[50px] h-[50px] object-contain mr-3" />
+                    <div>
+                      <p className="font-bold text-slate-900">Three Leaves (Singapore) Trading Enterprise</p>
+                      <p className="text-slate-600">UEN: 53033969B &nbsp;|&nbsp; OCBC A/C: 535-846562-001</p>
                     </div>
-                  )}
-                </td>
-                <td></td><td></td><td></td>
-              </tr>
-              
-              <tr className="border-t-2 border-black font-bold h-[28px]">
-                <td colSpan="3" rowSpan="3" className="bg-white border-r-2 border-black p-2 align-top text-left">
-                  {/* Intentionally blank */}
-                </td>
-                <td className={`p-1 text-center ${gstText}`}>SUBTOTAL</td><td className={`p-1 text-center ${subtotalText}`}>${formatMoney(subtotal)}</td>
-              </tr>
-              <tr className="font-bold h-[28px] border-t border-black"><td className={`p-1 text-center ${gstText}`}>9% GST</td><td className={`p-1 text-center ${subtotalText}`}>${formatMoney(gst)}</td></tr>
-              <tr className="font-bold h-[32px] border-t-2 border-black"><td className="p-1 text-center text-[16px]">TOTAL</td><td className={`p-1 text-center ${totalText}`}>${formatMoney(total)}</td></tr>
-            </tbody>
-          </table>
-          <div className="flex w-full mt-4 pt-2 items-end shrink-0">
-            <div className="w-[70%] text-[12px] font-bold leading-snug pr-4">
-              <div style={{ fontFamily: CJK_FONT }}>
-                <p className="text-[12px]">请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p><p className="text-[10px] whitespace-nowrap text-slate-800">Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
-                <div className="mt-2 flex items-center">
-                  <div className="w-[80px] h-[80px] shrink-0 mr-3 flex items-center justify-center"><img src={paynowQr} alt="PayNow QR Code" className="w-[80px] h-[80px] object-contain" /></div>
-                  <div className="flex flex-col justify-center text-[11px]"><p>UEN: 53033969B</p><p>A/C Name: Three Leaves (Singapore) Trading Enterprise</p><p>A/C Number: 535-846562-001</p><p>Bank Name: OCBC</p><p className="mt-0.5 font-normal text-[10px] text-slate-800">All payments must be made payable to Three Leaves (Singapore) Trading Enterprise.</p></div>
+                  </div>
+                </div>
+                
+                <div className="w-[35%] flex flex-col items-end">
+                  <table className="w-full font-bold text-[13px] border border-slate-800 rounded-sm overflow-hidden mb-4">
+                    <tbody>
+                      <tr className="border-b border-slate-800">
+                        <td className="p-1.5 bg-slate-100 text-left pl-3 border-r border-slate-800 w-[50%]">SUBTOTAL</td>
+                        <td className="p-1.5 text-right pr-3">${formatMoney(subtotal)}</td>
+                      </tr>
+                      <tr className="border-b border-slate-800">
+                        <td className="p-1.5 bg-slate-100 text-left pl-3 border-r border-slate-800">9% GST</td>
+                        <td className="p-1.5 text-right pr-3">${formatMoney(gst)}</td>
+                      </tr>
+                      <tr className="text-[16px] text-slate-900">
+                        <td className="p-2 bg-slate-200 text-left pl-3 border-r border-slate-800">TOTAL</td>
+                        <td className="p-2 text-right pr-3 font-black">${formatMoney(total)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div className="w-full border-t border-slate-800 pt-1 text-center font-bold text-[11px] text-slate-500 uppercase tracking-widest mt-2">
+                    Received By / Company Stamp
+                  </div>
                 </div>
               </div>
+
             </div>
-            <div className="w-[30%] shrink-0 flex flex-col justify-end pb-1 pl-2"><div className="h-12"></div><div className="border-t-2 border-black text-center pt-1.5 text-[12px] font-bold uppercase tracking-widest">Received By</div></div>
-          </div>
+          ) : (
+            // ==========================================
+            // STANDARD FORMAT LAYOUT
+            // ==========================================
+            <div className="flex flex-col w-full h-full">
+              <div className="flex w-full mb-4 justify-between shrink-0">
+                <div className="flex-1 flex flex-col pr-4">
+                  <div className="flex items-start justify-between mb-5">
+                    <div className="flex items-center">
+                      <div className="w-[110px] shrink-0 mr-4"><img src={logo} alt="Three Leaves Logo" className="w-full h-auto object-contain" /></div>
+                      <div className="flex-1 text-left leading-snug pt-2 whitespace-nowrap overflow-visible">
+                        <h1 className="font-black text-[17px]" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1><h2 className="font-bold text-[16px] mb-1" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
+                        <div className="text-[#d55e2d] font-bold text-[10.5px] leading-tight tracking-tight"><p className="whitespace-nowrap">CO.REG NO.53033969B &nbsp;&nbsp; GST REG NO. M90355440L</p><p className="whitespace-nowrap">280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p><p className="whitespace-nowrap">HP: 97578869 (Mr Ye) &nbsp;&nbsp; HP: 91113505 (Min) &nbsp;&nbsp; Email: 3leaves.sg@gmail.com</p></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-end w-full mb-2 text-[14px] font-bold">
+                    <div className="flex items-end flex-1 pr-4"><span className="shrink-0 mr-2 text-black">TO:</span><span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[13px] tracking-tight" style={{ fontFamily: CJK_FONT }}>{String(invoice?.customer || '')}</span></div>
+                    <div className="flex items-end w-[35%] pl-2"><span className="shrink-0 mr-2 text-black">DATE:</span><span className="flex-1 text-center border-b border-black pb-0.5">{invoice?.date && !isNaN(new Date(invoice.date).getTime()) ? new Date(invoice.date).toLocaleDateString('en-GB').replace(/\//g, '-') : new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}</span></div>
+                  </div>
+                  <div className="flex items-end w-full text-[14px] font-bold"><span className="shrink-0 mr-2 text-black">ADDRESS:</span><span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[12px] tracking-tighter" style={{ fontFamily: CJK_FONT }}>{customerAddress}</span></div>
+                </div>
+                <div className="w-[180px] shrink-0 flex flex-col items-start pl-4 pt-1">
+                  <h2 className="text-[22px] font-bold tracking-[0.4em] leading-none mb-1" style={{ fontFamily: CJK_FONT }}>發票</h2><h3 className="text-[15px] font-black tracking-wide uppercase mb-2 text-black">TAX INVOICE</h3>
+                  <div className="w-full flex flex-col gap-3 mt-auto mb-2">
+                    <div className="flex items-baseline"><span className="font-bold w-[50px] shrink-0 text-black text-[15px]">No.</span><span className="text-red-600 font-bold tracking-wider text-[17px] leading-none">{String(invoiceNumber)}</span></div>
+                    <div className="flex items-baseline"><span className="font-bold w-[50px] shrink-0 text-black text-[15px]">Term:</span><span className="text-red-600 font-bold text-[16px] leading-none">{invoice?.paymentTerms === 'cod' ? 'COD' : '30 Days'}</span></div>
+                  </div>
+                </div>
+              </div>
+              
+              <table className={`w-full h-full flex-grow border-2 border-black text-center mb-0 mt-2 ${baseText}`} style={{ fontFamily: CJK_FONT }}>
+                <thead className="border-b-2 border-black">
+                  <tr className="font-bold bg-white text-[14px]"><th className="py-2 px-1 w-12 text-center">NO.</th><th className="py-2 px-2 text-left">DESCRIPTION</th><th className="py-2 px-1 w-24 text-center">QUANTITY</th><th className="py-2 px-1 w-32 text-center">UNIT PRICE</th><th className="py-2 px-1 w-32 text-center">AMOUNT</th></tr>
+                </thead>
+                <tbody style={{ fontFamily: CJK_FONT }}>
+                  {safeItems.map((item, idx) => {
+                    const productName = String(item?.name || item?.Items || item?.rawSearchString || '-');
+                    return (
+                      <tr key={idx} className="align-top text-slate-900" style={{ fontFamily: CJK_FONT }}>
+                        <td className={`px-1 text-center font-normal ${cellPad}`}>{idx + 1}</td>
+                        <td className={`px-1 text-left pl-2 font-normal ${cellPad} ${descPad}`} style={{ fontFamily: CJK_FONT }}>{productName}</td>
+                        <td className={`px-1 text-center font-normal ${cellPad}`} style={{ fontFamily: CJK_FONT }}>{String(item?.qty || item?.quantity || 0)} {String(item?.unit || '')}</td>
+                        <td className={`px-1 text-center font-normal ${cellPad}`}>${formatMoney(item?.unitPrice)}</td>
+                        <td className={`px-1 text-center font-normal ${cellPad}`}>
+                          ${formatMoney((Number(item?.qty || item?.quantity) || 0) * (Number(item?.unitPrice) || 0))}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  <tr className="h-full"><td></td><td></td><td></td><td></td><td></td></tr>
+                  <tr className="border-t-2 border-black font-bold h-[28px]">
+                    <td colSpan="3" rowSpan="3" className="bg-white border-r-2 border-black p-2 align-top text-left"></td>
+                    <td className={`p-1 text-center ${gstText}`}>SUBTOTAL</td><td className={`p-1 text-center ${subtotalText}`}>${formatMoney(subtotal)}</td>
+                  </tr>
+                  <tr className="font-bold h-[28px] border-t border-black"><td className={`p-1 text-center ${gstText}`}>9% GST</td><td className={`p-1 text-center ${subtotalText}`}>${formatMoney(gst)}</td></tr>
+                  <tr className="font-bold h-[32px] border-t-2 border-black"><td className="p-1 text-center text-[16px]">TOTAL</td><td className={`p-1 text-center ${totalText}`}>${formatMoney(total)}</td></tr>
+                </tbody>
+              </table>
+              <div className="flex w-full mt-4 pt-2 items-end shrink-0">
+                <div className="w-[70%] text-[12px] font-bold leading-snug pr-4">
+                  <div style={{ fontFamily: CJK_FONT }}>
+                    <p className="text-[12px]">请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p><p className="text-[10px] whitespace-nowrap text-slate-800">Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
+                    <div className="mt-2 flex items-center">
+                      <div className="w-[80px] h-[80px] shrink-0 mr-3 flex items-center justify-center"><img src={paynowQr} alt="PayNow QR Code" className="w-[80px] h-[80px] object-contain" /></div>
+                      <div className="flex flex-col justify-center text-[11px]"><p>UEN: 53033969B</p><p>A/C Name: Three Leaves (Singapore) Trading Enterprise</p><p>A/C Number: 535-846562-001</p><p>Bank Name: OCBC</p><p className="mt-0.5 font-normal text-[10px] text-slate-800">All payments must be made payable to Three Leaves (Singapore) Trading Enterprise.</p></div>
+                    </div>
+                  </div>
+                </div>
+                <div className="w-[30%] shrink-0 flex flex-col justify-end pb-1 pl-2"><div className="h-12"></div><div className="border-t-2 border-black text-center pt-1.5 text-[12px] font-bold uppercase tracking-widest">Received By</div></div>
+              </div>
+            </div>
+          )}
+
         </div>
       </div>
     </div>
