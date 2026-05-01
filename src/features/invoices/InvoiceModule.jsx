@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
-import { Eye, FileText, MessageSquare, Printer, Save, Sparkles, Trash2, Search, BrainCircuit, ChevronLeft, X, Settings, AlertTriangle, ArrowUpDown, Plus, Edit, Filter, CheckCircle, AlertCircle, ChevronDown, Check } from 'lucide-react';
+import { Eye, FileText, MessageSquare, Printer, Save, Sparkles, Trash2, Search, BrainCircuit, ChevronLeft, X, Settings, AlertTriangle, ArrowUpDown, Plus, Edit, Filter, CheckCircle, AlertCircle, ChevronDown, Check, Layers } from 'lucide-react';
 import { CompanyHeader } from '../../components/shared/CompanyHeader';
 import { UNIT_OPTIONS } from '../../data/company';
 import { formatMoney } from '../../utils/format';
@@ -130,138 +130,58 @@ function CustomerSearchSelect({ value, customers, onChange, disabled }) {
 function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBack, onRegister, paymentTerms, subtotal, sys, total, existingInvoice }) {
   const customerAddress = customer?.address || existingInvoice?.address || '';
   const safeInventory = Array.isArray(sys?.inventory) ? sys.inventory : [];
-  // Bulletproof fallback: Remove nulls from items array
   const safeItems = Array.isArray(items) ? items.filter(Boolean) : [];
 
   return (
     <div className="fixed inset-0 z-[3000] overflow-y-auto bg-slate-950/90 print:static print:block print:bg-white print:p-0 print:backdrop-filter-none">
-      
       <style type="text/css">
         {`
           @media print {
             @page { size: A4; margin: 0 !important; }
-            html, body {
-              margin: 0 !important;
-              padding: 0 !important;
-              background: white !important;
-              -webkit-print-color-adjust: exact;
-              print-color-adjust: exact;
-            }
+            html, body { margin: 0 !important; padding: 0 !important; background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             body * { visibility: hidden !important; }
             #printable-invoice-generator, #printable-invoice-generator * { visibility: visible !important; }
-            
-            #printable-invoice-generator {
-              position: absolute !important;
-              left: 0 !important;
-              top: 0 !important;
-              width: 210mm !important; 
-              height: 297mm !important; 
-              padding: 15mm 10mm !important; 
-              margin: 0 !important;
-              background: white !important;
-              backdrop-filter: none !important;
-              box-sizing: border-box !important;
-            }
-            
+            #printable-invoice-generator { position: absolute !important; left: 0 !important; top: 0 !important; width: 210mm !important; height: 297mm !important; padding: 15mm 10mm !important; margin: 0 !important; background: white !important; backdrop-filter: none !important; box-sizing: border-box !important; }
             *, html, body, div, p, span, h1, h2, h3, table, th, td { font-family: ${CJK_FONT} !important; }
             tr, td, th { page-break-inside: avoid; break-inside: avoid; }
           }
         `}
       </style>
-
       <div className="flex min-h-full flex-col items-center py-12 print:block print:py-0 print:m-0">
-        
         <div className="w-full max-w-[210mm] shrink-0 bg-slate-900 px-8 py-4 flex justify-between items-center text-white rounded-t-2xl shadow-2xl print:hidden border-b-4 border-blue-600">
-          <div className="flex items-center">
-            <Eye size={24} className="mr-3 text-blue-400" />
-            <div>
-              <h2 className="text-sm font-black tracking-widest uppercase text-slate-200">Invoice Layout Check</h2>
-              <p className="text-lg font-bold text-white leading-none mt-0.5">#{String(invoiceNumber)}</p>
-            </div>
-          </div>
+          <div className="flex items-center"><Eye size={24} className="mr-3 text-blue-400" /><div><h2 className="text-sm font-black tracking-widest uppercase text-slate-200">Invoice Layout Check</h2><p className="text-lg font-bold text-white leading-none mt-0.5">#{String(invoiceNumber)}</p></div></div>
           <div className="flex items-center space-x-3">
-            <button className="flex items-center rounded bg-slate-800 px-5 py-2.5 font-bold text-white transition-all hover:bg-slate-700 border border-slate-700 text-sm" onClick={onBack} type="button">
-              <ChevronLeft size={16} className="mr-1" /> Edit Draft
-            </button>
-            <button className="flex items-center rounded bg-white px-5 py-2.5 font-bold text-slate-900 shadow-lg transition-all hover:bg-slate-50 text-sm" onClick={() => onRegister(false)} type="button">
-              <Save className="mr-2" size={16} /> Save Invoice
-            </button>
+            <button className="flex items-center rounded bg-slate-800 px-5 py-2.5 font-bold text-white transition-all hover:bg-slate-700 border border-slate-700 text-sm" onClick={onBack} type="button"><ChevronLeft size={16} className="mr-1" /> Edit Draft</button>
+            <button className="flex items-center rounded bg-white px-5 py-2.5 font-bold text-slate-900 shadow-lg transition-all hover:bg-slate-50 text-sm" onClick={() => onRegister(false)} type="button"><Save className="mr-2" size={16} /> Save Invoice</button>
           </div>
         </div>
-
-        <div 
-          id="printable-invoice-generator"
-          lang="zh" 
-          className="flex w-full max-w-[210mm] h-[297mm] flex-col bg-white py-[15mm] px-[10mm] text-black shadow-2xl rounded-b-2xl print:w-[210mm] print:h-[297mm] print:max-w-none print:rounded-none print:shadow-none box-border shrink-0"
-          style={{ fontFamily: CJK_FONT }}
-        >
+        <div id="printable-invoice-generator" lang="zh" className="flex w-full max-w-[210mm] h-[297mm] flex-col bg-white py-[15mm] px-[10mm] text-black shadow-2xl rounded-b-2xl print:w-[210mm] print:h-[297mm] print:max-w-none print:rounded-none print:shadow-none box-border shrink-0" style={{ fontFamily: CJK_FONT }}>
           <div className="flex w-full mb-4 justify-between shrink-0">
             <div className="flex-1 flex flex-col pr-4">
               <div className="flex items-center mb-5">
-                <div className="w-[110px] shrink-0 mr-4">
-                  <img src={logo} alt="Three Leaves Logo" className="w-full h-auto object-contain" />
-                </div>
+                <div className="w-[110px] shrink-0 mr-4"><img src={logo} alt="Three Leaves Logo" className="w-full h-auto object-contain" /></div>
                 <div className="flex-1 text-left leading-snug pt-2 whitespace-nowrap overflow-visible">
-                  <h1 className="font-black text-[17px]" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
-                  <h2 className="font-bold text-[16px] mb-1" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
-                  
-                  <div className="text-[#d55e2d] font-bold text-[10.5px] leading-tight tracking-tight">
-                    <p className="whitespace-nowrap">CO.REG NO.53033969B &nbsp;&nbsp; GST REG NO. M90355440L</p>
-                    <p className="whitespace-nowrap">280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
-                    <p className="whitespace-nowrap">HP: 97578869 (Mr Ye) &nbsp;&nbsp; HP: 91113505 (Min) &nbsp;&nbsp; Email: 3leaves.sg@gmail.com</p>
-                  </div>
+                  <h1 className="font-black text-[17px]" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1><h2 className="font-bold text-[16px] mb-1" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
+                  <div className="text-[#d55e2d] font-bold text-[10.5px] leading-tight tracking-tight"><p className="whitespace-nowrap">CO.REG NO.53033969B &nbsp;&nbsp; GST REG NO. M90355440L</p><p className="whitespace-nowrap">280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p><p className="whitespace-nowrap">HP: 97578869 (Mr Ye) &nbsp;&nbsp; HP: 91113505 (Min) &nbsp;&nbsp; Email: 3leaves.sg@gmail.com</p></div>
                 </div>
               </div>
-
               <div className="flex justify-between items-end w-full mb-2 text-[14px] font-bold">
-                <div className="flex items-end flex-1 pr-4">
-                  <span className="shrink-0 mr-2 text-black">TO:</span>
-                  <span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[13px] tracking-tight" style={{ fontFamily: CJK_FONT }}>
-                    {String(customer?.name || existingInvoice?.customer || '')}
-                  </span>
-                </div>
-                <div className="flex items-end w-[35%] pl-2">
-                  <span className="shrink-0 mr-2 text-black">DATE:</span>
-                  <span className="flex-1 text-center border-b border-black pb-0.5">
-                    {invoiceDate && !isNaN(new Date(invoiceDate).getTime()) ? new Date(invoiceDate).toLocaleDateString('en-GB').replace(/\//g, '-') : new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}
-                  </span>
-                </div>
+                <div className="flex items-end flex-1 pr-4"><span className="shrink-0 mr-2 text-black">TO:</span><span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[13px] tracking-tight" style={{ fontFamily: CJK_FONT }}>{String(customer?.name || existingInvoice?.customer || '')}</span></div>
+                <div className="flex items-end w-[35%] pl-2"><span className="shrink-0 mr-2 text-black">DATE:</span><span className="flex-1 text-center border-b border-black pb-0.5">{invoiceDate && !isNaN(new Date(invoiceDate).getTime()) ? new Date(invoiceDate).toLocaleDateString('en-GB').replace(/\//g, '-') : new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}</span></div>
               </div>
-
-              <div className="flex items-end w-full text-[14px] font-bold">
-                <span className="shrink-0 mr-2 text-black">ADDRESS:</span>
-                <span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[12px] tracking-tighter" style={{ fontFamily: CJK_FONT }}>
-                  {String(customerAddress)}
-                </span>
-              </div>
+              <div className="flex items-end w-full text-[14px] font-bold"><span className="shrink-0 mr-2 text-black">ADDRESS:</span><span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[12px] tracking-tighter" style={{ fontFamily: CJK_FONT }}>{String(customerAddress)}</span></div>
             </div>
-
             <div className="w-[180px] shrink-0 flex flex-col items-start pl-4 pt-1">
-              <h2 className="text-[22px] font-bold tracking-[0.4em] leading-none mb-1" style={{ fontFamily: CJK_FONT }}>發票</h2>
-              <h3 className="text-[15px] font-black tracking-wide uppercase mb-6 text-black">TAX INVOICE</h3>
-              
+              <h2 className="text-[22px] font-bold tracking-[0.4em] leading-none mb-1" style={{ fontFamily: CJK_FONT }}>發票</h2><h3 className="text-[15px] font-black tracking-wide uppercase mb-6 text-black">TAX INVOICE</h3>
               <div className="w-full flex flex-col gap-3 mt-auto mb-2">
-                <div className="flex items-baseline">
-                  <span className="font-bold w-[50px] shrink-0 text-black text-[15px]">No.</span>
-                  <span className="text-red-600 font-bold tracking-wider text-[17px] leading-none">{String(invoiceNumber)}</span>
-                </div>
-                <div className="flex items-baseline">
-                  <span className="font-bold w-[50px] shrink-0 text-black text-[15px]">Term:</span>
-                  <span className="text-red-600 font-bold text-[16px] leading-none">{paymentTerms === 'cod' ? 'COD' : '30 Days'}</span>
-                </div>
+                <div className="flex items-baseline"><span className="font-bold w-[50px] shrink-0 text-black text-[15px]">No.</span><span className="text-red-600 font-bold tracking-wider text-[17px] leading-none">{String(invoiceNumber)}</span></div>
+                <div className="flex items-baseline"><span className="font-bold w-[50px] shrink-0 text-black text-[15px]">Term:</span><span className="text-red-600 font-bold text-[16px] leading-none">{paymentTerms === 'cod' ? 'COD' : '30 Days'}</span></div>
               </div>
             </div>
           </div>
-
           <table className="w-full h-full flex-grow text-[15px] border-2 border-black text-center mb-0 leading-tight mt-2" style={{ fontFamily: CJK_FONT }}>
             <thead className="border-b-2 border-black">
-              <tr className="font-bold bg-white text-[14px]">
-                <th className="py-2 px-1 w-12 text-center">NO.</th>
-                <th className="py-2 px-2 text-left">DESCRIPTION</th>
-                <th className="py-2 px-1 w-24 text-center">QUANTITY</th>
-                <th className="py-2 px-1 w-32 text-center">UNIT PRICE</th>
-                <th className="py-2 px-1 w-32 text-center">AMOUNT</th>
-              </tr>
+              <tr className="font-bold bg-white text-[14px]"><th className="py-2 px-1 w-12 text-center">NO.</th><th className="py-2 px-2 text-left">DESCRIPTION</th><th className="py-2 px-1 w-24 text-center">QUANTITY</th><th className="py-2 px-1 w-32 text-center">UNIT PRICE</th><th className="py-2 px-1 w-32 text-center">AMOUNT</th></tr>
             </thead>
             <tbody style={{ fontFamily: CJK_FONT }}>
               {safeItems.map((item, idx) => {
@@ -277,54 +197,24 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
                   </tr>
                 );
               })}
-              
-              <tr className="h-full">
-                <td></td><td></td><td></td><td></td><td></td>
-              </tr>
-
-              <tr className="border-t-2 border-black font-bold h-[28px]">
-                <td colSpan="3" rowSpan="3" className="bg-white border-r-2 border-black"></td>
-                <td className="p-1 text-center text-[14px]">SUBTOTAL</td>
-                <td className="p-1 text-center text-[15px]">${formatMoney(subtotal)}</td>
-              </tr>
-              <tr className="font-bold h-[28px] border-t border-black">
-                <td className="p-1 text-center text-[14px]">9% GST</td>
-                <td className="p-1 text-center text-[15px]">${formatMoney(gst)}</td>
-              </tr>
-              <tr className="font-bold h-[32px] border-t-2 border-black">
-                <td className="p-1 text-center text-[16px]">TOTAL</td>
-                <td className="p-1 text-center text-[17px]">${formatMoney(total)}</td>
-              </tr>
+              <tr className="h-full"><td></td><td></td><td></td><td></td><td></td></tr>
+              <tr className="border-t-2 border-black font-bold h-[28px]"><td colSpan="3" rowSpan="3" className="bg-white border-r-2 border-black"></td><td className="p-1 text-center text-[14px]">SUBTOTAL</td><td className="p-1 text-center text-[15px]">${formatMoney(subtotal)}</td></tr>
+              <tr className="font-bold h-[28px] border-t border-black"><td className="p-1 text-center text-[14px]">9% GST</td><td className="p-1 text-center text-[15px]">${formatMoney(gst)}</td></tr>
+              <tr className="font-bold h-[32px] border-t-2 border-black"><td className="p-1 text-center text-[16px]">TOTAL</td><td className="p-1 text-center text-[17px]">${formatMoney(total)}</td></tr>
             </tbody>
           </table>
-
           <div className="flex w-full mt-4 pt-2 items-end shrink-0">
             <div className="w-[70%] text-[12px] font-bold leading-snug pr-4">
               <div style={{ fontFamily: CJK_FONT }}>
-                <p className="text-[12px]">请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
-                <p className="text-[10px] whitespace-nowrap text-slate-800">Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
-                
+                <p className="text-[12px]">请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p><p className="text-[10px] whitespace-nowrap text-slate-800">Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
                 <div className="mt-2 flex items-center">
-                  <div className="w-[80px] h-[80px] shrink-0 mr-3 flex items-center justify-center">
-                    <img src={paynowQr} alt="PayNow QR Code" className="w-[80px] h-[80px] object-contain" />
-                  </div>
-                  <div className="flex flex-col justify-center text-[11px]">
-                    <p>UEN: 53033969B</p>
-                    <p>A/C Name: Three Leaves (Singapore) Trading Enterprise</p>
-                    <p>A/C Number: 535-846562-001</p>
-                    <p>Bank Name: OCBC</p>
-                    <p className="mt-0.5 font-normal text-[10px] text-slate-800">All payments must be made payable to Three Leaves (Singapore) Trading Enterprise.</p>
-                  </div>
+                  <div className="w-[80px] h-[80px] shrink-0 mr-3 flex items-center justify-center"><img src={paynowQr} alt="PayNow QR Code" className="w-[80px] h-[80px] object-contain" /></div>
+                  <div className="flex flex-col justify-center text-[11px]"><p>UEN: 53033969B</p><p>A/C Name: Three Leaves (Singapore) Trading Enterprise</p><p>A/C Number: 535-846562-001</p><p>Bank Name: OCBC</p><p className="mt-0.5 font-normal text-[10px] text-slate-800">All payments must be made payable to Three Leaves (Singapore) Trading Enterprise.</p></div>
                 </div>
               </div>
             </div>
-
-            <div className="w-[30%] shrink-0 flex flex-col justify-end pb-1 pl-2">
-              <div className="h-12"></div> 
-              <div className="border-t-2 border-black text-center pt-1.5 text-[12px] font-bold uppercase tracking-widest">Received By</div>
-            </div>
+            <div className="w-[30%] shrink-0 flex flex-col justify-end pb-1 pl-2"><div className="h-12"></div><div className="border-t-2 border-black text-center pt-1.5 text-[12px] font-bold uppercase tracking-widest">Received By</div></div>
           </div>
-
         </div>
       </div>
     </div>
@@ -339,216 +229,97 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
 
   const safeCustomers = Array.isArray(sys?.customers) ? sys.customers : [];
   const safeInventory = Array.isArray(sys?.inventory) ? sys.inventory : [];
-  
-  // BULLETPROOFING: Filter out any null or completely broken items in historical data
   const safeItems = Array.isArray(invoice?.items) ? invoice.items.filter(Boolean) : [];
 
   const customerObj = safeCustomers.find(c => c?.id === invoice?.customerId) || {};
   const customerAddress = String(customerObj?.address || '');
-  
-  // BULLETPROOFING: Safely extract and calculate subtotal
   const subtotal = safeItems.reduce((sum, item) => sum + (Number(item?.qty || item?.quantity) || 0) * (Number(item?.unitPrice) || 0), 0);
   const gst = subtotal * 0.09;
   const total = subtotal + gst;
 
   return (
     <div className="fixed inset-0 z-[5000] overflow-y-auto bg-slate-950/90 print:static print:block print:bg-white print:p-0 print:backdrop-filter-none">
-      
       <style type="text/css">
         {`
           @media print {
             @page { size: A4; margin: 0 !important; }
-            html, body {
-              margin: 0 !important;
-              padding: 0 !important;
-              background: white !important;
-              -webkit-print-color-adjust: exact;
-              print-color-adjust: exact;
-            }
+            html, body { margin: 0 !important; padding: 0 !important; background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             body * { visibility: hidden !important; }
             #printable-invoice-history, #printable-invoice-history * { visibility: visible !important; }
-            
-            #printable-invoice-history {
-              position: absolute !important;
-              left: 0 !important;
-              top: 0 !important;
-              width: 210mm !important; 
-              height: 297mm !important; 
-              padding: 15mm 10mm !important; 
-              box-sizing: border-box !important;
-              background: white !important;
-              backdrop-filter: none !important;
-            }
-
+            #printable-invoice-history { position: absolute !important; left: 0 !important; top: 0 !important; width: 210mm !important; height: 297mm !important; padding: 15mm 10mm !important; box-sizing: border-box !important; background: white !important; backdrop-filter: none !important; }
             *, html, body, div, p, span, h1, h2, h3, table, th, td { font-family: ${CJK_FONT} !important; }
             tr, td, th { page-break-inside: avoid; break-inside: avoid; }
           }
         `}
       </style>
-
       <div className="flex min-h-full flex-col items-center py-12 print:block print:py-0 print:m-0">
-        
         <div className="w-full max-w-[210mm] shrink-0 bg-slate-900 px-8 py-4 flex justify-between items-center text-white rounded-t-2xl shadow-2xl print:hidden border-b-4 border-blue-600">
-          <div className="flex items-center">
-            <FileText size={24} className="mr-3 text-blue-400" />
-            <div>
-              <h2 className="text-sm font-black tracking-widest uppercase text-slate-200">A4 Print Preview</h2>
-              <p className="text-lg font-bold text-white leading-none mt-0.5">#{String(invoice?.number || invoice?.id || '')}</p>
-            </div>
-          </div>
+          <div className="flex items-center"><FileText size={24} className="mr-3 text-blue-400" /><div><h2 className="text-sm font-black tracking-widest uppercase text-slate-200">A4 Print Preview</h2><p className="text-lg font-bold text-white leading-none mt-0.5">#{String(invoice?.number || invoice?.id || '')}</p></div></div>
           <div className="flex items-center space-x-3">
-            <button onClick={() => window.print()} className="flex items-center text-sm font-bold bg-blue-600 hover:bg-blue-500 px-5 py-2.5 rounded-xl transition-colors shadow-lg">
-              <Printer size={18} className="mr-2" /> Print Document
-            </button>
-            <button onClick={() => onEdit(invoice)} className="flex items-center text-sm font-bold bg-slate-800 hover:bg-slate-700 px-5 py-2.5 rounded-xl transition-colors border border-slate-700">
-              <Edit size={16} className="mr-2" /> Edit
-            </button>
-            <button onClick={onClose} className="hover:bg-slate-700 p-2.5 rounded-full transition-colors ml-2 bg-slate-800">
-              <X size={20} />
-            </button>
+            <button onClick={() => window.print()} className="flex items-center text-sm font-bold bg-blue-600 hover:bg-blue-500 px-5 py-2.5 rounded-xl transition-colors shadow-lg"><Printer size={18} className="mr-2" /> Print Document</button>
+            <button onClick={() => onEdit(invoice)} className="flex items-center text-sm font-bold bg-slate-800 hover:bg-slate-700 px-5 py-2.5 rounded-xl transition-colors border border-slate-700"><Edit size={16} className="mr-2" /> Edit</button>
+            <button onClick={onClose} className="hover:bg-slate-700 p-2.5 rounded-full transition-colors ml-2 bg-slate-800"><X size={20} /></button>
           </div>
         </div>
-
-        <div 
-          id="printable-invoice-history"
-          lang="zh" 
-          className="flex w-full max-w-[210mm] h-[297mm] flex-col bg-white py-[15mm] px-[10mm] text-black shadow-2xl rounded-b-2xl print:w-[210mm] print:h-[297mm] print:max-w-none print:rounded-none print:shadow-none box-border shrink-0"
-          style={{ fontFamily: CJK_FONT }}
-        >
+        <div id="printable-invoice-history" lang="zh" className="flex w-full max-w-[210mm] h-[297mm] flex-col bg-white py-[15mm] px-[10mm] text-black shadow-2xl rounded-b-2xl print:w-[210mm] print:h-[297mm] print:max-w-none print:rounded-none print:shadow-none box-border shrink-0" style={{ fontFamily: CJK_FONT }}>
           <div className="flex w-full mb-4 justify-between shrink-0">
             <div className="flex-1 flex flex-col pr-4">
               <div className="flex items-center mb-5">
-                <div className="w-[110px] shrink-0 mr-4">
-                  <img src={logo} alt="Three Leaves Logo" className="w-full h-auto object-contain" />
-                </div>
+                <div className="w-[110px] shrink-0 mr-4"><img src={logo} alt="Three Leaves Logo" className="w-full h-auto object-contain" /></div>
                 <div className="flex-1 text-left leading-snug pt-2 whitespace-nowrap overflow-visible">
-                  <h1 className="font-black text-[17px]" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
-                  <h2 className="font-bold text-[16px] mb-1" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
-                  
-                  <div className="text-[#d55e2d] font-bold text-[10.5px] leading-tight tracking-tight">
-                    <p className="whitespace-nowrap">CO.REG NO.53033969B &nbsp;&nbsp; GST REG NO. M90355440L</p>
-                    <p className="whitespace-nowrap">280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
-                    <p className="whitespace-nowrap">HP: 97578869 (Mr Ye) &nbsp;&nbsp; HP: 91113505 (Min) &nbsp;&nbsp; Email: 3leaves.sg@gmail.com</p>
-                  </div>
+                  <h1 className="font-black text-[17px]" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1><h2 className="font-bold text-[16px] mb-1" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
+                  <div className="text-[#d55e2d] font-bold text-[10.5px] leading-tight tracking-tight"><p className="whitespace-nowrap">CO.REG NO.53033969B &nbsp;&nbsp; GST REG NO. M90355440L</p><p className="whitespace-nowrap">280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p><p className="whitespace-nowrap">HP: 97578869 (Mr Ye) &nbsp;&nbsp; HP: 91113505 (Min) &nbsp;&nbsp; Email: 3leaves.sg@gmail.com</p></div>
                 </div>
               </div>
-
               <div className="flex justify-between items-end w-full mb-2 text-[14px] font-bold">
-                <div className="flex items-end flex-1 pr-4">
-                  <span className="shrink-0 mr-2 text-black">TO:</span>
-                  <span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[13px] tracking-tight" style={{ fontFamily: CJK_FONT }}>
-                    {String(invoice?.customer || '')}
-                  </span>
-                </div>
-                <div className="flex items-end w-[35%] pl-2">
-                  <span className="shrink-0 mr-2 text-black">DATE:</span>
-                  <span className="flex-1 text-center border-b border-black pb-0.5">
-                    {invoice?.date && !isNaN(new Date(invoice.date).getTime()) 
-                      ? new Date(invoice.date).toLocaleDateString('en-GB').replace(/\//g, '-') 
-                      : new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}
-                  </span>
-                </div>
+                <div className="flex items-end flex-1 pr-4"><span className="shrink-0 mr-2 text-black">TO:</span><span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[13px] tracking-tight" style={{ fontFamily: CJK_FONT }}>{String(invoice?.customer || '')}</span></div>
+                <div className="flex items-end w-[35%] pl-2"><span className="shrink-0 mr-2 text-black">DATE:</span><span className="flex-1 text-center border-b border-black pb-0.5">{invoice?.date && !isNaN(new Date(invoice.date).getTime()) ? new Date(invoice.date).toLocaleDateString('en-GB').replace(/\//g, '-') : new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}</span></div>
               </div>
-
-              <div className="flex items-end w-full text-[14px] font-bold">
-                <span className="shrink-0 mr-2 text-black">ADDRESS:</span>
-                <span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[12px] tracking-tighter" style={{ fontFamily: CJK_FONT }}>
-                  {customerAddress}
-                </span>
-              </div>
+              <div className="flex items-end w-full text-[14px] font-bold"><span className="shrink-0 mr-2 text-black">ADDRESS:</span><span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[12px] tracking-tighter" style={{ fontFamily: CJK_FONT }}>{customerAddress}</span></div>
             </div>
-
             <div className="w-[180px] shrink-0 flex flex-col items-start pl-4 pt-1">
-              <h2 className="text-[22px] font-bold tracking-[0.4em] leading-none mb-1" style={{ fontFamily: CJK_FONT }}>發票</h2>
-              <h3 className="text-[15px] font-black tracking-wide uppercase mb-6 text-black">TAX INVOICE</h3>
-              
+              <h2 className="text-[22px] font-bold tracking-[0.4em] leading-none mb-1" style={{ fontFamily: CJK_FONT }}>發票</h2><h3 className="text-[15px] font-black tracking-wide uppercase mb-6 text-black">TAX INVOICE</h3>
               <div className="w-full flex flex-col gap-3 mt-auto mb-2">
-                <div className="flex items-baseline">
-                  <span className="font-bold w-[50px] shrink-0 text-black text-[15px]">No.</span>
-                  <span className="text-red-600 font-bold tracking-wider text-[17px] leading-none">{String(invoice?.number || invoice?.id || '')}</span>
-                </div>
-                <div className="flex items-baseline">
-                  <span className="font-bold w-[50px] shrink-0 text-black text-[15px]">Term:</span>
-                  <span className="text-red-600 font-bold text-[16px] leading-none">{invoice?.paymentTerms === 'cod' ? 'COD' : '30 Days'}</span>
-                </div>
+                <div className="flex items-baseline"><span className="font-bold w-[50px] shrink-0 text-black text-[15px]">No.</span><span className="text-red-600 font-bold tracking-wider text-[17px] leading-none">{String(invoice?.number || invoice?.id || '')}</span></div>
+                <div className="flex items-baseline"><span className="font-bold w-[50px] shrink-0 text-black text-[15px]">Term:</span><span className="text-red-600 font-bold text-[16px] leading-none">{invoice?.paymentTerms === 'cod' ? 'COD' : '30 Days'}</span></div>
               </div>
             </div>
           </div>
-
           <table className="w-full h-full flex-grow text-[15px] border-2 border-black text-center mb-0 leading-tight mt-2" style={{ fontFamily: CJK_FONT }}>
             <thead className="border-b-2 border-black">
-              <tr className="font-bold bg-white text-[14px]">
-                <th className="py-2 px-1 w-12 text-center">NO.</th>
-                <th className="py-2 px-2 text-left">DESCRIPTION</th>
-                <th className="py-2 px-1 w-24 text-center">QUANTITY</th>
-                <th className="py-2 px-1 w-32 text-center">UNIT PRICE</th>
-                <th className="py-2 px-1 w-32 text-center">AMOUNT</th>
-              </tr>
+              <tr className="font-bold bg-white text-[14px]"><th className="py-2 px-1 w-12 text-center">NO.</th><th className="py-2 px-2 text-left">DESCRIPTION</th><th className="py-2 px-1 w-24 text-center">QUANTITY</th><th className="py-2 px-1 w-32 text-center">UNIT PRICE</th><th className="py-2 px-1 w-32 text-center">AMOUNT</th></tr>
             </thead>
             <tbody style={{ fontFamily: CJK_FONT }}>
               {safeItems.map((item, idx) => {
                 const productName = String(item?.name || item?.Items || '-');
-
                 return (
                   <tr key={idx} className="align-top text-slate-900" style={{ fontFamily: CJK_FONT }}>
                     <td className="px-1 py-1 text-center font-normal">{idx + 1}</td>
                     <td className="px-1 py-1 text-left pl-2 leading-none pt-1.5 font-normal" style={{ fontFamily: CJK_FONT }}>{productName}</td>
                     <td className="px-1 py-1 text-center font-normal" style={{ fontFamily: CJK_FONT }}>{String(item?.qty || item?.quantity || 0)} {String(item?.unit || '')}</td>
                     <td className="px-1 py-1 text-center font-normal">${formatMoney(item?.unitPrice)}</td>
-                    <td className="px-1 py-1 text-center font-normal">
-                      ${formatMoney((Number(item?.qty || item?.quantity) || 0) * (Number(item?.unitPrice) || 0))}
-                    </td>
+                    <td className="px-1 py-1 text-center font-normal">${formatMoney((Number(item?.qty || item?.quantity) || 0) * (Number(item?.unitPrice) || 0))}</td>
                   </tr>
                 );
               })}
-              
-              <tr className="h-full">
-                <td></td><td></td><td></td><td></td><td></td>
-              </tr>
-
-              <tr className="border-t-2 border-black font-bold h-[28px]">
-                <td colSpan="3" rowSpan="3" className="bg-white border-r-2 border-black"></td>
-                <td className="p-1 text-center text-[14px]">SUBTOTAL</td>
-                <td className="p-1 text-center text-[15px]">${formatMoney(subtotal)}</td>
-              </tr>
-              <tr className="font-bold h-[28px] border-t border-black">
-                <td className="p-1 text-center text-[14px]">9% GST</td>
-                <td className="p-1 text-center text-[15px]">${formatMoney(gst)}</td>
-              </tr>
-              <tr className="font-bold h-[32px] border-t-2 border-black">
-                <td className="p-1 text-center text-[16px]">TOTAL</td>
-                <td className="p-1 text-center text-[17px]">${formatMoney(total)}</td>
-              </tr>
+              <tr className="h-full"><td></td><td></td><td></td><td></td><td></td></tr>
+              <tr className="border-t-2 border-black font-bold h-[28px]"><td colSpan="3" rowSpan="3" className="bg-white border-r-2 border-black"></td><td className="p-1 text-center text-[14px]">SUBTOTAL</td><td className="p-1 text-center text-[15px]">${formatMoney(subtotal)}</td></tr>
+              <tr className="font-bold h-[28px] border-t border-black"><td className="p-1 text-center text-[14px]">9% GST</td><td className="p-1 text-center text-[15px]">${formatMoney(gst)}</td></tr>
+              <tr className="font-bold h-[32px] border-t-2 border-black"><td className="p-1 text-center text-[16px]">TOTAL</td><td className="p-1 text-center text-[17px]">${formatMoney(total)}</td></tr>
             </tbody>
           </table>
-
           <div className="flex w-full mt-4 pt-2 items-end shrink-0">
             <div className="w-[70%] text-[12px] font-bold leading-snug pr-4">
               <div style={{ fontFamily: CJK_FONT }}>
-                <p className="text-[12px]">请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
-                <p className="text-[10px] whitespace-nowrap text-slate-800">Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
-                
+                <p className="text-[12px]">请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p><p className="text-[10px] whitespace-nowrap text-slate-800">Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
                 <div className="mt-2 flex items-center">
-                  <div className="w-[80px] h-[80px] shrink-0 mr-3 flex items-center justify-center">
-                    <img src={paynowQr} alt="PayNow QR Code" className="w-[80px] h-[80px] object-contain" />
-                  </div>
-                  <div className="flex flex-col justify-center text-[11px]">
-                    <p>UEN: 53033969B</p>
-                    <p>A/C Name: Three Leaves (Singapore) Trading Enterprise</p>
-                    <p>A/C Number: 535-846562-001</p>
-                    <p>Bank Name: OCBC</p>
-                    <p className="mt-0.5 font-normal text-[10px] text-slate-800">All payments must be made payable to Three Leaves (Singapore) Trading Enterprise.</p>
-                  </div>
+                  <div className="w-[80px] h-[80px] shrink-0 mr-3 flex items-center justify-center"><img src={paynowQr} alt="PayNow QR Code" className="w-[80px] h-[80px] object-contain" /></div>
+                  <div className="flex flex-col justify-center text-[11px]"><p>UEN: 53033969B</p><p>A/C Name: Three Leaves (Singapore) Trading Enterprise</p><p>A/C Number: 535-846562-001</p><p>Bank Name: OCBC</p><p className="mt-0.5 font-normal text-[10px] text-slate-800">All payments must be made payable to Three Leaves (Singapore) Trading Enterprise.</p></div>
                 </div>
               </div>
             </div>
-
-            <div className="w-[30%] shrink-0 flex flex-col justify-end pb-1 pl-2">
-              <div className="h-12"></div> 
-              <div className="border-t-2 border-black text-center pt-1.5 text-[12px] font-bold uppercase tracking-widest">Received By</div>
-            </div>
+            <div className="w-[30%] shrink-0 flex flex-col justify-end pb-1 pl-2"><div className="h-12"></div><div className="border-t-2 border-black text-center pt-1.5 text-[12px] font-bold uppercase tracking-widest">Received By</div></div>
           </div>
-
         </div>
       </div>
     </div>
@@ -571,6 +342,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
   const safeInventory = Array.isArray(sys?.inventory) ? sys.inventory : [];
   const safeCustomers = Array.isArray(sys?.customers) ? sys.customers : [];
   const safeInvoices = Array.isArray(sys?.invoices) ? sys.invoices : [];
+  const safeGroups = Array.isArray(sys?.pricingGroups) ? sys.pricingGroups : []; // NEW
 
   const [items, setItems] = useState(() => {
     if (existingInvoice && Array.isArray(existingInvoice.items)) {
@@ -583,7 +355,6 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
 
   const autoInvoiceNumber = useMemo(() => {
     if (existingInvoice && invoiceDate === existingInvoice.date) return String(existingInvoice.number || ''); 
-
     const dateObj = new Date(invoiceDate);
     if (isNaN(dateObj.getTime())) return '';
 
@@ -597,26 +368,19 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
     monthlyInvoices.forEach(inv => {
       const seqStr = String(inv?.number || '').slice(4); 
       const seqNum = parseInt(seqStr, 10);
-      if (!isNaN(seqNum) && seqNum > maxSequence) {
-        maxSequence = seqNum;
-      }
+      if (!isNaN(seqNum) && seqNum > maxSequence) maxSequence = seqNum;
     });
 
-    const nextSequence = String(maxSequence + 1).padStart(3, '0');
-    return `${prefix}${nextSequence}`;
+    return `${prefix}${String(maxSequence + 1).padStart(3, '0')}`;
   }, [safeInvoices, existingInvoice, invoiceDate]);
 
   const [invoiceNumber, setInvoiceNumber] = useState(autoInvoiceNumber);
-
-  useEffect(() => {
-    setInvoiceNumber(autoInvoiceNumber);
-  }, [autoInvoiceNumber]);
+  useEffect(() => { setInvoiceNumber(autoInvoiceNumber); }, [autoInvoiceNumber]);
   
   const [isParsing, setIsParsing] = useState(false);
   const [parseText, setParseText] = useState('');
   const [previewMode, setPreviewMode] = useState(false);
   const [autoFillNotif, setAutoFillNotif] = useState(false);
-  
   const [priceModal, setPriceModal] = useState(null);
 
   const customer = safeCustomers.find((entry) => entry?.id === customerId);
@@ -629,12 +393,25 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
   const gst = subtotal * 0.09;
   const total = subtotal + gst;
 
+  // NEW: UPDATED SAFE PRICE CASCADE
   const getSafePrice = (product, unit = '箱') => {
     if (!product) return 0;
     const ruleKey = `${product.id}|${unit}`;
+    
+    // 1. Check Individual Customer Price
     if (customer?.custom_prices && typeof customer.custom_prices === 'object' && customer.custom_prices[ruleKey] !== undefined) {
       return Number(customer.custom_prices[ruleKey]) || 0;
     }
+    
+    // 2. Check Pricing Group Price
+    if (customer?.pricing_group_id) {
+      const assignedGroup = safeGroups.find(g => g.id === customer.pricing_group_id);
+      if (assignedGroup?.prices && typeof assignedGroup.prices === 'object' && assignedGroup.prices[ruleKey] !== undefined) {
+        return Number(assignedGroup.prices[ruleKey]) || 0;
+      }
+    }
+    
+    // 3. Check Global Catalog Price
     let price = product.Price || product.unitPrice || product['Unit Price (SG)'] || 0;
     return Number(price) || 0;
   };
@@ -643,11 +420,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
     const originalCustomer = existingInvoice?.customerId || '';
     if (existingInvoice && customerId === originalCustomer) return; 
 
-    if (!customerId) {
-      setItems([]); 
-      setAutoFillNotif(false); 
-      return;
-    }
+    if (!customerId) { setItems([]); setAutoFillNotif(false); return; }
 
     if (!isAutofillEnabled) {
       setItems(prevItems => prevItems.filter(i => i && !i.isAutoFilled));
@@ -676,14 +449,8 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
         if (product) {
           const determinedUnit = String(stats.unit || product.Unit || product.unit || '箱');
           autoFilled.push({
-            itemId,
-            name: String(product.Name || product.name || product.Items || ''),
-            unit: determinedUnit,
-            qty: Math.max(1, Math.round(stats.totalQty / stats.count)),
-            unitPrice: getSafePrice(product, determinedUnit), 
-            picked: false,
-            isAutoFilled: true, 
-            suggestions: []
+            itemId, name: String(product.Name || product.name || product.Items || ''), unit: determinedUnit,
+            qty: Math.max(1, Math.round(stats.totalQty / stats.count)), unitPrice: getSafePrice(product, determinedUnit), picked: false, isAutoFilled: true, suggestions: []
           });
         }
       }
@@ -691,11 +458,9 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
 
     if (autoFilled.length > 0) {
       setItems(prevItems => [...prevItems.filter(i => i && !i.isAutoFilled), ...autoFilled]);
-      setAutoFillNotif(true); 
-      setTimeout(() => setAutoFillNotif(false), 4000);
+      setAutoFillNotif(true); setTimeout(() => setAutoFillNotif(false), 4000);
     } else {
-      setItems(prevItems => prevItems.filter(i => i && !i.isAutoFilled)); 
-      setAutoFillNotif(false);
+      setItems(prevItems => prevItems.filter(i => i && !i.isAutoFilled)); setAutoFillNotif(false);
     }
   }, [customerId, isAutofillEnabled, safeInvoices, safeInventory, existingInvoice]);
 
@@ -703,18 +468,9 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
     if (!customerId) return [];
     const history = safeInvoices.filter((invoice) => invoice?.customerId === customerId);
     if (history.length === 0) return [];
-
     const counts = {};
-    history.forEach((invoice) => {
-      (Array.isArray(invoice?.items) ? invoice.items.filter(Boolean) : []).forEach((item) => { 
-        if(item.itemId) counts[item.itemId] = (counts[item.itemId] || 0) + 1; 
-      });
-    });
-
-    return Object.entries(counts)
-      .filter(([, count]) => { const confidence = count / history.length; return confidence >= 0.3 && confidence < 0.9; })
-      .map(([itemId]) => safeInventory.find((entry) => entry?.id === itemId))
-      .filter((item) => item && !(Array.isArray(items) ? items.filter(Boolean) : []).find((draftItem) => draftItem.itemId === item.id));
+    history.forEach((invoice) => { (Array.isArray(invoice?.items) ? invoice.items.filter(Boolean) : []).forEach((item) => { if(item.itemId) counts[item.itemId] = (counts[item.itemId] || 0) + 1; }); });
+    return Object.entries(counts).filter(([, count]) => { const confidence = count / history.length; return confidence >= 0.3 && confidence < 0.9; }).map(([itemId]) => safeInventory.find((entry) => entry?.id === itemId)).filter((item) => item && !(Array.isArray(items) ? items.filter(Boolean) : []).find((draftItem) => draftItem.itemId === item.id));
   }, [customerId, items, safeInvoices, safeInventory]);
 
   const handleSmartExtract = () => {
@@ -731,28 +487,17 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
         if(!inventoryItem) return { item: null, score: 0 };
         const itemName = String(inventoryItem.Name || inventoryItem.name || inventoryItem.Items || '').toLowerCase();
         let score = 0;
-
-        if (itemName === searchString) {
-          score += 50;
-        } else if (itemName.includes(searchString) || searchString.includes(itemName)) {
-          score += 10;
-        } else {
+        if (itemName === searchString) { score += 50; } 
+        else if (itemName.includes(searchString) || searchString.includes(itemName)) { score += 10; } 
+        else {
           const searchChars = new Set(searchString.replace(/\s/g, '').split(''));
           if (searchChars.size > 0) {
             let matchCount = 0;
-            searchChars.forEach(char => {
-              if (itemName.includes(char)) matchCount++;
-            });
-            if (matchCount / searchChars.size >= 0.5) {
-               score += (matchCount / searchChars.size) * 5; 
-            }
+            searchChars.forEach(char => { if (itemName.includes(char)) matchCount++; });
+            if (matchCount / searchChars.size >= 0.5) { score += (matchCount / searchChars.size) * 5; }
           }
         }
-
-        if (inventoryItem.learned_phrases && typeof inventoryItem.learned_phrases === 'object' && inventoryItem.learned_phrases[searchString]) { 
-          score += (Number(inventoryItem.learned_phrases[searchString]) || 0) * 20; 
-        }
-
+        if (inventoryItem.learned_phrases && typeof inventoryItem.learned_phrases === 'object' && inventoryItem.learned_phrases[searchString]) { score += (Number(inventoryItem.learned_phrases[searchString]) || 0) * 20; }
         return { item: inventoryItem, score };
       }).filter(si => si.item !== null);
 
@@ -761,77 +506,36 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
 
       if (bestMatch && bestMatch.score >= 10) {
         const determinedUnit = String(bestMatch.item.Unit || bestMatch.item.unit || '箱');
-        nextDraftItems.push({
-          itemId: bestMatch.item.id,
-          name: String(bestMatch.item.Name || bestMatch.item.name || bestMatch.item.Items || ''),
-          unit: determinedUnit,
-          qty,
-          unitPrice: getSafePrice(bestMatch.item, determinedUnit),
-          picked: false,
-          rawSearchString: searchString, 
-          originalPredictedId: bestMatch.item.id, 
-          suggestions: [] 
-        });
+        nextDraftItems.push({ itemId: bestMatch.item.id, name: String(bestMatch.item.Name || bestMatch.item.name || bestMatch.item.Items || ''), unit: determinedUnit, qty, unitPrice: getSafePrice(bestMatch.item, determinedUnit), picked: false, rawSearchString: searchString, originalPredictedId: bestMatch.item.id, suggestions: [] });
       } else {
-        const topSuggestions = scoredItems
-          .filter(si => si.score > 0)
-          .slice(0, 3)
-          .map(si => si.item);
-
-        nextDraftItems.push({ 
-          itemId: '', 
-          name: '', 
-          unit: '箱', 
-          qty, 
-          unitPrice: 0, 
-          picked: false, 
-          rawSearchString: searchString, 
-          originalPredictedId: null,
-          suggestions: topSuggestions
-        });
+        const topSuggestions = scoredItems.filter(si => si.score > 0).slice(0, 3).map(si => si.item);
+        nextDraftItems.push({ itemId: '', name: '', unit: '箱', qty, unitPrice: 0, picked: false, rawSearchString: searchString, originalPredictedId: null, suggestions: topSuggestions });
       }
     });
-
-    setItems(nextDraftItems);
-    setIsParsing(false);
-    setParseText('');
+    setItems(nextDraftItems); setIsParsing(false); setParseText('');
   };
 
   const handleRegister = (printAfter = false) => {
-    const cleanItems = (Array.isArray(items) ? items.filter(Boolean) : []).map(item => {
-      const { isAutoFilled, ...rest } = item;
-      return rest;
-    });
+    const cleanItems = (Array.isArray(items) ? items.filter(Boolean) : []).map(item => { const { isAutoFilled, ...rest } = item; return rest; });
 
     const invoice = {
       id: existingInvoice ? existingInvoice.id : `INV-${invoiceNumber}`,
-      number: String(invoiceNumber),
-      customerId,
-      customer: String(customer?.name || existingInvoice?.customer || 'Unknown Customer'),
-      region: String(customer?.region || existingInvoice?.region || ''),
-      date: String(invoiceDate),
-      items: cleanItems,
-      total,
-      status: invoiceStatus, 
-      deliveryStatus: existingInvoice ? String(existingInvoice.deliveryStatus || 'Pending') : 'Pending',
-      paymentTerms: String(paymentTerms),
+      number: String(invoiceNumber), customerId, customer: String(customer?.name || existingInvoice?.customer || 'Unknown Customer'),
+      region: String(customer?.region || existingInvoice?.region || ''), date: String(invoiceDate), items: cleanItems, total,
+      status: invoiceStatus, deliveryStatus: existingInvoice ? String(existingInvoice.deliveryStatus || 'Pending') : 'Pending', paymentTerms: String(paymentTerms),
     };
 
     const nextInventory = [...safeInventory];
-
     cleanItems.forEach((item) => {
       if (!existingInvoice && item.itemId) {
         const stockIndex = nextInventory.findIndex((entry) => entry?.id === item.itemId);
         if (stockIndex > -1) { nextInventory[stockIndex].stock -= Number(item.qty || item.quantity) || 0; }
       }
-
       if (item.rawSearchString) {
         if (item.itemId) {
           const correctIndex = nextInventory.findIndex((entry) => entry?.id === item.itemId);
           if (correctIndex > -1) {
-            if (!nextInventory[correctIndex].learned_phrases || typeof nextInventory[correctIndex].learned_phrases !== 'object') { 
-              nextInventory[correctIndex].learned_phrases = {}; 
-            }
+            if (!nextInventory[correctIndex].learned_phrases || typeof nextInventory[correctIndex].learned_phrases !== 'object') { nextInventory[correctIndex].learned_phrases = {}; }
             const currentScore = Number(nextInventory[correctIndex].learned_phrases[item.rawSearchString]) || 0;
             nextInventory[correctIndex].learned_phrases[item.rawSearchString] = currentScore + 1;
           }
@@ -839,9 +543,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
         if (item.originalPredictedId && item.originalPredictedId !== item.itemId) {
           const wrongIndex = nextInventory.findIndex((entry) => entry?.id === item.originalPredictedId);
           if (wrongIndex > -1) {
-            if (!nextInventory[wrongIndex].learned_phrases || typeof nextInventory[wrongIndex].learned_phrases !== 'object') { 
-              nextInventory[wrongIndex].learned_phrases = {}; 
-            }
+            if (!nextInventory[wrongIndex].learned_phrases || typeof nextInventory[wrongIndex].learned_phrases !== 'object') { nextInventory[wrongIndex].learned_phrases = {}; }
             const currentScore = Number(nextInventory[wrongIndex].learned_phrases[item.rawSearchString]) || 0;
             nextInventory[wrongIndex].learned_phrases[item.rawSearchString] = currentScore - 1;
           }
@@ -850,18 +552,13 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
     });
 
     sys.setInventory(nextInventory);
-
-    if (existingInvoice) {
-      sys.setInvoices(safeInvoices.map(inv => inv?.id === existingInvoice.id ? invoice : inv));
-    } else {
-      sys.setInvoices([...safeInvoices, invoice]);
-    }
-
+    if (existingInvoice) { sys.setInvoices(safeInvoices.map(inv => inv?.id === existingInvoice.id ? invoice : inv)); } else { sys.setInvoices([...safeInvoices, invoice]); }
     if (printAfter) { setTimeout(() => { window.print(); onClose(); }, 500); } else { onClose(); }
   };
 
+  // NEW: UPDATED PRICING CASCADE SAVE LOGIC
   const executePriceSave = async (type, newPriceStr) => {
-    const { index, item, product } = priceModal;
+    const { index, item, product, assignedGroup } = priceModal;
     const newPrice = Number(newPriceStr) || 0;
     const ruleKey = `${product.id}|${item.unit}`;
 
@@ -870,37 +567,31 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
         const updatedCustomPrices = { ...(customer.custom_prices || {}), [ruleKey]: newPrice };
         const { error } = await supabase.from('customers').update({ custom_prices: updatedCustomPrices }).eq('id', customer.id);
         if (error) throw error;
-        
         sys.setCustomers(safeCustomers.map(c => c?.id === customer.id ? { ...c, custom_prices: updatedCustomPrices } : c));
       } 
-      
+      else if (type === 'GROUP' && assignedGroup) {
+        const updatedGroupPrices = { ...(assignedGroup.prices || {}), [ruleKey]: newPrice };
+        const { error } = await supabase.from('pricing_groups').update({ prices: updatedGroupPrices }).eq('id', assignedGroup.id);
+        if (error) throw error;
+        if (sys.setPricingGroups) sys.setPricingGroups(safeGroups.map(g => g.id === assignedGroup.id ? { ...g, prices: updatedGroupPrices } : g));
+      }
       else if (type === 'GLOBAL') {
         const isUUID = product.id && String(product.id).length === 36 && String(product.id).includes('-');
         let dbError;
-
-        if (isUUID) {
-          const { error } = await supabase.from('product_list').update({ Price: newPrice }).eq('id', product.id);
-          dbError = error;
-        } else {
-          const legacyName = String(product.Name || product.name || product.Items || '');
-          const { error } = await supabase.from('product_list').update({ Price: newPrice }).eq('Name', legacyName);
-          dbError = error;
-        }
-
+        if (isUUID) { const { error } = await supabase.from('product_list').update({ Price: newPrice }).eq('id', product.id); dbError = error; } 
+        else { const legacyName = String(product.Name || product.name || product.Items || ''); const { error } = await supabase.from('product_list').update({ Price: newPrice }).eq('Name', legacyName); dbError = error; }
         if (dbError) throw dbError;
         sys.setInventory(safeInventory.map(p => p?.id === product.id ? { ...p, Price: newPrice } : p));
       }
-      
       else if (type === 'REMOVE_CUSTOMER') {
         const updatedCustomPrices = { ...(customer.custom_prices || {}) };
         delete updatedCustomPrices[ruleKey];
-        
         const { error } = await supabase.from('customers').update({ custom_prices: updatedCustomPrices }).eq('id', customer.id);
         if (error) throw error;
-
         sys.setCustomers(safeCustomers.map(c => c?.id === customer.id ? { ...c, custom_prices: updatedCustomPrices } : c));
         
-        const fallbackPrice = Number(product.Price || product.unitPrice || product['Unit Price (SG)']) || 0;
+        // When individual is cleared, it might fallback to group. Re-evaluate using getSafePrice.
+        const fallbackPrice = getSafePrice(product, item.unit); // Re-run to see if group applies
         const nextItems = [...(Array.isArray(items) ? items : [])];
         if (nextItems[index]) nextItems[index].unitPrice = fallbackPrice;
         setItems(nextItems);
@@ -913,10 +604,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
       setItems(nextItems);
       setPriceModal(null);
 
-    } catch (error) {
-      console.error("Pricing update failed:", error);
-      alert(`Database Update Failed: ${error.message || 'Could not verify connection.'}`);
-    }
+    } catch (error) { alert(`Database Update Failed: ${error.message}`); }
   };
 
   if (previewMode) {
@@ -938,12 +626,8 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
             <h2 className="text-sm font-black uppercase tracking-widest">{existingInvoice ? 'Edit Existing Invoice' : 'Draft Invoice Workspace'}</h2>
           </div>
           <div className="flex space-x-3">
-            <button className="flex items-center rounded-xl bg-blue-600 px-4 py-1.5 text-xs font-black shadow-lg shadow-blue-500/20 transition-all hover:bg-blue-500" onClick={() => setIsParsing(true)} type="button">
-              <MessageSquare className="mr-2" size={14} /> Paste Order Message
-            </button>
-            <button className="rounded-full p-1.5 transition-colors hover:bg-slate-800" onClick={onClose} type="button">
-              <X size={20} />
-            </button>
+            <button className="flex items-center rounded-xl bg-blue-600 px-4 py-1.5 text-xs font-black shadow-lg shadow-blue-500/20 transition-all hover:bg-blue-500" onClick={() => setIsParsing(true)} type="button"><MessageSquare className="mr-2" size={14} /> Paste Order Message</button>
+            <button className="rounded-full p-1.5 transition-colors hover:bg-slate-800" onClick={onClose} type="button"><X size={20} /></button>
           </div>
         </div>
 
@@ -962,26 +646,13 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
 
           <div className="mx-auto mb-12 w-full max-w-[800px] border-b-8 border-blue-600 bg-white p-12 text-sm text-gray-800 shadow-xl">
             <CompanyHeader />
-
             <div className="mb-12 flex justify-between">
               <div className="w-[35%] border-r border-slate-100 pr-6">
                 <div className="flex justify-between items-end mb-1">
                   <label className="text-[10px] font-black uppercase text-gray-400">Customer Account:</label>
                   {!existingInvoice && (
                     <label className="flex items-center space-x-1.5 cursor-pointer bg-slate-50 border border-slate-200 px-2 py-1 rounded-md hover:bg-slate-100 transition-colors">
-                      <input 
-                        type="checkbox" 
-                        checked={isAutofillEnabled} 
-                        onChange={(e) => {
-                          const checked = e.target.checked;
-                          setIsAutofillEnabled(checked);
-                          if (!checked) {
-                            setItems(prev => prev.filter(i => i && !i.isAutoFilled));
-                            setAutoFillNotif(false);
-                          }
-                        }} 
-                        className="w-3 h-3 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer" 
-                      />
+                      <input type="checkbox" checked={isAutofillEnabled} onChange={(e) => { const checked = e.target.checked; setIsAutofillEnabled(checked); if (!checked) { setItems(prev => prev.filter(i => i && !i.isAutoFilled)); setAutoFillNotif(false); } }} className="w-3 h-3 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer" />
                       <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Auto-Predict</span>
                     </label>
                   )}
@@ -989,20 +660,16 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                 <CustomerSearchSelect value={customerId} customers={safeCustomers} onChange={setCustomerId} disabled={!!existingInvoice} />
                 {autoFillNotif && (<p className="mt-2 flex items-center text-[10px] font-black uppercase tracking-widest text-indigo-500"><Sparkles className="mr-1" size={12} /> Unverified Predictions Added</p>)}
               </div>
-
               <div className="w-[20%] border-r border-slate-100 px-6">
                 <label className="text-[10px] font-black uppercase text-gray-400">Invoice Date:</label>
                 <input type="date" className="mt-1 w-full cursor-pointer border-none bg-transparent p-0 text-[16px] font-black text-slate-800 focus:ring-0 outline-none" value={invoiceDate} onChange={(event) => setInvoiceDate(event.target.value)} />
               </div>
-
               <div className="w-[20%] border-r border-slate-100 px-6">
                 <label className="text-[10px] font-black uppercase text-gray-400">Terms:</label>
                 <select className="mt-1 w-full cursor-pointer border-none bg-transparent p-0 text-lg font-black text-slate-800 focus:ring-0" onChange={(event) => setPaymentTerms(event.target.value)} value={paymentTerms}>
-                  <option value="30_days">30 Days</option>
-                  <option value="cod">C.O.D</option>
+                  <option value="30_days">30 Days</option><option value="cod">C.O.D</option>
                 </select>
               </div>
-
               <div className="w-[25%] pl-6 text-right relative">
                 <label className="text-[10px] font-black uppercase text-gray-400">Serial No.</label>
                 <div className="flex items-center justify-end text-3xl font-black tracking-tighter text-red-600 mt-1">
@@ -1018,11 +685,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                 <p className="mb-2 text-[9px] font-black uppercase tracking-widest text-blue-400">Secondary Recommendations</p>
                 <div className="flex flex-wrap gap-2">
                   {suggestions.map((item) => (
-                    <button key={item.id} className="rounded border border-blue-100 bg-white px-3 py-1.5 text-[10px] font-bold text-blue-700 shadow-sm"
-                      onClick={() => {
-                        const determinedUnit = String(item.Unit || item.unit || '箱');
-                        setItems([...(Array.isArray(items) ? items.filter(Boolean) : []), { itemId: item.id, name: String(item.Name || item.name || item.Items || ''), unit: determinedUnit, qty: 1, unitPrice: getSafePrice(item, determinedUnit), picked: false, suggestions: [] }])
-                      }} type="button">
+                    <button key={item.id} className="rounded border border-blue-100 bg-white px-3 py-1.5 text-[10px] font-bold text-blue-700 shadow-sm" onClick={() => { const determinedUnit = String(item.Unit || item.unit || '箱'); setItems([...(Array.isArray(items) ? items.filter(Boolean) : []), { itemId: item.id, name: String(item.Name || item.name || item.Items || ''), unit: determinedUnit, qty: 1, unitPrice: getSafePrice(item, determinedUnit), picked: false, suggestions: [] }]) }} type="button">
                       + {String(item.Name || item.name || item.Items || '')}
                     </button>
                   ))}
@@ -1033,20 +696,19 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
             <table className="w-full text-left relative z-10">
               <thead className="border-y-2 border-slate-900 bg-slate-50">
                 <tr className="text-[10px] font-black uppercase tracking-widest text-gray-500">
-                  <th className="w-12 p-4 text-center">No.</th>
-                  <th className="p-4 w-72">Description</th>
-                  <th className="w-24 p-4 text-center">Unit</th>
-                  <th className="w-20 p-4 text-center">Qty</th>
-                  <th className="w-28 p-4 text-right">Cost</th>
-                  <th className="w-28 p-4 text-right">Total</th>
-                  <th className="w-8 p-4"></th>
+                  <th className="w-12 p-4 text-center">No.</th><th className="p-4 w-72">Description</th><th className="w-24 p-4 text-center">Unit</th><th className="w-20 p-4 text-center">Qty</th><th className="w-28 p-4 text-right">Cost</th><th className="w-28 p-4 text-right">Total</th><th className="w-8 p-4"></th>
                 </tr>
               </thead>
               <tbody>
                 {(Array.isArray(items) ? items.filter(Boolean) : []).map((item, index) => {
                   const safeItemUnit = String(item.unit || '');
                   const ruleKey = `${item.itemId}|${safeItemUnit}`;
-                  const hasCustomPrice = customer?.custom_prices && typeof customer.custom_prices === 'object' && customer.custom_prices[ruleKey] !== undefined;
+                  
+                  // NEW PRICING CASCADE CHECK
+                  const hasIndividualPrice = customer?.custom_prices && typeof customer.custom_prices === 'object' && customer.custom_prices[ruleKey] !== undefined;
+                  const assignedGroup = customer?.pricing_group_id ? safeGroups.find(g => g.id === customer.pricing_group_id) : null;
+                  const hasGroupPrice = assignedGroup?.prices && typeof assignedGroup.prices === 'object' && assignedGroup.prices[ruleKey] !== undefined;
+                  const hasAnyCustomPrice = hasIndividualPrice || hasGroupPrice;
 
                   const selectedProduct = safeInventory.find(p => p?.id === item.itemId);
                   let rowUnitOptions = [];
@@ -1054,30 +716,17 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                   if (selectedProduct) {
                     const defaultUnit = String(selectedProduct.Unit || selectedProduct.unit || '箱');
                     rowUnitOptions.push({ value: defaultUnit, label: defaultUnit });
-
                     if (customer?.custom_prices && typeof customer.custom_prices === 'object') {
-                      Object.keys(customer.custom_prices).forEach(key => {
-                        const [pid, pUnit] = key.split('|');
-                        if (pid === selectedProduct.id && pUnit !== defaultUnit) {
-                          rowUnitOptions.push({ value: pUnit, label: `${pUnit} (Custom)` });
-                        }
-                      });
+                      Object.keys(customer.custom_prices).forEach(key => { const [pid, pUnit] = key.split('|'); if (pid === selectedProduct.id && pUnit !== defaultUnit) { rowUnitOptions.push({ value: pUnit, label: `${pUnit} (Custom)` }); } });
                     }
-
-                    if (safeItemUnit && !rowUnitOptions.find(opt => opt.value === safeItemUnit)) {
-                      rowUnitOptions.push({ value: safeItemUnit, label: safeItemUnit });
-                    }
+                    if (safeItemUnit && !rowUnitOptions.find(opt => opt.value === safeItemUnit)) { rowUnitOptions.push({ value: safeItemUnit, label: safeItemUnit }); }
                   } else {
                     rowUnitOptions = Array.isArray(UNIT_OPTIONS) ? UNIT_OPTIONS : [];
-                    if (safeItemUnit && !rowUnitOptions.find(opt => opt.value === safeItemUnit)) {
-                      rowUnitOptions.push({ value: safeItemUnit, label: safeItemUnit });
-                    }
+                    if (safeItemUnit && !rowUnitOptions.find(opt => opt.value === safeItemUnit)) { rowUnitOptions.push({ value: safeItemUnit, label: safeItemUnit }); }
                   }
 
                   const isPredicted = item.isAutoFilled;
-                  const rowClass = isPredicted 
-                    ? 'bg-indigo-50/40 border-indigo-200 text-indigo-700' 
-                    : (!item.itemId && item.rawSearchString ? 'bg-amber-50/30 border-amber-100' : 'border-gray-100');
+                  const rowClass = isPredicted ? 'bg-indigo-50/40 border-indigo-200 text-indigo-700' : (!item.itemId && item.rawSearchString ? 'bg-amber-50/30 border-amber-100' : 'border-gray-100');
 
                   return (
                     <tr className={`border-b font-bold transition-colors ${rowClass}`} key={`${item.itemId}-${index}`}>
@@ -1090,68 +739,23 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                         
                         {isPredicted && (
                           <div className="ml-6 mt-1 flex items-center">
-                            <button 
-                              onClick={() => {
-                                const next = [...items];
-                                if(next[index]) next[index].isAutoFilled = false;
-                                setItems(next);
-                              }}
-                              className="text-[9px] font-black uppercase tracking-widest bg-indigo-200 text-indigo-800 px-2 py-1 rounded shadow-sm hover:bg-indigo-300 transition-colors flex items-center"
-                              type="button"
-                            >
-                              <Check size={10} className="mr-1" /> Verify Match
-                            </button>
+                            <button onClick={() => { const next = [...items]; if(next[index]) next[index].isAutoFilled = false; setItems(next); }} className="text-[9px] font-black uppercase tracking-widest bg-indigo-200 text-indigo-800 px-2 py-1 rounded shadow-sm hover:bg-indigo-300 transition-colors flex items-center" type="button"><Check size={10} className="mr-1" /> Verify Match</button>
                           </div>
                         )}
-
-                        {item.rawSearchString && item.itemId && !isPredicted && (
-                          <p className="text-[9px] text-blue-400 font-medium ml-6 mt-1 flex items-center">
-                            <BrainCircuit size={10} className="mr-1" /> Predicted from: "{item.rawSearchString}"
-                          </p>
-                        )}
-
+                        {item.rawSearchString && item.itemId && !isPredicted && (<p className="text-[9px] text-blue-400 font-medium ml-6 mt-1 flex items-center"><BrainCircuit size={10} className="mr-1" /> Predicted from: "{item.rawSearchString}"</p>)}
                         {!item.itemId && item.suggestions && item.suggestions.length > 0 && (
                           <div className="ml-6 mt-2 mb-1 p-2.5 bg-amber-50 border border-amber-200 rounded-lg shadow-sm">
-                            <p className="text-[9px] font-black uppercase tracking-widest text-amber-700 mb-2 flex items-center">
-                              <AlertTriangle size={12} className="mr-1.5" /> Did you mean?
-                            </p>
+                            <p className="text-[9px] font-black uppercase tracking-widest text-amber-700 mb-2 flex items-center"><AlertTriangle size={12} className="mr-1.5" /> Did you mean?</p>
                             <div className="flex flex-wrap gap-2">
                               {item.suggestions.map((sugg) => {
                                 const suggName = String(sugg?.Name || sugg?.name || sugg?.Items || '');
                                 const suggUnit = String(sugg?.Unit || sugg?.unit || '箱');
-                                return (
-                                  <button
-                                    key={sugg.id}
-                                    type="button"
-                                    onClick={() => {
-                                      const nextItems = [...items];
-                                      if(nextItems[index]) {
-                                        nextItems[index] = {
-                                          ...nextItems[index],
-                                          itemId: sugg.id,
-                                          name: suggName,
-                                          unit: suggUnit,
-                                          unitPrice: getSafePrice(sugg, suggUnit),
-                                          suggestions: [], 
-                                          originalPredictedId: sugg.id
-                                        };
-                                      }
-                                      setItems(nextItems);
-                                    }}
-                                    className="text-[11px] bg-white border border-amber-300 text-amber-900 font-bold px-2 py-1 rounded shadow-sm hover:bg-amber-200 transition-colors"
-                                  >
-                                    {suggName}
-                                  </button>
-                                );
+                                return (<button key={sugg.id} type="button" onClick={() => { const nextItems = [...items]; if(nextItems[index]) { nextItems[index] = { ...nextItems[index], itemId: sugg.id, name: suggName, unit: suggUnit, unitPrice: getSafePrice(sugg, suggUnit), suggestions: [], originalPredictedId: sugg.id }; } setItems(nextItems); }} className="text-[11px] bg-white border border-amber-300 text-amber-900 font-bold px-2 py-1 rounded shadow-sm hover:bg-amber-200 transition-colors">{suggName}</button>);
                               })}
                             </div>
                           </div>
                         )}
-                        {!item.itemId && item.rawSearchString && (!item.suggestions || item.suggestions.length === 0) && (
-                          <p className="text-[9px] text-amber-500 font-medium ml-6 mt-1 flex items-center">
-                            <AlertTriangle size={10} className="mr-1" /> No matches found for "{item.rawSearchString}"
-                          </p>
-                        )}
+                        {!item.itemId && item.rawSearchString && (!item.suggestions || item.suggestions.length === 0) && (<p className="text-[9px] text-amber-500 font-medium ml-6 mt-1 flex items-center"><AlertTriangle size={10} className="mr-1" /> No matches found for "{item.rawSearchString}"</p>)}
                       </td>
                       <td className="p-2 align-top pt-4">
                         <select className={`w-full border-none text-center text-xs font-bold focus:ring-0 bg-transparent m-0 cursor-pointer ${isPredicted ? 'text-indigo-600' : ''}`} onChange={(event) => { const nextItems = [...items]; const newUnit = event.target.value; if(nextItems[index]) { nextItems[index].unit = newUnit; const product = safeInventory.find(p => p?.id === nextItems[index].itemId); if (product) { nextItems[index].unitPrice = getSafePrice(product, newUnit); } } setItems(nextItems); }} value={safeItemUnit}>
@@ -1169,13 +773,15 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                             type="button"
                             onClick={() => {
                               const product = safeInventory.find((entry) => entry?.id === item.itemId);
-                              if (product) setPriceModal({ index, item, product, hasCustomPrice });
+                              if (product) setPriceModal({ index, item, product, hasIndividualPrice, assignedGroup });
                             }}
                             className={`text-[9px] uppercase tracking-widest mt-0.5 px-2 py-1 rounded transition-colors flex items-center justify-end w-full ${
-                              hasCustomPrice ? (isPredicted ? 'text-indigo-600 hover:bg-indigo-100' : 'text-emerald-500 font-black hover:bg-emerald-50') : 'text-slate-400 font-semibold hover:bg-slate-100'
+                              hasIndividualPrice ? (isPredicted ? 'text-indigo-600 hover:bg-indigo-100' : 'text-emerald-500 font-black hover:bg-emerald-50') 
+                              : hasGroupPrice ? 'text-indigo-500 font-black hover:bg-indigo-50' 
+                              : 'text-slate-400 font-semibold hover:bg-slate-100'
                             }`}
                           >
-                            {hasCustomPrice ? '★ Custom' : <><Settings size={10} className="mr-1" /> Default</>}
+                            {hasIndividualPrice ? '★ Custom (Ind)' : hasGroupPrice ? <><Layers size={10} className="mr-1" /> Custom (Grp)</> : <><Settings size={10} className="mr-1" /> Default</>}
                           </button>
                         )}
                       </td>
@@ -1188,11 +794,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                 })}
               </tbody>
             </table>
-
-            <button className="mt-8 rounded bg-blue-50 px-5 py-2 text-[10px] font-bold uppercase text-blue-600 shadow-sm transition-all hover:bg-blue-100" onClick={() => setItems([...(Array.isArray(items) ? items.filter(Boolean) : []), { itemId: '', name: '', unit: '箱', qty: 1, unitPrice: 0, picked: false, suggestions: [] }])} type="button">
-              + Add Row Manually
-            </button>
-
+            <button className="mt-8 rounded bg-blue-50 px-5 py-2 text-[10px] font-bold uppercase text-blue-600 shadow-sm transition-all hover:bg-blue-100" onClick={() => setItems([...(Array.isArray(items) ? items.filter(Boolean) : []), { itemId: '', name: '', unit: '箱', qty: 1, unitPrice: 0, picked: false, suggestions: [] }])} type="button">+ Add Row Manually</button>
             <div className="mt-12 flex justify-end border-t-2 border-slate-900 pt-6">
               <div className="w-72 space-y-1">
                 <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-gray-400"><span>Sub-Total ($)</span><span className="text-slate-900">${formatMoney(subtotal)}</span></div>
@@ -1214,16 +816,13 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
       </div>
 
       {/* ========================================== */}
-      {/* PRICING MANAGER MODAL */}
+      {/* PRICING MANAGER MODAL - UPDATED CASCADE */}
       {/* ========================================== */}
       {priceModal && (
         <div className="fixed inset-0 z-[6000] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in duration-200">
             <div className="bg-slate-900 px-6 py-4 flex justify-between items-center text-white">
-              <h2 className="text-sm font-black tracking-widest uppercase flex items-center">
-                <Settings size={16} className="mr-2 text-blue-400" />
-                Pricing Manager
-              </h2>
+              <h2 className="text-sm font-black tracking-widest uppercase flex items-center"><Settings size={16} className="mr-2 text-blue-400" /> Pricing Cascade</h2>
               <button onClick={() => setPriceModal(null)} className="hover:bg-slate-800 p-1 rounded-full transition-colors"><X size={18} /></button>
             </div>
             
@@ -1233,36 +832,27 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
               
               <div className="mb-6">
                 <label className="block text-[11px] font-black uppercase tracking-widest text-slate-400 mb-2">Long-Term New Price ($)</label>
-                <input 
-                  type="number" 
-                  step="0.01" 
-                  className="w-full text-2xl font-black text-blue-600 border-2 border-blue-100 rounded-xl p-4 outline-none focus:border-blue-500 bg-blue-50/50"
-                  defaultValue={priceModal.item?.unitPrice}
-                  id="pricingManagerInput"
-                />
+                <input type="number" step="0.01" className="w-full text-2xl font-black text-blue-600 border-2 border-blue-100 rounded-xl p-4 outline-none focus:border-blue-500 bg-blue-50/50" defaultValue={priceModal.item?.unitPrice} id="pricingManagerInput" />
               </div>
 
               <div className="space-y-3">
-                <button 
-                  onClick={() => executePriceSave('CUSTOMER', document.getElementById('pricingManagerInput').value)}
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl flex items-center justify-center transition-colors shadow-lg shadow-emerald-500/20"
-                >
-                  <Sparkles size={16} className="mr-2" /> Save for {String(customer?.name || 'Customer')} Only
-                </button>
-                
-                <button 
-                  onClick={() => executePriceSave('GLOBAL', document.getElementById('pricingManagerInput').value)}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition-colors shadow-lg shadow-blue-500/20"
-                >
-                  Update Global Catalog Price
+                <button onClick={() => executePriceSave('CUSTOMER', document.getElementById('pricingManagerInput').value)} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-4 rounded-xl flex items-center transition-colors shadow-lg shadow-emerald-500/20 text-sm">
+                  <User size={16} className="mr-3 shrink-0" /> <span className="flex-1 text-left">Save for {String(customer?.name || 'Customer')}</span>
                 </button>
 
-                {priceModal.hasCustomPrice && (
-                  <button 
-                    onClick={() => executePriceSave('REMOVE_CUSTOMER')}
-                    className="w-full bg-white border-2 border-red-100 text-red-600 hover:bg-red-50 font-bold py-3 rounded-xl transition-colors"
-                  >
-                    Clear Custom Price
+                {priceModal.assignedGroup && (
+                  <button onClick={() => executePriceSave('GROUP', document.getElementById('pricingManagerInput').value)} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-xl flex items-center transition-colors shadow-lg shadow-indigo-500/20 text-sm">
+                    <Layers size={16} className="mr-3 shrink-0" /> <span className="flex-1 text-left">Save for {priceModal.assignedGroup.name} Group</span>
+                  </button>
+                )}
+                
+                <button onClick={() => executePriceSave('GLOBAL', document.getElementById('pricingManagerInput').value)} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl flex items-center transition-colors shadow-lg shadow-blue-500/20 text-sm">
+                   <Settings size={16} className="mr-3 shrink-0" /> <span className="flex-1 text-left">Update Global Catalog</span>
+                </button>
+
+                {priceModal.hasIndividualPrice && (
+                  <button onClick={() => executePriceSave('REMOVE_CUSTOMER')} className="w-full bg-white border-2 border-red-100 text-red-600 hover:bg-red-50 font-bold py-3 px-4 rounded-xl flex items-center transition-colors text-sm mt-4">
+                    <Trash2 size={16} className="mr-3 shrink-0" /> <span className="flex-1 text-left">Clear Individual Override</span>
                   </button>
                 )}
               </div>
@@ -1294,10 +884,7 @@ export function InvoiceModule({ sys }) {
 
   const handleDeleteInvoice = async (e, invoiceId) => {
     e.stopPropagation(); 
-    
-    const confirmDelete = window.confirm("Are you sure you want to permanently delete this invoice? This cannot be undone.");
-    
-    if (confirmDelete) {
+    if (window.confirm("Are you sure you want to permanently delete this invoice? This cannot be undone.")) {
       const updatedInvoices = safeInvoices.filter(inv => inv?.id !== invoiceId);
       sys.setInvoices(updatedInvoices);
       if (sys.deleteRecord) { await sys.deleteRecord('invoices', invoiceId); }
@@ -1305,74 +892,43 @@ export function InvoiceModule({ sys }) {
   };
 
   const handleStatusChange = (invoiceId, newStatus) => {
-    const updatedInvoices = safeInvoices.map(inv => {
-      if (inv?.id === invoiceId) {
-        return { ...inv, status: newStatus };
-      }
-      return inv;
-    });
+    const updatedInvoices = safeInvoices.map(inv => { if (inv?.id === invoiceId) { return { ...inv, status: newStatus }; } return inv; });
     sys.setInvoices(updatedInvoices);
   };
 
   const filteredInvoices = useMemo(() => {
     let result = [...safeInvoices];
-
     if (searchTerm) {
       const searchLower = String(searchTerm).toLowerCase();
-      result = result.filter(inv => 
-        String(inv?.customer || '').toLowerCase().includes(searchLower) ||
-        String(inv?.number || inv?.id || '').toLowerCase().includes(searchLower)
-      );
+      result = result.filter(inv => String(inv?.customer || '').toLowerCase().includes(searchLower) || String(inv?.number || inv?.id || '').toLowerCase().includes(searchLower));
     }
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
+    const today = new Date(); today.setHours(0, 0, 0, 0);
     result = result.filter(inv => {
-      if (termFilter !== 'All' && String(inv?.paymentTerms) !== termFilter) {
-        return false;
-      }
-
+      if (termFilter !== 'All' && String(inv?.paymentTerms) !== termFilter) return false;
       if (filter === 'All') return true;
       const [year, month, day] = String(inv?.date || '').split('-').map(Number);
       if (!year || !month || !day) return false;
       const invDate = new Date(year, month - 1, day);
       if (isNaN(invDate.getTime())) return false; 
       invDate.setHours(0,0,0,0);
-      
       if (filter === 'Today') return invDate.getTime() === today.getTime();
-      if (filter === 'This Week') {
-        const diffDays = Math.ceil(Math.abs(today - invDate) / (1000 * 60 * 60 * 24));
-        return diffDays <= 7; 
-      }
+      if (filter === 'This Week') { const diffDays = Math.ceil(Math.abs(today - invDate) / (1000 * 60 * 60 * 24)); return diffDays <= 7; }
       if (filter === 'This Month') return invDate.getMonth() === today.getMonth() && invDate.getFullYear() === today.getFullYear();
       return true;
     });
 
     result.sort((a, b) => {
-      const dateA = new Date(a?.date || 0).getTime() || 0;
-      const dateB = new Date(b?.date || 0).getTime() || 0;
-      const numA = String(a?.number || a?.id || '');
-      const numB = String(b?.number || b?.id || '');
-      const totA = Number(a?.total) || 0;
-      const totB = Number(b?.total) || 0;
-      const custA = String(a?.customer || '');
-      const custB = String(b?.customer || '');
-
+      const dateA = new Date(a?.date || 0).getTime() || 0; const dateB = new Date(b?.date || 0).getTime() || 0;
+      const numA = String(a?.number || a?.id || ''); const numB = String(b?.number || b?.id || '');
+      const totA = Number(a?.total) || 0; const totB = Number(b?.total) || 0;
+      const custA = String(a?.customer || ''); const custB = String(b?.customer || '');
       switch (sortOption) {
-        case 'date_asc': return dateA - dateB;
-        case 'number_desc': return numB.localeCompare(numA, undefined, { numeric: true });
-        case 'number_asc': return numA.localeCompare(numB, undefined, { numeric: true });
-        case 'total_desc': return totB - totA;
-        case 'total_asc': return totA - totB;
-        case 'customer_asc': return custA.localeCompare(custB);
-        case 'customer_desc': return custB.localeCompare(custA);
-        case 'date_desc':
-        default:
-          return dateB - dateA;
+        case 'date_asc': return dateA - dateB; case 'number_desc': return numB.localeCompare(numA, undefined, { numeric: true });
+        case 'number_asc': return numA.localeCompare(numB, undefined, { numeric: true }); case 'total_desc': return totB - totA;
+        case 'total_asc': return totA - totB; case 'customer_asc': return custA.localeCompare(custB);
+        case 'customer_desc': return custB.localeCompare(custA); case 'date_desc': default: return dateB - dateA;
       }
     });
-
     return result;
   }, [safeInvoices, filter, termFilter, searchTerm, sortOption]);
 
@@ -1380,58 +936,34 @@ export function InvoiceModule({ sys }) {
 
   return (
     <div className="p-8 h-full overflow-y-auto relative print:p-0 print:overflow-visible">
-      
       <div className={(previewInvoice || isGeneratorOpen) ? "print:hidden" : "block"}>
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-2xl font-semibold text-slate-900 flex items-center">
-            <FileText className="mr-3 text-blue-600" size={28} /> Invoice History
-          </h1>
-          <button className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-medium shadow-lg hover:bg-blue-700" onClick={() => setIsGeneratorOpen(true)}>
-            <Plus className="mr-2" size={18} /> New Invoice
-          </button>
+          <h1 className="text-2xl font-semibold text-slate-900 flex items-center"><FileText className="mr-3 text-blue-600" size={28} /> Invoice History</h1>
+          <button className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-medium shadow-lg hover:bg-blue-700" onClick={() => setIsGeneratorOpen(true)}><Plus className="mr-2" size={18} /> New Invoice</button>
         </div>
 
         <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
           <div className="flex flex-wrap justify-between items-center border-b bg-slate-50 p-4 gap-4">
-            
             <div className="flex bg-white rounded-lg p-1 border shadow-sm">
               {['All', 'Today', 'This Week', 'This Month'].map((opt) => (
-                <button key={opt} onClick={() => setFilter(opt)} className={`px-4 py-1.5 text-[11px] font-black uppercase rounded-md ${filter === opt ? 'bg-slate-800 text-white' : 'text-slate-500'}`}>
-                  {opt}
-                </button>
+                <button key={opt} onClick={() => setFilter(opt)} className={`px-4 py-1.5 text-[11px] font-black uppercase rounded-md ${filter === opt ? 'bg-slate-800 text-white' : 'text-slate-500'}`}>{opt}</button>
               ))}
             </div>
 
             <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-              
               <div className="relative flex items-center bg-white border rounded-xl shadow-sm px-3 py-2 w-full sm:w-36 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
                 <Filter className="text-slate-400 mr-2 shrink-0" size={16} />
-                <select
-                  className="w-full bg-transparent outline-none text-xs font-bold text-slate-700 cursor-pointer appearance-none"
-                  value={termFilter}
-                  onChange={(e) => setTermFilter(e.target.value)}
-                >
-                  <option value="All">All Terms</option>
-                  <option value="cod">C.O.D</option>
-                  <option value="30_days">30 Days</option>
+                <select className="w-full bg-transparent outline-none text-xs font-bold text-slate-700 cursor-pointer appearance-none" value={termFilter} onChange={(e) => setTermFilter(e.target.value)}>
+                  <option value="All">All Terms</option><option value="cod">C.O.D</option><option value="30_days">30 Days</option>
                 </select>
               </div>
 
               <div className="relative flex items-center bg-white border rounded-xl shadow-sm px-3 py-2 w-full sm:w-48 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
                 <ArrowUpDown className="text-slate-400 mr-2 shrink-0" size={16} />
-                <select
-                  className="w-full bg-transparent outline-none text-xs font-bold text-slate-700 cursor-pointer appearance-none"
-                  value={sortOption}
-                  onChange={(e) => setSortOption(e.target.value)}
-                >
-                  <option value="date_desc">Date (Newest First)</option>
-                  <option value="date_asc">Date (Oldest First)</option>
-                  <option value="number_desc">Invoice No. (Highest)</option>
-                  <option value="number_asc">Invoice No. (Lowest)</option>
-                  <option value="total_desc">Amount (Highest)</option>
-                  <option value="total_asc">Amount (Lowest)</option>
-                  <option value="customer_asc">Customer (A-Z)</option>
-                  <option value="customer_desc">Customer (Z-A)</option>
+                <select className="w-full bg-transparent outline-none text-xs font-bold text-slate-700 cursor-pointer appearance-none" value={sortOption} onChange={(e) => setSortOption(e.target.value)}>
+                  <option value="date_desc">Date (Newest First)</option><option value="date_asc">Date (Oldest First)</option><option value="number_desc">Invoice No. (Highest)</option>
+                  <option value="number_asc">Invoice No. (Lowest)</option><option value="total_desc">Amount (Highest)</option><option value="total_asc">Amount (Lowest)</option>
+                  <option value="customer_asc">Customer (A-Z)</option><option value="customer_desc">Customer (Z-A)</option>
                 </select>
               </div>
 
@@ -1440,19 +972,12 @@ export function InvoiceModule({ sys }) {
                 <input type="text" placeholder="Search..." className="w-full bg-transparent outline-none text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
               </div>
             </div>
-
           </div>
 
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="text-xs uppercase tracking-widest text-slate-500 font-semibold border-b">
-                <th className="p-5 pl-8">Invoice No.</th>
-                <th className="p-5">Date</th>
-                <th className="p-5">Customer</th>
-                <th className="p-5 text-center">Terms</th>
-                <th className="p-5 text-right">Total</th>
-                <th className="p-5 text-center">Status</th>
-                <th className="p-5 text-center w-20">Delete</th>
+                <th className="p-5 pl-8">Invoice No.</th><th className="p-5">Date</th><th className="p-5">Customer</th><th className="p-5 text-center">Terms</th><th className="p-5 text-right">Total</th><th className="p-5 text-center">Status</th><th className="p-5 text-center w-20">Delete</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
@@ -1461,52 +986,21 @@ export function InvoiceModule({ sys }) {
                   <td className="p-5 pl-8 font-mono font-bold text-blue-600">#{String(inv?.number || inv?.id || '')}</td>
                   <td className="p-5 text-slate-500">{String(inv?.date || '')}</td>
                   <td className="p-5 text-slate-800">{String(inv?.customer || '')}</td>
-                  
-                  <td className="p-5 text-center">
-                    <span className="text-xs font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-1 rounded-md whitespace-nowrap">
-                      {inv?.paymentTerms === 'cod' ? 'C.O.D' : '30 Days'}
-                    </span>
-                  </td>
-
+                  <td className="p-5 text-center"><span className="text-xs font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-1 rounded-md whitespace-nowrap">{inv?.paymentTerms === 'cod' ? 'C.O.D' : '30 Days'}</span></td>
                   <td className="p-5 text-right font-black text-slate-900">${formatMoney(inv?.total)}</td>
-                  
                   <td className="p-5 text-center">
                     <div className="relative inline-flex items-center" onClick={(e) => e.stopPropagation()}>
-                      <select
-                        value={inv?.status || 'Unpaid'}
-                        onChange={(e) => handleStatusChange(inv.id, e.target.value)}
-                        className={`appearance-none cursor-pointer pl-8 pr-8 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest outline-none transition-all ${
-                          (inv?.status || 'Unpaid') === 'Paid' 
-                            ? 'bg-emerald-100 text-emerald-700 border border-emerald-200 hover:bg-emerald-200' 
-                            : 'bg-orange-100 text-orange-700 border border-orange-200 hover:bg-orange-200'
-                        }`}
-                      >
-                        <option value="Paid">PAID</option>
-                        <option value="Unpaid">UNPAID</option>
+                      <select value={inv?.status || 'Unpaid'} onChange={(e) => handleStatusChange(inv.id, e.target.value)} className={`appearance-none cursor-pointer pl-8 pr-8 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest outline-none transition-all ${(inv?.status || 'Unpaid') === 'Paid' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200 hover:bg-emerald-200' : 'bg-orange-100 text-orange-700 border border-orange-200 hover:bg-orange-200'}`}>
+                        <option value="Paid">PAID</option><option value="Unpaid">UNPAID</option>
                       </select>
-                      <div className="absolute left-2.5 pointer-events-none">
-                        {(inv?.status || 'Unpaid') === 'Paid' ? <CheckCircle size={12} className="text-emerald-600" /> : <AlertCircle size={12} className="text-orange-600" />}
-                      </div>
-                      <div className="absolute right-2.5 pointer-events-none">
-                        <ChevronDown size={12} className={(inv?.status || 'Unpaid') === 'Paid' ? "text-emerald-600" : "text-orange-600"} />
-                      </div>
+                      <div className="absolute left-2.5 pointer-events-none">{(inv?.status || 'Unpaid') === 'Paid' ? <CheckCircle size={12} className="text-emerald-600" /> : <AlertCircle size={12} className="text-orange-600" />}</div>
+                      <div className="absolute right-2.5 pointer-events-none"><ChevronDown size={12} className={(inv?.status || 'Unpaid') === 'Paid' ? "text-emerald-600" : "text-orange-600"} /></div>
                     </div>
                   </td>
-
-                  <td className="p-5 text-center">
-                    <button onClick={(e) => handleDeleteInvoice(e, inv?.id)} className="p-2 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all">
-                      <Trash2 size={18} />
-                    </button>
-                  </td>
+                  <td className="p-5 text-center"><button onClick={(e) => handleDeleteInvoice(e, inv?.id)} className="p-2 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"><Trash2 size={18} /></button></td>
                 </tr>
               ))}
-              {paginatedInvoices.length === 0 && (
-                <tr>
-                  <td colSpan="7" className="p-12 text-center text-sm font-bold text-slate-400">
-                    No invoices match your current search and sorting criteria.
-                  </td>
-                </tr>
-              )}
+              {paginatedInvoices.length === 0 && (<tr><td colSpan="7" className="p-12 text-center text-sm font-bold text-slate-400">No invoices match your current search and sorting criteria.</td></tr>)}
             </tbody>
           </table>
         </div>
