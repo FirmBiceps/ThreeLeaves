@@ -28,12 +28,25 @@ function ProductSearchSelect({ value, inventory, onChange, isAutoFilled }) {
 
   const safeInventory = Array.isArray(inventory) ? inventory : [];
   const selectedProduct = safeInventory.find((entry) => entry?.id === value);
-  const displayName = selectedProduct ? String(selectedProduct.Name || selectedProduct.name || selectedProduct.Items || '') : '';
+  
+  // Helper to format the display name with SKU if it exists
+  const getDisplayName = (item) => {
+    if (!item) return '';
+    const name = String(item.Name || item.name || item.Items || 'Unnamed Product');
+    const sku = item.SKU || item.sku;
+    return sku ? `[${sku}] ${name}` : name;
+  };
+
+  const displayName = getDisplayName(selectedProduct);
 
   const filteredInventory = safeInventory.filter((item) => {
     if (!item) return false;
     const itemName = String(item.Name || item.name || item.Items || '').toLowerCase();
-    return itemName.includes(String(searchTerm).toLowerCase());
+    const itemSku = String(item.SKU || item.sku || '').toLowerCase(); // NEW: Include SKU in filter
+    const searchLower = String(searchTerm).toLowerCase();
+    
+    // Returns true if search term matches the name OR the sku
+    return itemName.includes(searchLower) || itemSku.includes(searchLower);
   });
 
   return (
@@ -44,21 +57,20 @@ function ProductSearchSelect({ value, inventory, onChange, isAutoFilled }) {
           onClick={() => { setIsOpen(true); setSearchTerm(''); }}
           className={`w-full text-left text-xs font-bold p-1 border border-transparent rounded hover:bg-slate-200 transition-colors focus:outline-none ${displayName ? (isAutoFilled ? 'text-indigo-600' : 'text-slate-900') : 'text-slate-400'}`}
         >
-          {displayName || '- Search Product -'}
+          {displayName || '- Search Product or SKU -'}
         </button>
       ) : (
         <div className="absolute z-[5000] top-0 left-0 w-72 bg-white border border-slate-300 rounded shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-100">
           <div className="flex items-center p-2 border-b border-slate-200 bg-slate-50">
             <Search size={14} className="text-slate-400 ml-1 mr-2 shrink-0" />
-            <input autoFocus type="text" className="w-full bg-transparent border-none text-xs font-bold text-slate-800 p-1 focus:ring-0 placeholder:text-slate-400 outline-none" placeholder="Type to search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+            <input autoFocus type="text" className="w-full bg-transparent border-none text-xs font-bold text-slate-800 p-1 focus:ring-0 placeholder:text-slate-400 outline-none" placeholder="Type name or SKU..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
           </div>
           <div className="max-h-52 overflow-y-auto">
             {filteredInventory.length > 0 ? (
               filteredInventory.map((item) => {
-                const itemName = String(item?.Name || item?.name || item?.Items || 'Unnamed Product');
                 return (
                   <button key={item.id} type="button" className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 border-b border-slate-100 last:border-0 transition-colors" onClick={() => { onChange(item.id); setIsOpen(false); }}>
-                    {itemName}
+                    {getDisplayName(item)}
                   </button>
                 );
               })
@@ -180,8 +192,7 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
               <div className="flex items-end w-full text-[14px] font-bold"><span className="shrink-0 mr-2 text-black">ADDRESS:</span><span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[12px] tracking-tighter" style={{ fontFamily: CJK_FONT }}>{String(customerAddress)}</span></div>
             </div>
             <div className="w-[180px] shrink-0 flex flex-col items-start pl-4 pt-1">
-              <h2 className="text-[22px] font-bold tracking-[0.4em] leading-none mb-1" style={{ fontFamily: CJK_FONT }}>發票</h2>
-              <h3 className="text-[15px] font-black tracking-wide uppercase mb-2 text-black">TAX INVOICE</h3>
+              <h2 className="text-[22px] font-bold tracking-[0.4em] leading-none mb-1" style={{ fontFamily: CJK_FONT }}>發票</h2><h3 className="text-[15px] font-black tracking-wide uppercase mb-2 text-black">TAX INVOICE</h3>
               
               {/* NEW: Dynamic Barcode Injection */}
               {isSpecialFormat && (
@@ -328,7 +339,7 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
               )}
 
               <div className="w-full flex flex-col gap-3 mt-auto mb-2">
-                <div className="flex items-baseline"><span className="font-bold w-[50px] shrink-0 text-black text-[15px]">No.</span><span className="text-red-600 font-bold tracking-wider text-[17px] leading-none">{invoiceNumber}</span></div>
+                <div className="flex items-baseline"><span className="font-bold w-[50px] shrink-0 text-black text-[15px]">No.</span><span className="text-red-600 font-bold tracking-wider text-[17px] leading-none">{String(invoice?.number || invoice?.id || '')}</span></div>
                 <div className="flex items-baseline"><span className="font-bold w-[50px] shrink-0 text-black text-[15px]">Term:</span><span className="text-red-600 font-bold text-[16px] leading-none">{invoice?.paymentTerms === 'cod' ? 'COD' : '30 Days'}</span></div>
               </div>
             </div>
@@ -455,15 +466,21 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
   const getSafePrice = (product, unit = '箱') => {
     if (!product) return 0;
     const ruleKey = `${product.id}|${unit}`;
+    
+    // 1. Individual Price Check
     if (customer?.custom_prices && typeof customer.custom_prices === 'object' && customer.custom_prices[ruleKey] !== undefined) {
       return Number(customer.custom_prices[ruleKey]) || 0;
     }
+    
+    // 2. Group Price Check
     if (customer?.pricing_group_id) {
       const assignedGroup = safeGroups.find(g => g.id === customer.pricing_group_id);
       if (assignedGroup?.prices && typeof assignedGroup.prices === 'object' && assignedGroup.prices[ruleKey] !== undefined) {
         return Number(assignedGroup.prices[ruleKey]) || 0;
       }
     }
+    
+    // 3. Global Check
     let price = product.Price || product.unitPrice || product['Unit Price (SG)'] || 0;
     return Number(price) || 0;
   };
@@ -886,7 +903,7 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
       </div>
 
       {/* ========================================== */}
-      {/* PRICING MANAGER MODAL */}
+      {/* PRICING MANAGER MODAL - UPDATED CASCADE */}
       {/* ========================================== */}
       {priceModal && (
         <div className="fixed inset-0 z-[6000] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
