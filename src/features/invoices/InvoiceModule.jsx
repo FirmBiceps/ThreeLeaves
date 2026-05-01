@@ -29,7 +29,6 @@ function ProductSearchSelect({ value, inventory, onChange, isAutoFilled }) {
   const safeInventory = Array.isArray(inventory) ? inventory : [];
   const selectedProduct = safeInventory.find((entry) => entry?.id === value);
   
-  // Helper to format the display name with SKU if it exists
   const getDisplayName = (item) => {
     if (!item) return '';
     const name = String(item.Name || item.name || item.Items || 'Unnamed Product');
@@ -42,10 +41,8 @@ function ProductSearchSelect({ value, inventory, onChange, isAutoFilled }) {
   const filteredInventory = safeInventory.filter((item) => {
     if (!item) return false;
     const itemName = String(item.Name || item.name || item.Items || '').toLowerCase();
-    const itemSku = String(item.SKU || item.sku || '').toLowerCase(); // NEW: Include SKU in filter
+    const itemSku = String(item.SKU || item.sku || '').toLowerCase();
     const searchLower = String(searchTerm).toLowerCase();
-    
-    // Returns true if search term matches the name OR the sku
     return itemName.includes(searchLower) || itemSku.includes(searchLower);
   });
 
@@ -144,6 +141,31 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
   const safeInventory = Array.isArray(sys?.inventory) ? sys.inventory : [];
   const safeItems = Array.isArray(items) ? items.filter(Boolean) : [];
 
+  // DYNAMIC A4 FONT SIZING ENGINE
+  const itemCount = safeItems.length;
+  let baseText = "text-[15px]";
+  let cellPad = "py-1";
+  let descPad = "pt-1.5";
+  let totalText = "text-[17px]";
+  let subtotalText = "text-[15px]";
+  let gstText = "text-[14px]";
+
+  if (itemCount > 20) {
+    baseText = "text-[11px] leading-tight";
+    cellPad = "py-0";
+    descPad = "pt-0.5";
+    totalText = "text-[14px]";
+    subtotalText = "text-[12px]";
+    gstText = "text-[12px]";
+  } else if (itemCount > 14) {
+    baseText = "text-[13px] leading-tight";
+    cellPad = "py-0.5";
+    descPad = "pt-1";
+    totalText = "text-[15px]";
+    subtotalText = "text-[13px]";
+    gstText = "text-[13px]";
+  }
+
   return (
     <div className="fixed inset-0 z-[3000] overflow-y-auto bg-slate-950/90 print:static print:block print:bg-white print:p-0 print:backdrop-filter-none">
       <style type="text/css">
@@ -178,7 +200,6 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
                     <div className="text-[#d55e2d] font-bold text-[10.5px] leading-tight tracking-tight"><p className="whitespace-nowrap">CO.REG NO.53033969B &nbsp;&nbsp; GST REG NO. M90355440L</p><p className="whitespace-nowrap">280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p><p className="whitespace-nowrap">HP: 97578869 (Mr Ye) &nbsp;&nbsp; HP: 91113505 (Min) &nbsp;&nbsp; Email: 3leaves.sg@gmail.com</p></div>
                   </div>
                 </div>
-                {/* NEW: PO Number injected top right of company section if special format */}
                 {isSpecialFormat && poNumber && (
                   <div className="text-[14px] font-bold tracking-tight text-slate-800 pt-2 whitespace-nowrap">
                     PO NO. {poNumber}
@@ -194,7 +215,6 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
             <div className="w-[180px] shrink-0 flex flex-col items-start pl-4 pt-1">
               <h2 className="text-[22px] font-bold tracking-[0.4em] leading-none mb-1" style={{ fontFamily: CJK_FONT }}>發票</h2><h3 className="text-[15px] font-black tracking-wide uppercase mb-2 text-black">TAX INVOICE</h3>
               
-              {/* NEW: Dynamic Barcode Injection */}
               {isSpecialFormat && (
                 <div className="w-full flex justify-start mb-4">
                   <img src={`https://bwipjs-api.metafloor.com/?bcid=code128&text=${invoiceNumber}&scale=3&includetext=true&textxalign=center&textsize=10`} alt="Barcode" className="max-w-full h-[40px] object-contain" />
@@ -207,37 +227,37 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
               </div>
             </div>
           </div>
-          <table className="w-full h-full flex-grow text-[15px] border-2 border-black text-center mb-0 leading-tight mt-2" style={{ fontFamily: CJK_FONT }}>
+          
+          <table className={`w-full h-full flex-grow border-2 border-black text-center mb-0 mt-2 ${baseText}`} style={{ fontFamily: CJK_FONT }}>
             <thead className="border-b-2 border-black">
               <tr className="font-bold bg-white text-[14px]"><th className="py-2 px-1 w-12 text-center">NO.</th><th className="py-2 px-2 text-left">DESCRIPTION</th><th className="py-2 px-1 w-24 text-center">QUANTITY</th><th className="py-2 px-1 w-32 text-center">UNIT PRICE</th><th className="py-2 px-1 w-32 text-center">AMOUNT</th></tr>
             </thead>
             <tbody style={{ fontFamily: CJK_FONT }}>
               {safeItems.map((item, idx) => {
                 const foundProduct = safeInventory.find((entry) => entry?.id === item?.itemId);
-                const productName = foundProduct ? String(foundProduct.Name || foundProduct.name || foundProduct.Items || '') : String(item?.Name || item?.name || '-');
+                const productName = foundProduct ? String(foundProduct.Name || foundProduct.name || foundProduct.Items || '') : String(item?.name || item?.Items || '-');
                 return (
                   <tr key={idx} className="align-top text-slate-900" style={{ fontFamily: CJK_FONT }}>
-                    <td className="px-1 py-1 text-center font-normal">{idx + 1}</td>
-                    <td className="px-1 py-1 text-left pl-2 leading-none pt-1.5 font-normal" style={{ fontFamily: CJK_FONT }}>{productName}</td>
-                    <td className="px-1 py-1 text-center font-normal" style={{ fontFamily: CJK_FONT }}>{String(item?.qty || item?.quantity || 0)} {String(item?.unit || item?.Unit || '')}</td>
-                    <td className="px-1 py-1 text-center font-normal">${formatMoney(item?.unitPrice)}</td>
-                    <td className="px-1 py-1 text-center font-normal">${formatMoney((Number(item?.qty || item?.quantity) || 0) * (Number(item?.unitPrice) || 0))}</td>
+                    <td className={`px-1 text-center font-normal ${cellPad}`}>{idx + 1}</td>
+                    <td className={`px-1 text-left pl-2 font-normal ${cellPad} ${descPad}`} style={{ fontFamily: CJK_FONT }}>{productName}</td>
+                    <td className={`px-1 text-center font-normal ${cellPad}`} style={{ fontFamily: CJK_FONT }}>{String(item?.qty || item?.quantity || 0)} {String(item?.unit || item?.Unit || '')}</td>
+                    <td className={`px-1 text-center font-normal ${cellPad}`}>${formatMoney(item?.unitPrice)}</td>
+                    <td className={`px-1 text-center font-normal ${cellPad}`}>${formatMoney((Number(item?.qty || item?.quantity) || 0) * (Number(item?.unitPrice) || 0))}</td>
                   </tr>
                 );
               })}
               <tr className="h-full"><td></td><td></td><td></td><td></td><td></td></tr>
               
               <tr className="border-t-2 border-black font-bold h-[28px]">
-                {/* NEW: Car Plate Box inserted into the previously empty bottom-left space */}
                 <td colSpan="3" rowSpan="3" className="bg-white border-r-2 border-black p-2 align-top text-left">
                   {isSpecialFormat && carPlateNo && (
-                    <div className="font-bold text-[14px] leading-tight">Car<br/>Plate No: <span className="font-normal">{carPlateNo}</span></div>
+                    <div className={`${subtotalText} font-bold leading-tight`}>Car<br/>Plate No: <span className="font-normal">{carPlateNo}</span></div>
                   )}
                 </td>
-                <td className="p-1 text-center text-[14px]">SUBTOTAL</td><td className="p-1 text-center text-[15px]">${formatMoney(subtotal)}</td>
+                <td className={`p-1 text-center ${gstText}`}>SUBTOTAL</td><td className={`p-1 text-center ${subtotalText}`}>${formatMoney(subtotal)}</td>
               </tr>
-              <tr className="font-bold h-[28px] border-t border-black"><td className="p-1 text-center text-[14px]">9% GST</td><td className="p-1 text-center text-[15px]">${formatMoney(gst)}</td></tr>
-              <tr className="font-bold h-[32px] border-t-2 border-black"><td className="p-1 text-center text-[16px]">TOTAL</td><td className="p-1 text-center text-[17px]">${formatMoney(total)}</td></tr>
+              <tr className="font-bold h-[28px] border-t border-black"><td className={`p-1 text-center ${gstText}`}>9% GST</td><td className={`p-1 text-center ${subtotalText}`}>${formatMoney(gst)}</td></tr>
+              <tr className="font-bold h-[32px] border-t-2 border-black"><td className="p-1 text-center text-[16px]">TOTAL</td><td className={`p-1 text-center ${totalText}`}>${formatMoney(total)}</td></tr>
             </tbody>
           </table>
           <div className="flex w-full mt-4 pt-2 items-end shrink-0">
@@ -274,11 +294,35 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
   const gst = subtotal * 0.09;
   const total = subtotal + gst;
 
-  // Extract special fields
   const isSpecialFormat = invoice.isSpecialFormat;
   const poNumber = invoice.poNumber;
   const carPlateNo = invoice.carPlateNo;
   const invoiceNumber = String(invoice?.number || invoice?.id || '');
+
+  // DYNAMIC A4 FONT SIZING ENGINE
+  const itemCount = safeItems.length;
+  let baseText = "text-[15px]";
+  let cellPad = "py-1";
+  let descPad = "pt-1.5";
+  let totalText = "text-[17px]";
+  let subtotalText = "text-[15px]";
+  let gstText = "text-[14px]";
+
+  if (itemCount > 20) {
+    baseText = "text-[11px] leading-tight";
+    cellPad = "py-0";
+    descPad = "pt-0.5";
+    totalText = "text-[14px]";
+    subtotalText = "text-[12px]";
+    gstText = "text-[12px]";
+  } else if (itemCount > 14) {
+    baseText = "text-[13px] leading-tight";
+    cellPad = "py-0.5";
+    descPad = "pt-1";
+    totalText = "text-[15px]";
+    subtotalText = "text-[13px]";
+    gstText = "text-[13px]";
+  }
 
   return (
     <div className="fixed inset-0 z-[5000] overflow-y-auto bg-slate-950/90 print:static print:block print:bg-white print:p-0 print:backdrop-filter-none">
@@ -315,7 +359,6 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
                     <div className="text-[#d55e2d] font-bold text-[10.5px] leading-tight tracking-tight"><p className="whitespace-nowrap">CO.REG NO.53033969B &nbsp;&nbsp; GST REG NO. M90355440L</p><p className="whitespace-nowrap">280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p><p className="whitespace-nowrap">HP: 97578869 (Mr Ye) &nbsp;&nbsp; HP: 91113505 (Min) &nbsp;&nbsp; Email: 3leaves.sg@gmail.com</p></div>
                   </div>
                 </div>
-                {/* NEW: PO Number injected top right of company section if special format */}
                 {isSpecialFormat && poNumber && (
                   <div className="text-[14px] font-bold tracking-tight text-slate-800 pt-2 whitespace-nowrap">
                     PO NO. {poNumber}
@@ -331,7 +374,6 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
             <div className="w-[180px] shrink-0 flex flex-col items-start pl-4 pt-1">
               <h2 className="text-[22px] font-bold tracking-[0.4em] leading-none mb-1" style={{ fontFamily: CJK_FONT }}>發票</h2><h3 className="text-[15px] font-black tracking-wide uppercase mb-2 text-black">TAX INVOICE</h3>
               
-              {/* NEW: Dynamic Barcode Injection */}
               {isSpecialFormat && (
                 <div className="w-full flex justify-start mb-4">
                   <img src={`https://bwipjs-api.metafloor.com/?bcid=code128&text=${invoiceNumber}&scale=3&includetext=true&textxalign=center&textsize=10`} alt="Barcode" className="max-w-full h-[40px] object-contain" />
@@ -344,37 +386,39 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
               </div>
             </div>
           </div>
-          <table className="w-full h-full flex-grow text-[15px] border-2 border-black text-center mb-0 leading-tight mt-2" style={{ fontFamily: CJK_FONT }}>
+          
+          <table className={`w-full h-full flex-grow border-2 border-black text-center mb-0 mt-2 ${baseText}`} style={{ fontFamily: CJK_FONT }}>
             <thead className="border-b-2 border-black">
               <tr className="font-bold bg-white text-[14px]"><th className="py-2 px-1 w-12 text-center">NO.</th><th className="py-2 px-2 text-left">DESCRIPTION</th><th className="py-2 px-1 w-24 text-center">QUANTITY</th><th className="py-2 px-1 w-32 text-center">UNIT PRICE</th><th className="py-2 px-1 w-32 text-center">AMOUNT</th></tr>
             </thead>
             <tbody style={{ fontFamily: CJK_FONT }}>
               {safeItems.map((item, idx) => {
-                const productName = String(item?.name || item?.Items || '-');
+                const foundProduct = safeInventory.find((entry) => entry?.id === item?.itemId);
+                const productName = foundProduct ? String(foundProduct.Name || foundProduct.name || foundProduct.Items || '') : String(item?.name || item?.Items || '-');
                 return (
                   <tr key={idx} className="align-top text-slate-900" style={{ fontFamily: CJK_FONT }}>
-                    <td className="px-1 py-1 text-center font-normal">{idx + 1}</td>
-                    <td className="px-1 py-1 text-left pl-2 leading-none pt-1.5 font-normal" style={{ fontFamily: CJK_FONT }}>{productName}</td>
-                    <td className="px-1 py-1 text-center font-normal" style={{ fontFamily: CJK_FONT }}>{String(item?.qty || item?.quantity || 0)} {String(item?.unit || '')}</td>
-                    <td className="px-1 py-1 text-center font-normal">${formatMoney(item?.unitPrice)}</td>
-                    <td className="px-1 py-1 text-center font-normal">
+                    <td className={`px-1 text-center font-normal ${cellPad}`}>{idx + 1}</td>
+                    <td className={`px-1 text-left pl-2 font-normal ${cellPad} ${descPad}`} style={{ fontFamily: CJK_FONT }}>{productName}</td>
+                    <td className={`px-1 text-center font-normal ${cellPad}`} style={{ fontFamily: CJK_FONT }}>{String(item?.qty || item?.quantity || 0)} {String(item?.unit || '')}</td>
+                    <td className={`px-1 text-center font-normal ${cellPad}`}>${formatMoney(item?.unitPrice)}</td>
+                    <td className={`px-1 text-center font-normal ${cellPad}`}>
                       ${formatMoney((Number(item?.qty || item?.quantity) || 0) * (Number(item?.unitPrice) || 0))}
                     </td>
                   </tr>
                 );
               })}
               <tr className="h-full"><td></td><td></td><td></td><td></td><td></td></tr>
+              
               <tr className="border-t-2 border-black font-bold h-[28px]">
-                {/* NEW: Car Plate Box inserted into the previously empty bottom-left space */}
                 <td colSpan="3" rowSpan="3" className="bg-white border-r-2 border-black p-2 align-top text-left">
                   {isSpecialFormat && carPlateNo && (
-                    <div className="font-bold text-[14px] leading-tight">Car<br/>Plate No: <span className="font-normal">{carPlateNo}</span></div>
+                    <div className={`${subtotalText} font-bold leading-tight`}>Car<br/>Plate No: <span className="font-normal">{carPlateNo}</span></div>
                   )}
                 </td>
-                <td className="p-1 text-center text-[14px]">SUBTOTAL</td><td className="p-1 text-center text-[15px]">${formatMoney(subtotal)}</td>
+                <td className={`p-1 text-center ${gstText}`}>SUBTOTAL</td><td className={`p-1 text-center ${subtotalText}`}>${formatMoney(subtotal)}</td>
               </tr>
-              <tr className="font-bold h-[28px] border-t border-black"><td className="p-1 text-center text-[14px]">9% GST</td><td className="p-1 text-center text-[15px]">${formatMoney(gst)}</td></tr>
-              <tr className="font-bold h-[32px] border-t-2 border-black"><td className="p-1 text-center text-[16px]">TOTAL</td><td className="p-1 text-center text-[17px]">${formatMoney(total)}</td></tr>
+              <tr className="font-bold h-[28px] border-t border-black"><td className={`p-1 text-center ${gstText}`}>9% GST</td><td className={`p-1 text-center ${subtotalText}`}>${formatMoney(gst)}</td></tr>
+              <tr className="font-bold h-[32px] border-t-2 border-black"><td className="p-1 text-center text-[16px]">TOTAL</td><td className={`p-1 text-center ${totalText}`}>${formatMoney(total)}</td></tr>
             </tbody>
           </table>
           <div className="flex w-full mt-4 pt-2 items-end shrink-0">
@@ -404,7 +448,6 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
   const [isAutofillEnabled, setIsAutofillEnabled] = useState(false);
   const [invoiceStatus, setInvoiceStatus] = useState(existingInvoice?.status || 'Unpaid');
 
-  // NEW: Special Format State Variables
   const [isSpecialFormat, setIsSpecialFormat] = useState(existingInvoice?.isSpecialFormat || false);
   const [poNumber, setPoNumber] = useState(existingInvoice?.poNumber || '');
   const [carPlateNo, setCarPlateNo] = useState(existingInvoice?.carPlateNo || '');
@@ -467,12 +510,10 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
     if (!product) return 0;
     const ruleKey = `${product.id}|${unit}`;
     
-    // 1. Individual Price Check
     if (customer?.custom_prices && typeof customer.custom_prices === 'object' && customer.custom_prices[ruleKey] !== undefined) {
       return Number(customer.custom_prices[ruleKey]) || 0;
     }
     
-    // 2. Group Price Check
     if (customer?.pricing_group_id) {
       const assignedGroup = safeGroups.find(g => g.id === customer.pricing_group_id);
       if (assignedGroup?.prices && typeof assignedGroup.prices === 'object' && assignedGroup.prices[ruleKey] !== undefined) {
@@ -480,7 +521,6 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
       }
     }
     
-    // 3. Global Check
     let price = product.Price || product.unitPrice || product['Unit Price (SG)'] || 0;
     return Number(price) || 0;
   };
@@ -585,14 +625,18 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
   };
 
   const handleRegister = (printAfter = false) => {
-    const cleanItems = (Array.isArray(items) ? items.filter(Boolean) : []).map(item => { const { isAutoFilled, ...rest } = item; return rest; });
+    // BUG FIX: Strip away all bloated AI-suggestion objects to prevent payload truncation
+    const cleanItems = (Array.isArray(items) ? items.filter(Boolean) : []).map(item => { 
+      const { isAutoFilled, suggestions, rawSearchString, originalPredictedId, ...rest } = item; 
+      return rest; 
+    });
 
     const invoice = {
       id: existingInvoice ? existingInvoice.id : `INV-${invoiceNumber}`,
       number: String(invoiceNumber), customerId, customer: String(customer?.name || existingInvoice?.customer || 'Unknown Customer'),
       region: String(customer?.region || existingInvoice?.region || ''), date: String(invoiceDate), items: cleanItems, total,
       status: invoiceStatus, deliveryStatus: existingInvoice ? String(existingInvoice.deliveryStatus || 'Pending') : 'Pending', paymentTerms: String(paymentTerms),
-      isSpecialFormat, poNumber, carPlateNo // NEW: Inject special format data into the database save
+      isSpecialFormat, poNumber, carPlateNo
     };
 
     const nextInventory = [...safeInventory];
@@ -601,24 +645,9 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
         const stockIndex = nextInventory.findIndex((entry) => entry?.id === item.itemId);
         if (stockIndex > -1) { nextInventory[stockIndex].stock -= Number(item.qty || item.quantity) || 0; }
       }
-      if (item.rawSearchString) {
-        if (item.itemId) {
-          const correctIndex = nextInventory.findIndex((entry) => entry?.id === item.itemId);
-          if (correctIndex > -1) {
-            if (!nextInventory[correctIndex].learned_phrases || typeof nextInventory[correctIndex].learned_phrases !== 'object') { nextInventory[correctIndex].learned_phrases = {}; }
-            const currentScore = Number(nextInventory[correctIndex].learned_phrases[item.rawSearchString]) || 0;
-            nextInventory[correctIndex].learned_phrases[item.rawSearchString] = currentScore + 1;
-          }
-        }
-        if (item.originalPredictedId && item.originalPredictedId !== item.itemId) {
-          const wrongIndex = nextInventory.findIndex((entry) => entry?.id === item.originalPredictedId);
-          if (wrongIndex > -1) {
-            if (!nextInventory[wrongIndex].learned_phrases || typeof nextInventory[wrongIndex].learned_phrases !== 'object') { nextInventory[wrongIndex].learned_phrases = {}; }
-            const currentScore = Number(nextInventory[wrongIndex].learned_phrases[item.rawSearchString]) || 0;
-            nextInventory[wrongIndex].learned_phrases[item.rawSearchString] = currentScore - 1;
-          }
-        }
-      }
+      
+      // Removed the learned_phrases mutation from here as rawSearchString is stripped, 
+      // preventing accidental mutation of global inventory state that wasn't being saved to DB anyway.
     });
 
     sys.setInventory(nextInventory);
@@ -681,7 +710,7 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
         customer={customer} gst={gst} invoiceNumber={invoiceNumber} invoiceDate={invoiceDate} items={items}
         onBack={() => setPreviewMode(false)} onRegister={handleRegister} paymentTerms={paymentTerms} setItems={setItems}
         subtotal={subtotal} sys={sys} total={total} existingInvoice={existingInvoice}
-        isSpecialFormat={isSpecialFormat} poNumber={poNumber} carPlateNo={carPlateNo} // Pass new special fields to preview
+        isSpecialFormat={isSpecialFormat} poNumber={poNumber} carPlateNo={carPlateNo}
       />
     );
   }
@@ -749,7 +778,6 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
               </div>
             </div>
 
-            {/* NEW: SPECIAL FORMAT TOGGLE ROW */}
             <div className="flex flex-col mb-8 bg-slate-50 p-4 rounded-xl border border-slate-200">
               <label className="flex items-center space-x-2 cursor-pointer w-max">
                 <input type="checkbox" checked={isSpecialFormat} onChange={e => setIsSpecialFormat(e.target.checked)} className="rounded border-slate-300 text-purple-600 focus:ring-purple-500 w-4 h-4" />
