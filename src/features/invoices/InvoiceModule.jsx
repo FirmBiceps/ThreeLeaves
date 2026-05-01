@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
-import { Eye, FileText, MessageSquare, Printer, Save, Sparkles, Trash2, Search, BrainCircuit, ChevronLeft, X, Settings, AlertTriangle, ArrowUpDown, Plus, Edit, Filter } from 'lucide-react';
+import { Eye, FileText, MessageSquare, Printer, Save, Sparkles, Trash2, Search, BrainCircuit, ChevronLeft, X, Settings, AlertTriangle, ArrowUpDown, Plus, Edit, Filter, CheckCircle, AlertCircle, ChevronDown } from 'lucide-react';
 import { CompanyHeader } from '../../components/shared/CompanyHeader';
 import { UNIT_OPTIONS } from '../../data/company';
 import { formatMoney } from '../../utils/format';
@@ -250,7 +250,6 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
             </div>
           </div>
 
-          {/* TABLE AREA - NO INNER BORDERS, STRETCHES TO FILL SPACE */}
           <table className="w-full h-full flex-grow text-[15px] border-2 border-black text-center mb-0 leading-tight mt-2" style={{ fontFamily: CJK_FONT }}>
             <thead className="border-b-2 border-black">
               <tr className="font-bold bg-white text-[14px]">
@@ -276,12 +275,10 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
                 );
               })}
               
-              {/* STRETCHER ROW: Absorbs remaining table height to push footer down */}
               <tr className="h-full">
                 <td></td><td></td><td></td><td></td><td></td>
               </tr>
 
-              {/* TOTALS AREA */}
               <tr className="border-t-2 border-black font-bold h-[28px]">
                 <td colSpan="3" rowSpan="3" className="bg-white border-r-2 border-black"></td>
                 <td className="p-1 text-center text-[14px]">SUBTOTAL</td>
@@ -298,7 +295,6 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
             </tbody>
           </table>
 
-          {/* FOOTER - NARROW MARGINS */}
           <div className="flex w-full mt-4 pt-2 items-end shrink-0">
             <div className="w-[70%] text-[12px] font-bold leading-snug pr-4">
               <div style={{ fontFamily: CJK_FONT }}>
@@ -563,6 +559,9 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
   
   const [customerId, setCustomerId] = useState(existingInvoice?.customerId || '');
   
+  // NEW: State for the Invoice Status Dropdown (Defaults to Unpaid)
+  const [invoiceStatus, setInvoiceStatus] = useState(existingInvoice?.status || 'Unpaid');
+
   const safeInventory = Array.isArray(sys?.inventory) ? sys.inventory : [];
   const safeCustomers = Array.isArray(sys?.customers) ? sys.customers : [];
   const safeInvoices = Array.isArray(sys?.invoices) ? sys.invoices : [];
@@ -789,7 +788,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
       date: String(invoiceDate),
       items: Array.isArray(items) ? items : [],
       total,
-      status: existingInvoice ? String(existingInvoice.status || 'Unpaid') : 'Unpaid',
+      status: invoiceStatus, // Pull directly from the new dropdown state
       deliveryStatus: existingInvoice ? String(existingInvoice.deliveryStatus || 'Pending') : 'Pending',
       paymentTerms: String(paymentTerms),
     };
@@ -941,32 +940,45 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
             <CompanyHeader />
 
             <div className="mb-12 flex justify-between">
-              <div className="w-[30%] border-r border-slate-100 pr-6">
+              <div className="w-[28%] border-r border-slate-100 pr-4">
                 <label className="text-[10px] font-black uppercase text-gray-400">Customer Account:</label>
                 <CustomerSearchSelect value={customerId} customers={safeCustomers} onChange={setCustomerId} disabled={!!existingInvoice} />
                 {autoFillNotif && (<p className="mt-2 flex items-center text-[10px] font-black uppercase tracking-widest text-emerald-500"><Sparkles className="mr-1" size={12} /> Predictively Prefilled</p>)}
               </div>
 
-              <div className="w-[20%] border-r border-slate-100 px-6">
-                <label className="text-[10px] font-black uppercase text-gray-400">Invoice Date:</label>
-                <input type="date" className="mt-1 w-full cursor-pointer border-none bg-transparent p-0 text-[16px] font-black text-slate-800 focus:ring-0 outline-none" value={invoiceDate} onChange={(event) => setInvoiceDate(event.target.value)} />
+              <div className="w-[16%] border-r border-slate-100 px-4">
+                <label className="text-[10px] font-black uppercase text-gray-400">Date:</label>
+                <input type="date" className="mt-1 w-full cursor-pointer border-none bg-transparent p-0 text-sm font-black text-slate-800 focus:ring-0 outline-none" value={invoiceDate} onChange={(event) => setInvoiceDate(event.target.value)} />
               </div>
 
-              <div className="w-[20%] border-r border-slate-100 px-6">
+              <div className="w-[16%] border-r border-slate-100 px-4">
                 <label className="text-[10px] font-black uppercase text-gray-400">Terms:</label>
-                <select className="mt-1 w-full cursor-pointer border-none bg-transparent p-0 text-lg font-black text-slate-800 focus:ring-0" onChange={(event) => setPaymentTerms(event.target.value)} value={paymentTerms}>
+                <select className="mt-1 w-full cursor-pointer border-none bg-transparent p-0 text-sm font-black text-slate-800 focus:ring-0" onChange={(event) => setPaymentTerms(event.target.value)} value={paymentTerms}>
                   <option value="30_days">30 Days</option>
                   <option value="cod">C.O.D</option>
                 </select>
               </div>
+              
+              {/* NEW EXPLICIT STATUS DROPDOWN IN GENERATOR */}
+              <div className="w-[16%] border-r border-slate-100 px-4">
+                <label className="text-[10px] font-black uppercase text-gray-400">Status:</label>
+                <select 
+                  className={`mt-1 w-full cursor-pointer border-none bg-transparent p-0 text-sm font-black focus:ring-0 outline-none ${invoiceStatus === 'Paid' ? 'text-emerald-600' : 'text-orange-600'}`} 
+                  onChange={(event) => setInvoiceStatus(event.target.value)} 
+                  value={invoiceStatus}
+                >
+                  <option value="Unpaid" className="text-orange-600 font-bold">Unpaid</option>
+                  <option value="Paid" className="text-emerald-600 font-bold">Paid</option>
+                </select>
+              </div>
 
-              <div className="w-[30%] pl-6 text-right relative">
+              <div className="w-[24%] pl-4 text-right relative">
                 <label className="text-[10px] font-black uppercase text-gray-400">Serial No.</label>
-                <div className="flex items-center justify-end text-3xl font-black tracking-tighter text-red-600 mt-1">
+                <div className="flex items-center justify-end text-xl font-black tracking-tighter text-red-600 mt-1">
                   <span className="mr-1">#</span>
-                  <input type="text" value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} className={`w-full max-w-[140px] bg-transparent border-b-2 outline-none text-right focus:ring-0 p-0 m-0 ${isDuplicateNumber ? 'border-red-500 text-red-600' : 'border-transparent hover:border-red-200 focus:border-red-600'}`} />
+                  <input type="text" value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} className={`w-full max-w-[100px] bg-transparent border-b-2 outline-none text-right focus:ring-0 p-0 m-0 ${isDuplicateNumber ? 'border-red-500 text-red-600' : 'border-transparent hover:border-red-200 focus:border-red-600'}`} />
                 </div>
-                {isDuplicateNumber && (<p className="text-[10px] font-black text-red-500 uppercase mt-1">Number Already Exists!</p>)}
+                {isDuplicateNumber && (<p className="text-[10px] font-black text-red-500 uppercase mt-1">Exists!</p>)}
               </div>
             </div>
 
@@ -1238,6 +1250,17 @@ export function InvoiceModule({ sys }) {
     }
   };
 
+  // NEW: Handler for the explicit Status Dropdown in the Main Table
+  const handleStatusChange = (invoiceId, newStatus) => {
+    const updatedInvoices = safeInvoices.map(inv => {
+      if (inv.id === invoiceId) {
+        return { ...inv, status: newStatus };
+      }
+      return inv;
+    });
+    sys.setInvoices(updatedInvoices);
+  };
+
   const filteredInvoices = useMemo(() => {
     let result = [...safeInvoices];
 
@@ -1394,10 +1417,28 @@ export function InvoiceModule({ sys }) {
 
                   <td className="p-5 text-right font-black text-slate-900">${formatMoney(inv.total)}</td>
                   
+                  {/* NEW: Interactive Explicit Status Dropdown in Dashboard */}
                   <td className="p-5 text-center">
-                    <span className={`px-3 py-1 rounded-md text-[10px] font-black uppercase tracking-widest ${inv.status === 'Paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700'}`}>
-                      {inv.status || 'Paid'}
-                    </span>
+                    <div className="relative inline-flex items-center" onClick={(e) => e.stopPropagation()}>
+                      <select
+                        value={inv.status || 'Unpaid'}
+                        onChange={(e) => handleStatusChange(inv.id, e.target.value)}
+                        className={`appearance-none cursor-pointer pl-8 pr-8 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest outline-none transition-all ${
+                          (inv.status || 'Unpaid') === 'Paid' 
+                            ? 'bg-emerald-100 text-emerald-700 border border-emerald-200 hover:bg-emerald-200' 
+                            : 'bg-orange-100 text-orange-700 border border-orange-200 hover:bg-orange-200'
+                        }`}
+                      >
+                        <option value="Paid">PAID</option>
+                        <option value="Unpaid">UNPAID</option>
+                      </select>
+                      <div className="absolute left-2.5 pointer-events-none">
+                        {(inv.status || 'Unpaid') === 'Paid' ? <CheckCircle size={12} className="text-emerald-600" /> : <AlertCircle size={12} className="text-orange-600" />}
+                      </div>
+                      <div className="absolute right-2.5 pointer-events-none">
+                        <ChevronDown size={12} className={(inv.status || 'Unpaid') === 'Paid' ? "text-emerald-600" : "text-orange-600"} />
+                      </div>
+                    </div>
                   </td>
 
                   <td className="p-5 text-center">
