@@ -21,9 +21,6 @@ const EMPTY_CUSTOMER = {
   payment_terms: '30_days', pricing_group_id: '', custom_prices: {}, 
 };
 
-// ==========================================
-// SEARCHABLE PRODUCT DROPDOWN
-// ==========================================
 function ProductSearchSelect({ value, inventory, onChange }) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -78,11 +75,8 @@ function ProductSearchSelect({ value, inventory, onChange }) {
   );
 }
 
-// ==========================================
-// PRICING GROUP MANAGER MODAL (NEW MEMBER ASSIGNMENT)
-// ==========================================
-function PricingGroupManager({ sys, onClose }) {
-  const safeGroups = Array.isArray(sys?.pricingGroups) ? sys.pricingGroups : [];
+function PricingGroupManager({ sys, groups, setGroups, onClose }) {
+  const safeGroups = Array.isArray(groups) ? groups : [];
   const safeInventory = Array.isArray(sys?.inventory) ? sys.inventory : [];
   const safeCustomers = Array.isArray(sys?.customers) ? sys.customers : [];
   
@@ -94,13 +88,11 @@ function PricingGroupManager({ sys, onClose }) {
   const [pricingUnit, setPricingUnit] = useState('箱');
   const [pricingValue, setPricingValue] = useState('');
 
-  // NEW: State to toggle between "Rules" and "Members" tab
   const [activeTab, setActiveTab] = useState('rules'); 
   const [memberSearch, setMemberSearch] = useState('');
 
   const activeGroup = safeGroups.find(g => g.id === activeGroupId);
 
-  // Group Member Calculations
   const groupMembers = safeCustomers.filter(c => c.pricing_group_id === activeGroupId);
   const unassignedCustomers = safeCustomers.filter(c => c.pricing_group_id !== activeGroupId);
 
@@ -115,11 +107,11 @@ function PricingGroupManager({ sys, onClose }) {
       const { error } = await supabase.from('pricing_groups').insert([newGroup]);
       if (error) throw error;
       
-      if (sys.setPricingGroups) sys.setPricingGroups([...safeGroups, newGroup]);
+      setGroups([...safeGroups, newGroup]);
       setActiveGroupId(newGroup.id);
       setIsCreating(false);
       setNewGroupName('');
-      setActiveTab('members'); // Auto-switch to members so they can add people instantly
+      setActiveTab('members'); 
     } catch (err) { alert(`Error creating group: ${err.message}`); }
   };
 
@@ -133,7 +125,7 @@ function PricingGroupManager({ sys, onClose }) {
       if (error) throw error;
 
       const updatedGroup = { ...activeGroup, prices: updatedPrices };
-      if (sys.setPricingGroups) sys.setPricingGroups(safeGroups.map(g => g.id === activeGroup.id ? updatedGroup : g));
+      setGroups(safeGroups.map(g => g.id === activeGroup.id ? updatedGroup : g));
       
       setPricingItem(''); setPricingValue('');
     } catch (err) { alert(`Error saving price: ${err.message}`); }
@@ -149,32 +141,28 @@ function PricingGroupManager({ sys, onClose }) {
       if (error) throw error;
 
       const updatedGroup = { ...activeGroup, prices: updatedPrices };
-      if (sys.setPricingGroups) sys.setPricingGroups(safeGroups.map(g => g.id === activeGroup.id ? updatedGroup : g));
+      setGroups(safeGroups.map(g => g.id === activeGroup.id ? updatedGroup : g));
     } catch (err) { alert(`Error removing price: ${err.message}`); }
   };
 
   const handleDeleteGroup = async (groupId) => {
     if(!window.confirm("Delete this pricing group entirely? Customers assigned to it will revert to catalog prices.")) return;
     try {
-      // 1. Delete group
       const { error } = await supabase.from('pricing_groups').delete().eq('id', groupId);
       if (error) throw error;
       
-      // 2. Clear pricing_group_id from all affected customers
       const affectedCustomers = safeCustomers.filter(c => c.pricing_group_id === groupId);
       for (const cust of affectedCustomers) {
         await supabase.from('customers').update({ pricing_group_id: null }).eq('id', cust.id);
       }
 
-      // 3. Update local state
-      if (sys.setPricingGroups) sys.setPricingGroups(safeGroups.filter(g => g.id !== groupId));
+      setGroups(safeGroups.filter(g => g.id !== groupId));
       sys.setCustomers(safeCustomers.map(c => c.pricing_group_id === groupId ? { ...c, pricing_group_id: null } : c));
       
       if (activeGroupId === groupId) setActiveGroupId(null);
     } catch (err) { alert(`Error deleting group: ${err.message}`); }
   };
 
-  // NEW: Add customer to group
   const handleAddMember = async (customerId) => {
     try {
       const { error } = await supabase.from('customers').update({ pricing_group_id: activeGroupId }).eq('id', customerId);
@@ -183,7 +171,6 @@ function PricingGroupManager({ sys, onClose }) {
     } catch (err) { alert(`Failed to add member: ${err.message}`); }
   };
 
-  // NEW: Remove customer from group
   const handleRemoveMember = async (customerId) => {
     try {
       const { error } = await supabase.from('customers').update({ pricing_group_id: null }).eq('id', customerId);
@@ -203,7 +190,6 @@ function PricingGroupManager({ sys, onClose }) {
         </div>
 
         <div className="flex flex-1 overflow-hidden">
-          {/* LEFT SIDEBAR - GROUP LIST */}
           <div className="w-1/3 bg-slate-50 border-r border-slate-200 flex flex-col">
             <div className="p-4 border-b border-slate-200">
               {isCreating ? (
@@ -239,7 +225,6 @@ function PricingGroupManager({ sys, onClose }) {
             </div>
           </div>
 
-          {/* RIGHT SIDEBAR - GROUP EDITOR */}
           <div className="flex-1 bg-white flex flex-col h-full overflow-hidden">
             {activeGroup ? (
               <>
@@ -247,7 +232,6 @@ function PricingGroupManager({ sys, onClose }) {
                   <h3 className="text-2xl font-black text-slate-900 mb-1">{activeGroup.name}</h3>
                   <p className="text-sm text-slate-500 font-medium mb-6">Manage pricing rules and assign customers to this tier.</p>
                   
-                  {/* TAB NAVIGATION */}
                   <div className="flex space-x-2">
                     <button onClick={() => setActiveTab('rules')} className={`px-4 py-2 text-xs font-black uppercase tracking-widest rounded-lg transition-all ${activeTab === 'rules' ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
                       <Tag className="inline mr-1.5" size={14}/> Pricing Rules ({Object.keys(activeGroup.prices || {}).length})
@@ -259,7 +243,6 @@ function PricingGroupManager({ sys, onClose }) {
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-8 bg-slate-50">
-                  {/* TAB: PRICING RULES */}
                   {activeTab === 'rules' && (
                     <div className="max-w-2xl mx-auto">
                       <div className="flex space-x-3 mb-8 bg-white p-4 rounded-xl border border-slate-200 items-center shadow-sm">
@@ -312,11 +295,8 @@ function PricingGroupManager({ sys, onClose }) {
                     </div>
                   )}
 
-                  {/* TAB: MEMBERS */}
                   {activeTab === 'members' && (
                     <div className="grid grid-cols-2 gap-8 h-full">
-                      
-                      {/* Enrolled Members */}
                       <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col overflow-hidden">
                         <div className="bg-slate-900 text-white p-3 font-bold text-xs uppercase tracking-widest flex justify-between items-center shrink-0">
                           <span>Enrolled Entities</span>
@@ -341,7 +321,6 @@ function PricingGroupManager({ sys, onClose }) {
                         </div>
                       </div>
 
-                      {/* Add New Members */}
                       <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col overflow-hidden">
                         <div className="bg-slate-100 border-b border-slate-200 p-3 font-bold text-xs uppercase tracking-widest text-slate-600 shrink-0">
                           Add Customers
@@ -388,12 +367,9 @@ function PricingGroupManager({ sys, onClose }) {
   );
 }
 
-// ==========================================
-// COMPONENT: CUSTOMER ADD/EDIT MODAL
-// ==========================================
-function CustomerFormModal({ initialValue, onClose, onSave, sys }) {
+function CustomerFormModal({ initialValue, onClose, onSave, groups }) {
   const [form, setForm] = useState(initialValue);
-  const safeGroups = Array.isArray(sys?.pricingGroups) ? sys.pricingGroups : [];
+  const safeGroups = Array.isArray(groups) ? groups : [];
 
   return (
     <EntityModal onClose={onClose} onSave={() => onSave(form)} title="Customer Modification">
@@ -412,7 +388,6 @@ function CustomerFormModal({ initialValue, onClose, onSave, sys }) {
           <select className="w-full rounded-xl border border-gray-200 p-3 text-sm bg-white cursor-pointer" onChange={(event) => setForm((current) => ({ ...current, payment_terms: event.target.value }))} value={form.payment_terms || '30_days'}>
             <option value="30_days">30 Days Credit</option><option value="cod">C.O.D</option>
           </select>
-          {/* NEW: Group Pricing Selector on Profile */}
           <select className="w-full rounded-xl border border-indigo-200 text-indigo-800 bg-indigo-50 p-3 text-sm font-bold cursor-pointer outline-none focus:ring-2 focus:ring-indigo-500" onChange={(event) => setForm((current) => ({ ...current, pricing_group_id: event.target.value }))} value={form.pricing_group_id || ''}>
             <option value="">No Pricing Group</option>
             {safeGroups.map(g => (<option key={g.id} value={g.id}>{g.name}</option>))}
@@ -425,9 +400,6 @@ function CustomerFormModal({ initialValue, onClose, onSave, sys }) {
   );
 }
 
-// ==========================================
-// MAIN EXPORT: CUSTOMER MODULE
-// ==========================================
 export function CustomerModule({ sys }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isGroupManagerOpen, setIsGroupManagerOpen] = useState(false);
@@ -442,10 +414,22 @@ export function CustomerModule({ sys }) {
   const [pricingUnit, setPricingUnit] = useState('箱');
   const [pricingValue, setPricingValue] = useState('');
 
+  // INDEPENDENT PRICING GROUPS STATE
+  const [pricingGroups, setPricingGroups] = useState([]);
+
+  useEffect(() => {
+    const fetchGroups = async () => {
+      try {
+        const { data, error } = await supabase.from('pricing_groups').select('*');
+        if (!error && data) setPricingGroups(data);
+      } catch (err) { console.error("Error fetching pricing groups:", err); }
+    };
+    fetchGroups();
+  }, []);
+
   const safeCustomers = Array.isArray(sys?.customers) ? sys.customers : [];
   const safeInvoices = Array.isArray(sys?.invoices) ? sys.invoices : [];
   const safeInventory = Array.isArray(sys?.inventory) ? sys.inventory : [];
-  const safeGroups = Array.isArray(sys?.pricingGroups) ? sys.pricingGroups : [];
 
   const analytics = useMemo(() => {
     const now = new Date();
@@ -569,7 +553,7 @@ export function CustomerModule({ sys }) {
   if (selectedCustomer) {
     const statusStyle = STATUS_STYLES[selectedCustomer.status] || STATUS_STYLES.inactive;
     const customPrices = selectedCustomer.customer.custom_prices || {};
-    const assignedGroup = safeGroups.find(g => g.id === selectedCustomer.customer.pricing_group_id);
+    const assignedGroup = pricingGroups.find(g => g.id === selectedCustomer.customer.pricing_group_id);
     const groupPrices = assignedGroup?.prices || {};
 
     return (
@@ -841,8 +825,8 @@ export function CustomerModule({ sys }) {
         </table>
       </div>
 
-      {isOpen && <CustomerFormModal initialValue={editingCustomer} onClose={() => setIsOpen(false)} onSave={handleSave} sys={sys} />}
-      {isGroupManagerOpen && <PricingGroupManager sys={sys} onClose={() => setIsGroupManagerOpen(false)} />}
+      {isOpen && <CustomerFormModal initialValue={editingCustomer} groups={pricingGroups} onClose={() => setIsOpen(false)} onSave={handleSave} sys={sys} />}
+      {isGroupManagerOpen && <PricingGroupManager sys={sys} groups={pricingGroups} setGroups={setPricingGroups} onClose={() => setIsGroupManagerOpen(false)} />}
     </div>
   );
 }
