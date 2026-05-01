@@ -1,38 +1,71 @@
 import { useMemo, useState } from 'react';
-import { ClipboardList, Printer, Calendar, PackageCheck, Search, ChevronRight } from 'lucide-react';
-import logo from '../invoices/three_leaves_logo.png'; // Re-using your existing logo
+import { ClipboardList, Printer, Calendar, PackageCheck, Search, ChevronRight, CheckSquare, ListPlus, MousePointerSquareDashed } from 'lucide-react';
+import logo from '../invoices/three_leaves_logo.png'; 
 
 const CJK_FONT = '"Microsoft YaHei", "微软雅黑", "PingFang SC", "Hiragino Sans GB", "SimHei", "黑体", "SimSun", "宋体", serif';
 
 export function PickingModule({ sys }) {
-  // Default to today's date
-  const [selectedDate, setSelectedDate] = useState(() => {
-    return new Date().toISOString().split('T')[0];
-  });
+  // NEW: Mode selection (auto vs manual)
+  const [aggregationMode, setAggregationMode] = useState('auto'); // 'auto' | 'manual'
+  
+  // Auto Mode State
+  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
+  
+  // Manual Mode State
+  const [selectedInvoiceIds, setSelectedInvoiceIds] = useState(new Set());
+  const [manualSearchTerm, setManualSearchTerm] = useState('');
+
+  // General State
   const [searchTerm, setSearchTerm] = useState('');
   const [isPrinting, setIsPrinting] = useState(false);
 
   const safeInvoices = Array.isArray(sys?.invoices) ? sys.invoices : [];
   const safeInventory = Array.isArray(sys?.inventory) ? sys.inventory : [];
 
+  // Sort invoices for manual selection view (newest first)
+  const sortedInvoicesForManual = useMemo(() => {
+    return [...safeInvoices]
+      .filter(inv => {
+        if (!manualSearchTerm) return true;
+        const s = manualSearchTerm.toLowerCase();
+        return (inv.customer?.toLowerCase() || '').includes(s) || (inv.number?.toLowerCase() || '').includes(s);
+      })
+      .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+  }, [safeInvoices, manualSearchTerm]);
+
+  // Toggle individual invoice selection
+  const toggleInvoiceSelection = (invoiceId) => {
+    const nextSet = new Set(selectedInvoiceIds);
+    if (nextSet.has(invoiceId)) {
+      nextSet.delete(invoiceId);
+    } else {
+      nextSet.add(invoiceId);
+    }
+    setSelectedInvoiceIds(nextSet);
+  };
+
   // ==========================================
-  // AGGREGATION ENGINE: Products -> Customers
+  // AGGREGATION ENGINE
   // ==========================================
   const picklistData = useMemo(() => {
-    // 1. Get all invoices for the selected date
-    const targetInvoices = safeInvoices.filter(inv => inv.date === selectedDate);
+    // Determine which invoices to aggregate based on mode
+    let targetInvoices = [];
+    if (aggregationMode === 'auto') {
+      targetInvoices = safeInvoices.filter(inv => inv.date === selectedDate);
+    } else {
+      targetInvoices = safeInvoices.filter(inv => selectedInvoiceIds.has(inv.id));
+    }
+
     const productMap = {};
     let totalItemsToPick = 0;
 
-    // 2. Extract items and group them
     targetInvoices.forEach(inv => {
       const customerName = inv.customer || 'Unknown Customer';
       
       (Array.isArray(inv.items) ? inv.items : []).forEach(item => {
-        const productId = item.itemId || item.name; // Fallback to name if no ID
+        const productId = item.itemId || item.name; 
         if (!productId) return;
 
-        // Initialize product entry if it doesn't exist
         if (!productMap[productId]) {
           const inventoryData = safeInventory.find(i => i.id === item.itemId);
           productMap[productId] = {
@@ -46,27 +79,22 @@ export function PickingModule({ sys }) {
 
         const qty = Number(item.qty || item.quantity) || 0;
         
-        // Add to total
         productMap[productId].totalQty += qty;
         totalItemsToPick += qty;
         
-        // Add to customer breakdown
         productMap[productId].customers[customerName] = (productMap[productId].customers[customerName] || 0) + qty;
       });
     });
 
-    // 3. Convert to array and format the breakdown for easy rendering
     let dataArray = Object.values(productMap).map(prod => ({
       ...prod,
       breakdown: Object.entries(prod.customers)
         .map(([cName, cQty]) => ({ cName, cQty }))
-        .sort((a, b) => b.cQty - a.cQty) // Sort breakdown by highest qty first
+        .sort((a, b) => b.cQty - a.cQty) 
     }));
 
-    // 4. Sort alphabetically by product name
     dataArray.sort((a, b) => a.name.localeCompare(b.name));
 
-    // 5. Apply screen search filter (Optional, for UI only)
     let displayArray = dataArray;
     if (searchTerm) {
       const lowerSearch = searchTerm.toLowerCase();
@@ -77,16 +105,15 @@ export function PickingModule({ sys }) {
     }
 
     return {
-      date: selectedDate,
+      date: aggregationMode === 'auto' ? selectedDate : 'Custom Selection',
       invoiceCount: targetInvoices.length,
       totalUniqueProducts: dataArray.length,
       totalItemsToPick,
       allData: dataArray,
       displayData: displayArray
     };
-  }, [safeInvoices, safeInventory, selectedDate, searchTerm]);
+  }, [safeInvoices, safeInventory, selectedDate, searchTerm, aggregationMode, selectedInvoiceIds]);
 
-  // Handle Print
   const handlePrint = () => {
     setIsPrinting(true);
     setTimeout(() => {
@@ -96,20 +123,19 @@ export function PickingModule({ sys }) {
   };
 
   const formattedDate = useMemo(() => {
+    if (aggregationMode === 'manual') return 'Custom Manual Selection';
     if (!selectedDate) return '';
     const dateObj = new Date(selectedDate);
     return isNaN(dateObj.getTime()) ? selectedDate : dateObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-  }, [selectedDate]);
+  }, [selectedDate, aggregationMode]);
 
   return (
-    <div className="p-8 h-full overflow-y-auto relative bg-slate-50/50">
+    <div className="p-8 h-full overflow-y-auto relative bg-slate-50/50 flex flex-col">
       
-      {/* IMAGE PRELOADER FOR PDF LOGO */}
       <div className="absolute opacity-0 w-0 h-0 overflow-hidden pointer-events-none">
         <img src={logo} alt="preload logo" />
       </div>
 
-      {/* INJECTED PRINT STYLES */}
       <style type="text/css">
         {`
           @media print {
@@ -126,22 +152,18 @@ export function PickingModule({ sys }) {
               display: block !important; 
               position: relative !important; 
             }
-            /* Prevent rows from breaking cleanly across pages */
             tr { page-break-inside: avoid; break-inside: avoid; }
             td, th { page-break-inside: avoid; break-inside: avoid; }
           }
         `}
       </style>
 
-      {/* ========================================================================= */}
-      {/* SCREEN UI */}
-      {/* ========================================================================= */}
-      <div id="screen-ui">
-        <div className="flex justify-between items-center mb-8">
+      <div id="screen-ui" className="flex flex-col flex-1 h-full">
+        <div className="flex justify-between items-center mb-8 shrink-0">
           <div>
             <h1 className="text-2xl font-semibold text-slate-900 flex items-center">
               <ClipboardList className="mr-3 text-blue-600" size={28} />
-              Daily Fulfillment Picklist
+              Fulfillment Picklist Generator
             </h1>
             <p className="text-base text-slate-500 mt-1">
               Consolidate product picking totals and view customer box allocations.
@@ -159,9 +181,9 @@ export function PickingModule({ sys }) {
         </div>
 
         {/* METRICS DASHBOARD */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 shrink-0">
           <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex flex-col justify-center">
-            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-1">Orders Processing</p>
+            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-1">Orders Aggregated</p>
             <p className="text-3xl font-black text-slate-800">{picklistData.invoiceCount} <span className="text-sm font-medium text-slate-400">invoices</span></p>
           </div>
           <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex flex-col justify-center">
@@ -174,78 +196,160 @@ export function PickingModule({ sys }) {
           </div>
         </div>
 
-        {/* FILTER BAR */}
-        <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-          <div className="flex flex-col sm:flex-row justify-between items-center border-b border-slate-100 bg-slate-50 p-4 gap-4">
-            <div className="flex items-center bg-white border border-slate-200 rounded-xl px-4 py-2 shadow-sm focus-within:ring-2 focus-within:ring-blue-100">
-              <Calendar className="text-slate-400 mr-2" size={18} />
-              <input
-                type="date"
-                className="bg-transparent border-none focus:ring-0 text-sm font-bold text-slate-700 outline-none cursor-pointer"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-              />
+        {/* DUAL-PANE LAYOUT FOR MANUAL MODE */}
+        <div className={`flex-1 flex gap-6 min-h-0 ${aggregationMode === 'manual' ? 'flex-row' : 'flex-col'}`}>
+          
+          {/* LEFT SIDEBAR: MANUAL SELECTION PANEL (Only visible in manual mode) */}
+          {aggregationMode === 'manual' && (
+            <div className="w-1/3 flex flex-col bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden shrink-0">
+              <div className="bg-slate-900 text-white p-4 font-bold text-xs uppercase tracking-widest flex justify-between items-center">
+                <span>Select Invoices to Pick</span>
+                <span className="bg-slate-700 px-2 py-0.5 rounded">{selectedInvoiceIds.size} Selected</span>
+              </div>
+              <div className="p-3 border-b border-slate-100 bg-slate-50">
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input 
+                    type="text" 
+                    placeholder="Search by customer or invoice #" 
+                    value={manualSearchTerm} 
+                    onChange={(e) => setManualSearchTerm(e.target.value)} 
+                    className="w-full text-xs font-bold border border-slate-200 rounded-lg py-2 pl-8 outline-none focus:border-blue-500 shadow-sm" 
+                  />
+                </div>
+                <div className="flex gap-2 mt-3">
+                  <button onClick={() => setAggregationMode('auto')} className="flex-1 bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 text-[10px] font-black uppercase tracking-widest py-1.5 rounded transition-colors flex items-center justify-center">
+                    <Calendar size={12} className="mr-1"/> Switch to Auto Date
+                  </button>
+                  <button onClick={() => setSelectedInvoiceIds(new Set())} className="px-3 bg-red-50 text-red-600 hover:bg-red-100 text-[10px] font-black uppercase tracking-widest py-1.5 rounded transition-colors" disabled={selectedInvoiceIds.size === 0}>
+                    Clear
+                  </button>
+                </div>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                {sortedInvoicesForManual.map(inv => (
+                  <label key={inv.id} className={`flex items-start p-3 rounded-lg border cursor-pointer transition-all ${selectedInvoiceIds.has(inv.id) ? 'bg-indigo-50/50 border-indigo-200 shadow-sm' : 'bg-white border-transparent hover:bg-slate-50 border-b-slate-100'}`}>
+                    <div className="mt-0.5 mr-3">
+                      <input 
+                        type="checkbox" 
+                        checked={selectedInvoiceIds.has(inv.id)} 
+                        onChange={() => toggleInvoiceSelection(inv.id)} 
+                        className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500" 
+                      />
+                    </div>
+                    <div className="flex-1 truncate pr-2">
+                      <div className="flex justify-between items-center mb-0.5">
+                        <span className={`text-xs font-black uppercase tracking-widest ${selectedInvoiceIds.has(inv.id) ? 'text-indigo-600' : 'text-slate-400'}`}>#{inv.number}</span>
+                        <span className="text-[10px] font-bold text-slate-400">{inv.date}</span>
+                      </div>
+                      <p className={`text-sm font-bold truncate ${selectedInvoiceIds.has(inv.id) ? 'text-indigo-900' : 'text-slate-800'}`}>{inv.customer}</p>
+                    </div>
+                  </label>
+                ))}
+                {sortedInvoicesForManual.length === 0 && (
+                  <p className="text-center text-xs font-bold text-slate-400 mt-8 uppercase tracking-widest">No invoices found.</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* MAIN PICKLIST DATA TABLE */}
+          <div className="flex-1 flex flex-col bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden h-full">
+            
+            {/* Control Bar for Picklist View */}
+            <div className="flex flex-col sm:flex-row justify-between items-center border-b border-slate-100 bg-slate-50 p-4 gap-4 shrink-0">
+              
+              {/* Mode Toggle Controls */}
+              {aggregationMode === 'auto' ? (
+                <div className="flex items-center space-x-2">
+                  <div className="flex items-center bg-white border border-blue-200 shadow-sm shadow-blue-500/10 rounded-xl px-4 py-2">
+                    <Calendar className="text-blue-500 mr-2" size={18} />
+                    <input
+                      type="date"
+                      className="bg-transparent border-none focus:ring-0 text-sm font-bold text-blue-900 outline-none cursor-pointer"
+                      value={selectedDate}
+                      onChange={(e) => setSelectedDate(e.target.value)}
+                    />
+                  </div>
+                  <button onClick={() => setAggregationMode('manual')} className="flex items-center bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 hover:border-slate-300 rounded-xl px-4 py-2 text-sm font-bold transition-all shadow-sm">
+                    <MousePointerSquareDashed size={16} className="mr-2 text-slate-400"/> Switch to Manual Selection
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center space-x-2">
+                   <div className="flex items-center bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-2">
+                    <CheckSquare className="text-indigo-500 mr-2" size={18} />
+                    <span className="text-sm font-bold text-indigo-900">Custom Manual Picklist</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Product Result Search */}
+              <div className="flex items-center bg-white border border-slate-200 rounded-xl px-4 py-2 shadow-sm w-full sm:w-80 focus-within:ring-2 focus-within:ring-blue-100">
+                <Search className="text-slate-400 mr-2" size={18} />
+                <input
+                  type="text"
+                  placeholder="Filter final picklist items..."
+                  className="w-full bg-transparent border-none focus:ring-0 text-sm placeholder:text-slate-400 outline-none"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
             </div>
 
-            <div className="flex items-center bg-white border border-slate-200 rounded-xl px-4 py-2 shadow-sm w-full sm:w-80 focus-within:ring-2 focus-within:ring-blue-100">
-              <Search className="text-slate-400 mr-2" size={18} />
-              <input
-                type="text"
-                placeholder="Search products or customers..."
-                className="w-full bg-transparent border-none focus:ring-0 text-sm placeholder:text-slate-400 outline-none"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+            {/* THE DATA TABLE */}
+            <div className="flex-1 overflow-y-auto relative">
+              <table className="w-full text-left border-collapse min-w-[600px]">
+                <thead className="sticky top-0 z-10">
+                  <tr className="bg-white border-b border-slate-200 text-xs uppercase tracking-widest text-slate-500 font-semibold shadow-sm">
+                    <th className="p-5 pl-8 w-16 text-center bg-white">Done</th>
+                    <th className="p-5 bg-white">Product Details</th>
+                    <th className="p-5 text-center bg-white">Total Required</th>
+                    <th className="p-5 pr-8 bg-white">Allocation Breakdown (Customer)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-sm">
+                  {picklistData.displayData.map((row, idx) => (
+                    <tr className="hover:bg-blue-50/30 transition-colors" key={row.id || idx}>
+                      <td className="p-5 pl-8 text-center align-top">
+                        <input type="checkbox" className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer mt-1" />
+                      </td>
+                      <td className="p-5 align-top">
+                        <p className="font-bold text-slate-900 text-base">{row.name}</p>
+                      </td>
+                      <td className="p-5 align-top text-center">
+                        <span className="inline-flex flex-col items-center bg-blue-50 border border-blue-100 rounded-xl px-4 py-2">
+                          <span className="text-2xl font-black text-blue-700 leading-none">{row.totalQty}</span>
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-blue-500 mt-1">{row.unit}</span>
+                        </span>
+                      </td>
+                      <td className="p-5 pr-8 align-top">
+                        <ul className="space-y-1.5">
+                          {row.breakdown.map((b, i) => (
+                            <li key={i} className="flex items-center text-sm">
+                              <ChevronRight size={14} className="text-slate-300 mr-2 shrink-0" />
+                              <span className="font-medium text-slate-700 flex-1">{b.cName}</span>
+                              <span className="font-black text-slate-900 ml-4 px-2 py-0.5 bg-slate-100 rounded text-xs">{b.cQty} {row.unit}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </td>
+                    </tr>
+                  ))}
+                  {picklistData.displayData.length === 0 && (
+                    <tr>
+                      <td className="p-16 text-center text-sm font-bold text-slate-400" colSpan="4">
+                        {aggregationMode === 'auto' 
+                          ? "No orders found for the selected date." 
+                          : "Select invoices from the left panel to build your picklist."}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
-
-          {/* ON-SCREEN TABLE */}
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-white border-b border-slate-200 text-xs uppercase tracking-widest text-slate-500 font-semibold">
-                <th className="p-5 pl-8 w-16 text-center">Done</th>
-                <th className="p-5">Product Details</th>
-                <th className="p-5 text-center">Total Required</th>
-                <th className="p-5 pr-8">Allocation Breakdown (Customer)</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-sm">
-              {picklistData.displayData.map((row, idx) => (
-                <tr className="hover:bg-blue-50/30 transition-colors" key={row.id || idx}>
-                  <td className="p-5 pl-8 text-center align-top">
-                    <input type="checkbox" className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer mt-1" />
-                  </td>
-                  <td className="p-5 align-top">
-                    <p className="font-bold text-slate-900 text-base">{row.name}</p>
-                  </td>
-                  <td className="p-5 align-top text-center">
-                    <span className="inline-flex flex-col items-center bg-blue-50 border border-blue-100 rounded-xl px-4 py-2">
-                      <span className="text-2xl font-black text-blue-700 leading-none">{row.totalQty}</span>
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-blue-500 mt-1">{row.unit}</span>
-                    </span>
-                  </td>
-                  <td className="p-5 pr-8 align-top">
-                    <ul className="space-y-1.5">
-                      {row.breakdown.map((b, i) => (
-                        <li key={i} className="flex items-center text-sm">
-                          <ChevronRight size={14} className="text-slate-300 mr-2 shrink-0" />
-                          <span className="font-medium text-slate-700 flex-1">{b.cName}</span>
-                          <span className="font-black text-slate-900 ml-4 px-2 py-0.5 bg-slate-100 rounded text-xs">{b.cQty} {row.unit}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </td>
-                </tr>
-              ))}
-              {picklistData.displayData.length === 0 && (
-                <tr>
-                  <td className="p-12 text-center text-sm font-bold text-slate-400" colSpan="4">
-                    No orders found for this date.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
         </div>
       </div>
 
@@ -255,7 +359,6 @@ export function PickingModule({ sys }) {
       <div id="print-ui" className={isPrinting ? "block" : "hidden"}>
         <div className="w-full bg-white text-black font-sans" style={{ fontFamily: CJK_FONT }}>
           
-          {/* HEADER MATCHING THE INVOICE AESTHETIC */}
           <div className="flex w-full mb-6 justify-between items-start border-b-2 border-black pb-4">
             <div className="flex items-center">
               <div className="w-[90px] shrink-0 mr-4">
@@ -268,7 +371,9 @@ export function PickingModule({ sys }) {
             </div>
             <div className="text-right flex flex-col items-end pt-1">
               <h2 className="text-[24px] font-black tracking-widest leading-none mb-2" style={{ fontFamily: CJK_FONT }}>拣货单</h2>
-              <h3 className="text-[14px] font-black tracking-widest uppercase text-slate-500 mb-1">DAILY PICKLIST</h3>
+              <h3 className="text-[14px] font-black tracking-widest uppercase text-slate-500 mb-1">
+                {aggregationMode === 'auto' ? 'DAILY PICKLIST' : 'CUSTOM PICKLIST'}
+              </h3>
               <p className="text-[14px] font-bold bg-slate-100 px-3 py-1 border border-black rounded-md">{formattedDate}</p>
             </div>
           </div>
@@ -282,7 +387,6 @@ export function PickingModule({ sys }) {
             </div>
           </div>
 
-          {/* TABLE AREA - BORDERLESS INTERIOR MATCHING INVOICE */}
           <table className="w-full text-[14px] border-2 border-black text-left mb-0" style={{ fontFamily: CJK_FONT }}>
             <thead className="border-b-2 border-black">
               <tr className="font-bold bg-slate-50 text-[12px]">
@@ -319,13 +423,12 @@ export function PickingModule({ sys }) {
               ))}
               {picklistData.allData.length === 0 && (
                 <tr>
-                  <td colSpan="4" className="py-12 text-center text-slate-400 font-bold">No items to pick for this date.</td>
+                  <td colSpan="4" className="py-12 text-center text-slate-400 font-bold">No items to pick for this selection.</td>
                 </tr>
               )}
             </tbody>
           </table>
 
-          {/* FOOTER */}
           <div className="mt-8 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest">
             End of Picklist • Generated by Three Leaves ERP
           </div>
