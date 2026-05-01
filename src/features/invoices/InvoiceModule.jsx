@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
-import { Eye, FileText, MessageSquare, Printer, Save, Sparkles, Trash2, Search, BrainCircuit, ChevronLeft, X, Settings, AlertTriangle, ArrowUpDown, Plus, Edit, Filter, CheckCircle, AlertCircle, ChevronDown } from 'lucide-react';
+import { Eye, FileText, MessageSquare, Printer, Save, Sparkles, Trash2, Search, BrainCircuit, ChevronLeft, X, Settings, AlertTriangle, ArrowUpDown, Plus, Edit, Filter, CheckCircle, AlertCircle, ChevronDown, Check } from 'lucide-react';
 import { CompanyHeader } from '../../components/shared/CompanyHeader';
 import { UNIT_OPTIONS } from '../../data/company';
 import { formatMoney } from '../../utils/format';
@@ -13,7 +13,7 @@ const CJK_FONT = '"Microsoft YaHei", "微软雅黑", "PingFang SC", "Hiragino Sa
 // ==========================================
 // COMPONENT: SEARCHABLE PRODUCT DROPDOWN
 // ==========================================
-function ProductSearchSelect({ value, inventory, onChange }) {
+function ProductSearchSelect({ value, inventory, onChange, isAutoFilled }) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const dropdownRef = useRef(null);
@@ -41,7 +41,7 @@ function ProductSearchSelect({ value, inventory, onChange }) {
         <button
           type="button"
           onClick={() => { setIsOpen(true); setSearchTerm(''); }}
-          className={`w-full text-left text-xs font-bold p-1 border border-transparent rounded hover:bg-slate-200 transition-colors focus:outline-none ${displayName ? 'text-slate-900' : 'text-slate-400'}`}
+          className={`w-full text-left text-xs font-bold p-1 border border-transparent rounded hover:bg-slate-200 transition-colors focus:outline-none ${displayName ? (isAutoFilled ? 'text-indigo-600' : 'text-slate-900') : 'text-slate-400'}`}
         >
           {displayName || '- Search Product -'}
         </button>
@@ -329,226 +329,6 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
 }
 
 // ==========================================
-// COMPONENT: HISTORY PREVIEW MODAL
-// ==========================================
-function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
-  if (!invoice) return null;
-
-  const safeCustomers = Array.isArray(sys?.customers) ? sys.customers : [];
-  const safeInventory = Array.isArray(sys?.inventory) ? sys.inventory : [];
-  const safeItems = Array.isArray(invoice?.items) ? invoice.items : [];
-
-  const customerObj = safeCustomers.find(c => c.id === invoice.customerId) || {};
-  const customerAddress = String(customerObj.address || '');
-  const subtotal = safeItems.reduce((sum, item) => sum + (Number(item.qty || item.quantity) || 0) * (Number(item.unitPrice) || 0), 0);
-  const gst = subtotal * 0.09;
-  const total = subtotal + gst;
-
-  return (
-    <div className="fixed inset-0 z-[5000] overflow-y-auto bg-slate-950/90 print:static print:block print:bg-white print:p-0 print:backdrop-filter-none">
-      
-      <style type="text/css">
-        {`
-          @media print {
-            @page { size: A4; margin: 0 !important; }
-            html, body {
-              margin: 0 !important;
-              padding: 0 !important;
-              background: white !important;
-              -webkit-print-color-adjust: exact;
-              print-color-adjust: exact;
-            }
-            body * { visibility: hidden !important; }
-            #printable-invoice-history, #printable-invoice-history * { visibility: visible !important; }
-            
-            #printable-invoice-history {
-              position: absolute !important;
-              left: 0 !important;
-              top: 0 !important;
-              width: 210mm !important; 
-              height: 297mm !important; 
-              padding: 15mm 10mm !important; 
-              box-sizing: border-box !important;
-              background: white !important;
-              backdrop-filter: none !important;
-            }
-
-            *, html, body, div, p, span, h1, h2, h3, table, th, td { font-family: ${CJK_FONT} !important; }
-            tr, td, th { page-break-inside: avoid; break-inside: avoid; }
-          }
-        `}
-      </style>
-
-      <div className="flex min-h-full flex-col items-center py-12 print:block print:py-0 print:m-0">
-        
-        <div className="w-full max-w-[210mm] shrink-0 bg-slate-900 px-8 py-4 flex justify-between items-center text-white rounded-t-2xl shadow-2xl print:hidden border-b-4 border-blue-600">
-          <div className="flex items-center">
-            <FileText size={24} className="mr-3 text-blue-400" />
-            <div>
-              <h2 className="text-sm font-black tracking-widest uppercase text-slate-200">A4 Print Preview</h2>
-              <p className="text-lg font-bold text-white leading-none mt-0.5">#{String(invoice.number || invoice.id || '')}</p>
-            </div>
-          </div>
-          <div className="flex items-center space-x-3">
-            <button onClick={() => window.print()} className="flex items-center text-sm font-bold bg-blue-600 hover:bg-blue-500 px-5 py-2.5 rounded-xl transition-colors shadow-lg">
-              <Printer size={18} className="mr-2" /> Print Document
-            </button>
-            <button onClick={() => onEdit(invoice)} className="flex items-center text-sm font-bold bg-slate-800 hover:bg-slate-700 px-5 py-2.5 rounded-xl transition-colors border border-slate-700">
-              <Edit size={16} className="mr-2" /> Edit
-            </button>
-            <button onClick={onClose} className="hover:bg-slate-700 p-2.5 rounded-full transition-colors ml-2 bg-slate-800">
-              <X size={20} />
-            </button>
-          </div>
-        </div>
-
-        <div 
-          id="printable-invoice-history"
-          lang="zh" 
-          className="flex w-full max-w-[210mm] h-[297mm] flex-col bg-white py-[15mm] px-[10mm] text-black shadow-2xl rounded-b-2xl print:w-[210mm] print:h-[297mm] print:max-w-none print:rounded-none print:shadow-none box-border shrink-0"
-          style={{ fontFamily: CJK_FONT }}
-        >
-          <div className="flex w-full mb-4 justify-between shrink-0">
-            <div className="flex-1 flex flex-col pr-4">
-              <div className="flex items-center mb-5">
-                <div className="w-[110px] shrink-0 mr-4">
-                  <img src={logo} alt="Three Leaves Logo" className="w-full h-auto object-contain" />
-                </div>
-                <div className="flex-1 text-left leading-snug pt-2 whitespace-nowrap overflow-visible">
-                  <h1 className="font-black text-[17px]" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
-                  <h2 className="font-bold text-[16px] mb-1" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
-                  
-                  <div className="text-[#d55e2d] font-bold text-[10.5px] leading-tight tracking-tight">
-                    <p className="whitespace-nowrap">CO.REG NO.53033969B &nbsp;&nbsp; GST REG NO. M90355440L</p>
-                    <p className="whitespace-nowrap">280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
-                    <p className="whitespace-nowrap">HP: 97578869 (Mr Ye) &nbsp;&nbsp; HP: 91113505 (Min) &nbsp;&nbsp; Email: 3leaves.sg@gmail.com</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-between items-end w-full mb-2 text-[14px] font-bold">
-                <div className="flex items-end flex-1 pr-4">
-                  <span className="shrink-0 mr-2 text-black">TO:</span>
-                  <span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[13px] tracking-tight" style={{ fontFamily: CJK_FONT }}>
-                    {String(invoice.customer || '')}
-                  </span>
-                </div>
-                <div className="flex items-end w-[35%] pl-2">
-                  <span className="shrink-0 mr-2 text-black">DATE:</span>
-                  <span className="flex-1 text-center border-b border-black pb-0.5">
-                    {invoice.date && !isNaN(new Date(invoice.date).getTime()) 
-                      ? new Date(invoice.date).toLocaleDateString('en-GB').replace(/\//g, '-') 
-                      : new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex items-end w-full text-[14px] font-bold">
-                <span className="shrink-0 mr-2 text-black">ADDRESS:</span>
-                <span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[12px] tracking-tighter" style={{ fontFamily: CJK_FONT }}>
-                  {customerAddress}
-                </span>
-              </div>
-            </div>
-
-            <div className="w-[180px] shrink-0 flex flex-col items-start pl-4 pt-1">
-              <h2 className="text-[22px] font-bold tracking-[0.4em] leading-none mb-1" style={{ fontFamily: CJK_FONT }}>發票</h2>
-              <h3 className="text-[15px] font-black tracking-wide uppercase mb-6 text-black">TAX INVOICE</h3>
-              
-              <div className="w-full flex flex-col gap-3 mt-auto mb-2">
-                <div className="flex items-baseline">
-                  <span className="font-bold w-[50px] shrink-0 text-black text-[15px]">No.</span>
-                  <span className="text-red-600 font-bold tracking-wider text-[17px] leading-none">{String(invoice.number || '')}</span>
-                </div>
-                <div className="flex items-baseline">
-                  <span className="font-bold w-[50px] shrink-0 text-black text-[15px]">Term:</span>
-                  <span className="text-red-600 font-bold text-[16px] leading-none">{invoice.paymentTerms === 'cod' ? 'COD' : '30 Days'}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <table className="w-full h-full flex-grow text-[15px] border-2 border-black text-center mb-0 leading-tight mt-2" style={{ fontFamily: CJK_FONT }}>
-            <thead className="border-b-2 border-black">
-              <tr className="font-bold bg-white text-[14px]">
-                <th className="py-2 px-1 w-12 text-center">NO.</th>
-                <th className="py-2 px-2 text-left">DESCRIPTION</th>
-                <th className="py-2 px-1 w-24 text-center">QUANTITY</th>
-                <th className="py-2 px-1 w-32 text-center">UNIT PRICE</th>
-                <th className="py-2 px-1 w-32 text-center">AMOUNT</th>
-              </tr>
-            </thead>
-            <tbody style={{ fontFamily: CJK_FONT }}>
-              {safeItems.map((item, idx) => {
-                const productName = String(item.name || item.Items || '-');
-
-                return (
-                  <tr key={idx} className="align-top text-slate-900" style={{ fontFamily: CJK_FONT }}>
-                    <td className="px-1 py-1 text-center font-normal">{idx + 1}</td>
-                    <td className="px-1 py-1 text-left pl-2 leading-none pt-1.5 font-normal" style={{ fontFamily: CJK_FONT }}>{productName}</td>
-                    <td className="px-1 py-1 text-center font-normal" style={{ fontFamily: CJK_FONT }}>{String(item.qty || item.quantity || 0)} {String(item.unit || '')}</td>
-                    <td className="px-1 py-1 text-center font-normal">${formatMoney(item.unitPrice)}</td>
-                    <td className="px-1 py-1 text-center font-normal">
-                      ${formatMoney((Number(item.qty || item.quantity) || 0) * (Number(item.unitPrice) || 0))}
-                    </td>
-                  </tr>
-                );
-              })}
-              
-              <tr className="h-full">
-                <td></td><td></td><td></td><td></td><td></td>
-              </tr>
-
-              <tr className="border-t-2 border-black font-bold h-[28px]">
-                <td colSpan="3" rowSpan="3" className="bg-white border-r-2 border-black"></td>
-                <td className="p-1 text-center text-[14px]">SUBTOTAL</td>
-                <td className="p-1 text-center text-[15px]">${formatMoney(subtotal)}</td>
-              </tr>
-              <tr className="font-bold h-[28px] border-t border-black">
-                <td className="p-1 text-center text-[14px]">9% GST</td>
-                <td className="p-1 text-center text-[15px]">${formatMoney(gst)}</td>
-              </tr>
-              <tr className="font-bold h-[32px] border-t-2 border-black">
-                <td className="p-1 text-center text-[16px]">TOTAL</td>
-                <td className="p-1 text-center text-[17px]">${formatMoney(total)}</td>
-              </tr>
-            </tbody>
-          </table>
-
-          <div className="flex w-full mt-4 pt-2 items-end shrink-0">
-            <div className="w-[70%] text-[12px] font-bold leading-snug pr-4">
-              <div style={{ fontFamily: CJK_FONT }}>
-                <p className="text-[12px]">请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
-                <p className="text-[10px] whitespace-nowrap text-slate-800">Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
-                
-                <div className="mt-2 flex items-center">
-                  <div className="w-[80px] h-[80px] shrink-0 mr-3 flex items-center justify-center">
-                    <img src={paynowQr} alt="PayNow QR Code" className="w-[80px] h-[80px] object-contain" />
-                  </div>
-                  <div className="flex flex-col justify-center text-[11px]">
-                    <p>UEN: 53033969B</p>
-                    <p>A/C Name: Three Leaves (Singapore) Trading Enterprise</p>
-                    <p>A/C Number: 535-846562-001</p>
-                    <p>Bank Name: OCBC</p>
-                    <p className="mt-0.5 font-normal text-[10px] text-slate-800">All payments must be made payable to Three Leaves (Singapore) Trading Enterprise.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="w-[30%] shrink-0 flex flex-col justify-end pb-1 pl-2">
-              <div className="h-12"></div> 
-              <div className="border-t-2 border-black text-center pt-1.5 text-[12px] font-bold uppercase tracking-widest">Received By</div>
-            </div>
-          </div>
-
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ==========================================
 // MAIN EXPORT: INVOICE GENERATOR WORKSPACE
 // ==========================================
 export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
@@ -559,7 +339,10 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
   
   const [customerId, setCustomerId] = useState(existingInvoice?.customerId || '');
   
-  // NEW: State for the Invoice Status Dropdown (Defaults to Unpaid)
+  // NEW: State to explicitly turn on/off autofill predictions
+  const [isAutofillEnabled, setIsAutofillEnabled] = useState(false);
+
+  // Default to Unpaid internally, status removed from the UI below.
   const [invoiceStatus, setInvoiceStatus] = useState(existingInvoice?.status || 'Unpaid');
 
   const safeInventory = Array.isArray(sys?.inventory) ? sys.inventory : [];
@@ -635,13 +418,18 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
 
   useEffect(() => {
     const originalCustomer = existingInvoice?.customerId || '';
-    if (existingInvoice && customerId === originalCustomer) {
-      return; 
-    }
+    if (existingInvoice && customerId === originalCustomer) return; 
 
     if (!customerId) {
       setItems([]); 
       setAutoFillNotif(false); 
+      return;
+    }
+
+    // NEW: If autofill is disabled, wipe unverified predictions and do not fetch history
+    if (!isAutofillEnabled) {
+      setItems(prevItems => prevItems.filter(i => !i.isAutoFilled));
+      setAutoFillNotif(false);
       return;
     }
 
@@ -670,6 +458,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
             qty: Math.max(1, Math.round(stats.totalQty / stats.count)),
             unitPrice: getSafePrice(product, determinedUnit), 
             picked: false,
+            isAutoFilled: true, // FLAG UNVERIFIED PREDICTIONS
             suggestions: []
           });
         }
@@ -677,11 +466,15 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
     });
 
     if (autoFilled.length > 0) {
-      setItems(autoFilled); setAutoFillNotif(true); setTimeout(() => setAutoFillNotif(false), 4000);
+      // Merge verified existing items with the new autofilled items
+      setItems(prevItems => [...prevItems.filter(i => !i.isAutoFilled), ...autoFilled]);
+      setAutoFillNotif(true); 
+      setTimeout(() => setAutoFillNotif(false), 4000);
     } else {
-      setItems([]); setAutoFillNotif(false);
+      setItems(prevItems => prevItems.filter(i => !i.isAutoFilled)); 
+      setAutoFillNotif(false);
     }
-  }, [customerId, safeInvoices, safeInventory, existingInvoice]);
+  }, [customerId, isAutofillEnabled, safeInvoices, safeInventory, existingInvoice]);
 
   const suggestions = useMemo(() => {
     if (!customerId) return [];
@@ -779,6 +572,12 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
   };
 
   const handleRegister = (printAfter = false) => {
+    // Strip out the internal "isAutoFilled" flag before saving so it doesn't break future reads
+    const cleanItems = (Array.isArray(items) ? items : []).map(item => {
+      const { isAutoFilled, ...rest } = item;
+      return rest;
+    });
+
     const invoice = {
       id: existingInvoice ? existingInvoice.id : `INV-${invoiceNumber}`,
       number: String(invoiceNumber),
@@ -786,16 +585,16 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
       customer: String(customer?.name || existingInvoice?.customer || 'Unknown Customer'),
       region: String(customer?.region || existingInvoice?.region || ''),
       date: String(invoiceDate),
-      items: Array.isArray(items) ? items : [],
+      items: cleanItems,
       total,
-      status: invoiceStatus, // Pull directly from the new dropdown state
+      status: invoiceStatus, 
       deliveryStatus: existingInvoice ? String(existingInvoice.deliveryStatus || 'Pending') : 'Pending',
       paymentTerms: String(paymentTerms),
     };
 
     const nextInventory = [...safeInventory];
 
-    (Array.isArray(items) ? items : []).forEach((item) => {
+    cleanItems.forEach((item) => {
       if (!existingInvoice && item.itemId) {
         const stockIndex = nextInventory.findIndex((entry) => entry.id === item.itemId);
         if (stockIndex > -1) { nextInventory[stockIndex].stock -= Number(item.qty || item.quantity) || 0; }
@@ -939,46 +738,54 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
           <div className="mx-auto mb-12 w-full max-w-[800px] border-b-8 border-blue-600 bg-white p-12 text-sm text-gray-800 shadow-xl">
             <CompanyHeader />
 
+            {/* ADJUSTED LAYOUT: Status removed, Toggle Added */}
             <div className="mb-12 flex justify-between">
-              <div className="w-[28%] border-r border-slate-100 pr-4">
-                <label className="text-[10px] font-black uppercase text-gray-400">Customer Account:</label>
+              <div className="w-[35%] border-r border-slate-100 pr-6">
+                <div className="flex justify-between items-end mb-1">
+                  <label className="text-[10px] font-black uppercase text-gray-400">Customer Account:</label>
+                  {!existingInvoice && (
+                    <label className="flex items-center space-x-1.5 cursor-pointer bg-slate-50 border border-slate-200 px-2 py-1 rounded-md hover:bg-slate-100 transition-colors">
+                      <input 
+                        type="checkbox" 
+                        checked={isAutofillEnabled} 
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setIsAutofillEnabled(checked);
+                          if (!checked) {
+                            setItems(prev => prev.filter(i => !i.isAutoFilled));
+                            setAutoFillNotif(false);
+                          }
+                        }} 
+                        className="w-3 h-3 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer" 
+                      />
+                      <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Auto-Predict</span>
+                    </label>
+                  )}
+                </div>
                 <CustomerSearchSelect value={customerId} customers={safeCustomers} onChange={setCustomerId} disabled={!!existingInvoice} />
-                {autoFillNotif && (<p className="mt-2 flex items-center text-[10px] font-black uppercase tracking-widest text-emerald-500"><Sparkles className="mr-1" size={12} /> Predictively Prefilled</p>)}
+                {autoFillNotif && (<p className="mt-2 flex items-center text-[10px] font-black uppercase tracking-widest text-indigo-500"><Sparkles className="mr-1" size={12} /> Unverified Predictions Added</p>)}
               </div>
 
-              <div className="w-[16%] border-r border-slate-100 px-4">
-                <label className="text-[10px] font-black uppercase text-gray-400">Date:</label>
-                <input type="date" className="mt-1 w-full cursor-pointer border-none bg-transparent p-0 text-sm font-black text-slate-800 focus:ring-0 outline-none" value={invoiceDate} onChange={(event) => setInvoiceDate(event.target.value)} />
+              <div className="w-[20%] border-r border-slate-100 px-6">
+                <label className="text-[10px] font-black uppercase text-gray-400">Invoice Date:</label>
+                <input type="date" className="mt-1 w-full cursor-pointer border-none bg-transparent p-0 text-[16px] font-black text-slate-800 focus:ring-0 outline-none" value={invoiceDate} onChange={(event) => setInvoiceDate(event.target.value)} />
               </div>
 
-              <div className="w-[16%] border-r border-slate-100 px-4">
+              <div className="w-[20%] border-r border-slate-100 px-6">
                 <label className="text-[10px] font-black uppercase text-gray-400">Terms:</label>
-                <select className="mt-1 w-full cursor-pointer border-none bg-transparent p-0 text-sm font-black text-slate-800 focus:ring-0" onChange={(event) => setPaymentTerms(event.target.value)} value={paymentTerms}>
+                <select className="mt-1 w-full cursor-pointer border-none bg-transparent p-0 text-lg font-black text-slate-800 focus:ring-0" onChange={(event) => setPaymentTerms(event.target.value)} value={paymentTerms}>
                   <option value="30_days">30 Days</option>
                   <option value="cod">C.O.D</option>
                 </select>
               </div>
-              
-              {/* NEW EXPLICIT STATUS DROPDOWN IN GENERATOR */}
-              <div className="w-[16%] border-r border-slate-100 px-4">
-                <label className="text-[10px] font-black uppercase text-gray-400">Status:</label>
-                <select 
-                  className={`mt-1 w-full cursor-pointer border-none bg-transparent p-0 text-sm font-black focus:ring-0 outline-none ${invoiceStatus === 'Paid' ? 'text-emerald-600' : 'text-orange-600'}`} 
-                  onChange={(event) => setInvoiceStatus(event.target.value)} 
-                  value={invoiceStatus}
-                >
-                  <option value="Unpaid" className="text-orange-600 font-bold">Unpaid</option>
-                  <option value="Paid" className="text-emerald-600 font-bold">Paid</option>
-                </select>
-              </div>
 
-              <div className="w-[24%] pl-4 text-right relative">
+              <div className="w-[25%] pl-6 text-right relative">
                 <label className="text-[10px] font-black uppercase text-gray-400">Serial No.</label>
-                <div className="flex items-center justify-end text-xl font-black tracking-tighter text-red-600 mt-1">
+                <div className="flex items-center justify-end text-3xl font-black tracking-tighter text-red-600 mt-1">
                   <span className="mr-1">#</span>
-                  <input type="text" value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} className={`w-full max-w-[100px] bg-transparent border-b-2 outline-none text-right focus:ring-0 p-0 m-0 ${isDuplicateNumber ? 'border-red-500 text-red-600' : 'border-transparent hover:border-red-200 focus:border-red-600'}`} />
+                  <input type="text" value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} className={`w-full max-w-[140px] bg-transparent border-b-2 outline-none text-right focus:ring-0 p-0 m-0 ${isDuplicateNumber ? 'border-red-500 text-red-600' : 'border-transparent hover:border-red-200 focus:border-red-600'}`} />
                 </div>
-                {isDuplicateNumber && (<p className="text-[10px] font-black text-red-500 uppercase mt-1">Exists!</p>)}
+                {isDuplicateNumber && (<p className="text-[10px] font-black text-red-500 uppercase mt-1">Number Already Exists!</p>)}
               </div>
             </div>
 
@@ -1043,16 +850,38 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                     }
                   }
 
+                  // STYLING FOR UNVERIFIED PREDICTIONS
+                  const isPredicted = item.isAutoFilled;
+                  const rowClass = isPredicted 
+                    ? 'bg-indigo-50/40 border-indigo-200 text-indigo-700' 
+                    : (!item.itemId && item.rawSearchString ? 'bg-amber-50/30 border-amber-100' : 'border-gray-100');
+
                   return (
-                    <tr className={`border-b font-bold ${!item.itemId && item.rawSearchString ? 'bg-amber-50/30 border-amber-100' : 'border-gray-100'}`} key={`${item.itemId}-${index}`}>
+                    <tr className={`border-b font-bold transition-colors ${rowClass}`} key={`${item.itemId}-${index}`}>
                       <td className="p-4 text-center font-mono text-xs text-slate-300 align-top pt-5">{index + 1}</td>
                       <td className="p-2 relative align-top pt-3">
                         <div className="flex items-center space-x-2">
                           <input checked={item.picked || false} className="h-4 w-4 cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500 shrink-0" onChange={(event) => { const nextItems = [...items]; nextItems[index].picked = event.target.checked; setItems(nextItems); }} type="checkbox" />
-                          <ProductSearchSelect value={item.itemId} inventory={safeInventory} onChange={(selectedId) => { const product = safeInventory.find((entry) => entry.id === selectedId); if (!product) return; const nextItems = [...items]; const determinedUnit = String(product.Unit || product.unit || '箱'); nextItems[index] = { ...nextItems[index], itemId: selectedId, name: String(product.Name || product.name || product.Items || ''), unit: determinedUnit, unitPrice: getSafePrice(product, determinedUnit), suggestions: [] }; setItems(nextItems); }} />
+                          <ProductSearchSelect value={item.itemId} inventory={safeInventory} isAutoFilled={isPredicted} onChange={(selectedId) => { const product = safeInventory.find((entry) => entry.id === selectedId); if (!product) return; const nextItems = [...items]; const determinedUnit = String(product.Unit || product.unit || '箱'); nextItems[index] = { ...nextItems[index], itemId: selectedId, name: String(product.Name || product.name || product.Items || ''), unit: determinedUnit, unitPrice: getSafePrice(product, determinedUnit), suggestions: [] }; setItems(nextItems); }} />
                         </div>
                         
-                        {item.rawSearchString && item.itemId && (
+                        {isPredicted && (
+                          <div className="ml-6 mt-1 flex items-center">
+                            <button 
+                              onClick={() => {
+                                const next = [...items];
+                                next[index].isAutoFilled = false;
+                                setItems(next);
+                              }}
+                              className="text-[9px] font-black uppercase tracking-widest bg-indigo-200 text-indigo-800 px-2 py-1 rounded shadow-sm hover:bg-indigo-300 transition-colors flex items-center"
+                              type="button"
+                            >
+                              <Check size={10} className="mr-1" /> Verify Match
+                            </button>
+                          </div>
+                        )}
+
+                        {item.rawSearchString && item.itemId && !isPredicted && (
                           <p className="text-[9px] text-blue-400 font-medium ml-6 mt-1 flex items-center">
                             <BrainCircuit size={10} className="mr-1" /> Predicted from: "{item.rawSearchString}"
                           </p>
@@ -1100,15 +929,15 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                         )}
                       </td>
                       <td className="p-2 align-top pt-4">
-                        <select className="w-full border-none text-center text-xs font-bold focus:ring-0 bg-transparent m-0 cursor-pointer" onChange={(event) => { const nextItems = [...items]; const newUnit = event.target.value; nextItems[index].unit = newUnit; const product = safeInventory.find(p => p.id === nextItems[index].itemId); if (product) { nextItems[index].unitPrice = getSafePrice(product, newUnit); } setItems(nextItems); }} value={safeItemUnit}>
+                        <select className={`w-full border-none text-center text-xs font-bold focus:ring-0 bg-transparent m-0 cursor-pointer ${isPredicted ? 'text-indigo-600' : ''}`} onChange={(event) => { const nextItems = [...items]; const newUnit = event.target.value; nextItems[index].unit = newUnit; const product = safeInventory.find(p => p.id === nextItems[index].itemId); if (product) { nextItems[index].unitPrice = getSafePrice(product, newUnit); } setItems(nextItems); }} value={safeItemUnit}>
                           {rowUnitOptions.map((option) => (<option key={option.value} value={option.value}>{option.label}</option>))}
                         </select>
                       </td>
                       <td className="p-2 align-top pt-3">
-                        <input className="w-full border-none bg-transparent p-1 text-center font-black text-blue-600 focus:ring-0 m-0" onChange={(event) => { const nextItems = [...items]; nextItems[index].qty = event.target.value; setItems(nextItems); }} type="number" value={item.qty || item.quantity || ''} />
+                        <input className={`w-full border-none bg-transparent p-1 text-center font-black focus:ring-0 m-0 ${isPredicted ? 'text-indigo-700' : 'text-blue-600'}`} onChange={(event) => { const nextItems = [...items]; nextItems[index].qty = event.target.value; setItems(nextItems); }} type="number" value={item.qty || item.quantity || ''} />
                       </td>
                       <td className="p-2 align-top pt-3 text-right">
-                        <input className="w-full border-none bg-transparent p-1 text-right font-black focus:ring-0 m-0 leading-none" onChange={(event) => { const nextItems = [...items]; nextItems[index].unitPrice = event.target.value; setItems(nextItems); }} step="0.01" type="number" value={item.unitPrice || ''} />
+                        <input className={`w-full border-none bg-transparent p-1 text-right font-black focus:ring-0 m-0 leading-none ${isPredicted ? 'text-indigo-900' : ''}`} onChange={(event) => { const nextItems = [...items]; nextItems[index].unitPrice = event.target.value; setItems(nextItems); }} step="0.01" type="number" value={item.unitPrice || ''} />
                         
                         {item.itemId && customer && (
                           <button 
@@ -1118,16 +947,16 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
                               if (product) setPriceModal({ index, item, product, hasCustomPrice });
                             }}
                             className={`text-[9px] uppercase tracking-widest mt-0.5 px-2 py-1 rounded transition-colors flex items-center justify-end w-full ${
-                              hasCustomPrice ? 'text-emerald-500 font-black hover:bg-emerald-50' : 'text-slate-400 font-semibold hover:bg-slate-100'
+                              hasCustomPrice ? (isPredicted ? 'text-indigo-600 hover:bg-indigo-100' : 'text-emerald-500 font-black hover:bg-emerald-50') : 'text-slate-400 font-semibold hover:bg-slate-100'
                             }`}
                           >
                             {hasCustomPrice ? '★ Custom' : <><Settings size={10} className="mr-1" /> Default</>}
                           </button>
                         )}
                       </td>
-                      <td className="p-4 text-right font-mono text-lg font-black tracking-tighter text-slate-900 align-top pt-3">${formatMoney((Number(item.qty || item.quantity) || 0) * (Number(item.unitPrice) || 0))}</td>
+                      <td className={`p-4 text-right font-mono text-lg font-black tracking-tighter align-top pt-3 ${isPredicted ? 'text-indigo-900' : 'text-slate-900'}`}>${formatMoney((Number(item.qty || item.quantity) || 0) * (Number(item.unitPrice) || 0))}</td>
                       <td className="w-8 p-0 align-top pt-5">
-                        <button className="ml-2 text-red-200 hover:text-red-500" onClick={() => setItems(items.filter((_, itemIndex) => itemIndex !== index))} type="button"><Trash2 size={18} /></button>
+                        <button className={`ml-2 hover:text-red-500 ${isPredicted ? 'text-indigo-300 hover:bg-indigo-100' : 'text-red-200'}`} onClick={() => setItems(items.filter((_, itemIndex) => itemIndex !== index))} type="button"><Trash2 size={18} /></button>
                       </td>
                     </tr>
                   );
@@ -1135,7 +964,7 @@ export function InvoiceGenerator({ sys, existingInvoice = null, onClose }) {
               </tbody>
             </table>
 
-            <button className="mt-8 rounded bg-blue-50 px-5 py-2 text-[10px] font-bold uppercase text-blue-600 shadow-sm transition-all" onClick={() => setItems([...(Array.isArray(items) ? items : []), { itemId: '', name: '', unit: '箱', qty: 1, unitPrice: 0, picked: false, suggestions: [] }])} type="button">
+            <button className="mt-8 rounded bg-blue-50 px-5 py-2 text-[10px] font-bold uppercase text-blue-600 shadow-sm transition-all hover:bg-blue-100" onClick={() => setItems([...(Array.isArray(items) ? items : []), { itemId: '', name: '', unit: '箱', qty: 1, unitPrice: 0, picked: false, suggestions: [] }])} type="button">
               + Add Row Manually
             </button>
 
@@ -1250,7 +1079,6 @@ export function InvoiceModule({ sys }) {
     }
   };
 
-  // NEW: Handler for the explicit Status Dropdown in the Main Table
   const handleStatusChange = (invoiceId, newStatus) => {
     const updatedInvoices = safeInvoices.map(inv => {
       if (inv.id === invoiceId) {
@@ -1417,7 +1245,6 @@ export function InvoiceModule({ sys }) {
 
                   <td className="p-5 text-right font-black text-slate-900">${formatMoney(inv.total)}</td>
                   
-                  {/* NEW: Interactive Explicit Status Dropdown in Dashboard */}
                   <td className="p-5 text-center">
                     <div className="relative inline-flex items-center" onClick={(e) => e.stopPropagation()}>
                       <select
