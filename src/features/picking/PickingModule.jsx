@@ -5,7 +5,7 @@ import logo from '../invoices/three_leaves_logo.png';
 const CJK_FONT = '"Microsoft YaHei", "微软雅黑", "PingFang SC", "Hiragino Sans GB", "SimHei", "黑体", "SimSun", "宋体", serif';
 
 export function PickingModule({ sys }) {
-  // NEW: Mode selection (auto vs manual)
+  // Mode selection (auto vs manual)
   const [aggregationMode, setAggregationMode] = useState('auto'); // 'auto' | 'manual'
   
   // Auto Mode State
@@ -130,7 +130,8 @@ export function PickingModule({ sys }) {
   }, [selectedDate, aggregationMode]);
 
   return (
-    <div className="p-8 h-full overflow-y-auto relative bg-slate-50/50 flex flex-col">
+    // ADDED PRINT MODIFIERS TO PREVENT CLIPPING
+    <div className="p-8 h-full overflow-y-auto relative bg-slate-50/50 flex flex-col print:p-0 print:h-auto print:block print:overflow-visible print:bg-white">
       
       <div className="absolute opacity-0 w-0 h-0 overflow-hidden pointer-events-none">
         <img src={logo} alt="preload logo" />
@@ -140,20 +141,38 @@ export function PickingModule({ sys }) {
         {`
           @media print {
             @page { size: A4; margin: 10mm; }
-            html, body {
+            
+            /* CRITICAL FIX: Strip all screen-based height/scroll constraints to allow multi-page flow */
+            html, body, #root, .h-full, .h-screen, .overflow-y-auto, .overflow-hidden {
+              height: auto !important;
+              min-height: 100% !important;
+              max-height: none !important;
+              overflow: visible !important;
               margin: 0 !important;
               padding: 0 !important;
               background: white !important;
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
             }
+            
             #screen-ui { display: none !important; }
+            
             #print-ui { 
               display: block !important; 
               position: relative !important; 
+              height: auto !important;
+              overflow: visible !important;
+              width: 100% !important;
             }
-            tr { page-break-inside: avoid; break-inside: avoid; }
+
+            /* Force table to paginate cleanly without splitting rows */
+            table { page-break-inside: auto; width: 100%; }
+            tr { page-break-inside: avoid; page-break-after: auto; }
             td, th { page-break-inside: avoid; break-inside: avoid; }
+            
+            /* Forces table headers to repeat on every new printed page */
+            thead { display: table-header-group; }
+            tfoot { display: table-footer-group; }
           }
         `}
       </style>
@@ -354,7 +373,7 @@ export function PickingModule({ sys }) {
       </div>
 
       {/* ========================================================================= */}
-      {/* PRINT UI (Hidden on screen, styled cleanly for A4 PDF Output) */}
+      {/* PRINT UI (Hidden on screen, Multi-page capable) */}
       {/* ========================================================================= */}
       <div id="print-ui" className={isPrinting ? "block" : "hidden"}>
         <div className="w-full bg-white text-black font-sans" style={{ fontFamily: CJK_FONT }}>
@@ -388,8 +407,8 @@ export function PickingModule({ sys }) {
           </div>
 
           <table className="w-full text-[14px] border-2 border-black text-left mb-0" style={{ fontFamily: CJK_FONT }}>
-            <thead className="border-b-2 border-black">
-              <tr className="font-bold bg-slate-50 text-[12px]">
+            <thead className="border-b-2 border-black bg-slate-50">
+              <tr className="font-bold text-[12px]">
                 <th className="py-2 px-2 w-12 text-center border-r border-black/20">DONE</th>
                 <th className="py-2 px-3 text-left">PRODUCT DESCRIPTION</th>
                 <th className="py-2 px-3 w-32 text-center bg-blue-50/50">TOTAL QTY</th>
