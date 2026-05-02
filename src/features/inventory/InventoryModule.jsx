@@ -17,27 +17,41 @@ const DEFAULT_UNITS = [
 ];
 
 // ==========================================
-// COMPONENT: SUPPLIER AUTOCOMPLETE SEARCH
+// COMPONENT: STRICT SUPPLIER AUTOCOMPLETE
 // ==========================================
-function SupplierSearchInput({ value, onChange, inventory }) {
+function SupplierSearchInput({ value, onChange, suppliers }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [localSearch, setLocalSearch] = useState(value || '');
   const dropdownRef = useRef(null);
 
-  // Dynamically generate a list of unique suppliers from existing inventory
-  const uniqueSuppliers = useMemo(() => {
-    const suppliers = inventory.map(item => item?.Supplier || item?.supplier).filter(Boolean);
-    return Array.from(new Set(suppliers)).sort();
-  }, [inventory]);
+  // Extract a clean list of verified supplier names
+  const supplierNames = useMemo(() => {
+    const safeSuppliers = Array.isArray(suppliers) ? suppliers : [];
+    const names = safeSuppliers.map(s => s?.name || s?.Name || s?.supplier_name).filter(Boolean);
+    return Array.from(new Set(names)).sort();
+  }, [suppliers]);
 
-  const filtered = uniqueSuppliers.filter(s => s.toLowerCase().includes(String(value || '').toLowerCase()));
+  const filtered = supplierNames.filter(s => s.toLowerCase().includes(localSearch.toLowerCase()));
+
+  // Sync local search term if parent value changes
+  useEffect(() => {
+    setLocalSearch(value || '');
+  }, [value]);
 
   useEffect(() => {
     function handleClickOutside(event) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) setIsOpen(false);
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+        // STRICT MODE: If the typed text isn't a verified supplier, wipe it out.
+        if (localSearch && !supplierNames.includes(localSearch)) {
+          setLocalSearch('');
+          onChange('');
+        }
+      }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [localSearch, supplierNames, onChange]);
 
   return (
     <div className="relative w-full" ref={dropdownRef}>
@@ -45,31 +59,45 @@ function SupplierSearchInput({ value, onChange, inventory }) {
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
         <input
           type="text"
-          value={value}
+          value={localSearch}
           onChange={(e) => {
-            onChange(e.target.value);
+            const val = e.target.value;
+            setLocalSearch(val);
             setIsOpen(true);
+            // Only update parent form if it perfectly matches a valid supplier
+            if (supplierNames.includes(val)) {
+              onChange(val);
+            } else {
+              onChange(''); 
+            }
           }}
           onFocus={() => setIsOpen(true)}
-          placeholder="Search or add new supplier..."
+          placeholder="Search verified suppliers..."
           className="w-full border border-slate-200 rounded-xl py-3 pl-10 pr-3 text-base text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none"
         />
       </div>
-      {isOpen && filtered.length > 0 && (
+      {isOpen && (
         <div className="absolute z-[6000] top-full left-0 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto">
-          {filtered.map(sup => (
-            <button
-              key={sup}
-              type="button"
-              className="w-full text-left px-4 py-3 hover:bg-slate-50 text-sm font-bold text-slate-700 border-b border-slate-100 last:border-0 transition-colors"
-              onClick={() => {
-                onChange(sup);
-                setIsOpen(false);
-              }}
-            >
-              {sup}
-            </button>
-          ))}
+          {filtered.length > 0 ? (
+            filtered.map(sup => (
+              <button
+                key={sup}
+                type="button"
+                className="w-full text-left px-4 py-3 hover:bg-slate-50 text-sm font-bold text-slate-700 border-b border-slate-100 last:border-0 transition-colors"
+                onClick={() => {
+                  setLocalSearch(sup);
+                  onChange(sup);
+                  setIsOpen(false);
+                }}
+              >
+                {sup}
+              </button>
+            ))
+          ) : (
+            <div className="p-4 text-center text-sm text-slate-500 bg-slate-50 font-medium">
+              No matching supplier found in registry.
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -79,12 +107,12 @@ function SupplierSearchInput({ value, onChange, inventory }) {
 // ==========================================
 // COMPONENT: INVENTORY ADD/EDIT MODAL
 // ==========================================
-function InventoryFormModal({ item, inventory, onClose, onSave, onDelete }) {
+function InventoryFormModal({ item, suppliers, onClose, onSave, onDelete }) {
   const [formData, setFormData] = useState({
     id: item?.id || `prod-${Date.now()}`,
     sku: item?.sku || item?.SKU || '',
     Name: item?.Name || item?.name || item?.Items || '',
-    Supplier: item?.Supplier || item?.supplier || '', // NEW FIELD
+    Supplier: item?.Supplier || item?.supplier || '', 
     Unit: item?.Unit || item?.unit || '箱',
     Description: item?.Description || item?.description || '',
     Packing: item?.Packing || item?.packaging || '',
@@ -157,13 +185,12 @@ function InventoryFormModal({ item, inventory, onClose, onSave, onDelete }) {
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            {/* NEW SUPPLIER SEARCH FIELD */}
             <div>
               <label className="block text-sm text-slate-500 mb-1">Supplier</label>
               <SupplierSearchInput 
                 value={formData.Supplier}
                 onChange={(val) => setFormData({ ...formData, Supplier: val })}
-                inventory={inventory}
+                suppliers={suppliers}
               />
             </div>
             <div>
@@ -295,8 +322,23 @@ export function InventoryModule({ sys }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
-  
   const [notification, setNotification] = useState(null);
+
+  // INDEPENDENT SUPPLIER REGISTRY STATE
+  const [verifiedSuppliers, setVerifiedSuppliers] = useState([]);
+  
+  // Fetch real suppliers directly from database to enforce strict mode
+  useEffect(() => {
+    const fetchSuppliers = async () => {
+      try {
+        const { data, error } = await supabase.from('suppliers').select('*');
+        if (!error && data) setVerifiedSuppliers(data);
+      } catch (err) {
+        console.error("Error fetching suppliers:", err);
+      }
+    };
+    fetchSuppliers();
+  }, [isModalOpen]);
 
   const showNotification = (message, type = 'success') => {
     setNotification({ message, type });
@@ -312,7 +354,7 @@ export function InventoryModule({ sys }) {
     const name = String(item?.Name || item?.name || item?.Items || '');
     const desc = String(item?.Description || item?.description || '');
     const packing = String(item?.Packing || item?.packaging || '');
-    const supplier = String(item?.Supplier || item?.supplier || ''); // Search supplier
+    const supplier = String(item?.Supplier || item?.supplier || ''); 
     
     const searchLower = String(searchTerm).toLowerCase();
     return (
@@ -333,7 +375,7 @@ export function InventoryModule({ sys }) {
       const payload = {
         SKU: formData.sku,
         Name: formData.Name,
-        Supplier: formData.Supplier, // SAVING NEW SUPPLIER FIELD
+        Supplier: formData.Supplier, // Enforced by strict dropdown
         Unit: formData.Unit,
         Description: formData.Description,
         Packing: formData.Packing,
@@ -566,7 +608,7 @@ export function InventoryModule({ sys }) {
       {isModalOpen && (
         <InventoryFormModal 
           item={editingItem} 
-          inventory={safeInventoryArray}
+          suppliers={verifiedSuppliers}
           onClose={() => {
             setIsModalOpen(false);
             setEditingItem(null);
