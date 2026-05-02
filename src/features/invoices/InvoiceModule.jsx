@@ -141,8 +141,10 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
   const safeInventory = Array.isArray(sys?.inventory) ? sys.inventory : [];
   const safeItems = Array.isArray(items) ? items.filter(Boolean) : [];
 
-  // DYNAMIC A4 SIZING ENGINE - VERTICAL SPACING FOCUS
+  // DYNAMIC A4 SIZING ENGINE
   const itemCount = safeItems.length;
+  
+  // STANDARD LAYOUT SIZING
   let baseText = "text-[15px]";
   let cellPad = "py-1";
   let descPad = "pt-1.5";
@@ -150,13 +152,20 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
   let subtotalText = "text-[15px]";
   let gstText = "text-[14px]";
 
+  // SPECIAL LAYOUT SIZING
+  let spBaseText = "text-[14px]";
+  let spCellPad = "py-1.5";
+
   if (itemCount > 20) {
-    baseText = "text-[13px] leading-none"; // Keep font readable, tighten line height
-    cellPad = "py-0"; // aggressively strip vertical padding
+    baseText = "text-[13px] leading-none"; 
+    cellPad = "py-0"; 
     descPad = "pt-0.5";
     totalText = "text-[15px]";
     subtotalText = "text-[13px]";
     gstText = "text-[12px]";
+    
+    spBaseText = "text-[11px] leading-tight";
+    spCellPad = "py-0";
   } else if (itemCount > 14) {
     baseText = "text-[14px] leading-tight";
     cellPad = "py-0.5";
@@ -164,6 +173,9 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
     totalText = "text-[16px]";
     subtotalText = "text-[14px]";
     gstText = "text-[13px]";
+    
+    spBaseText = "text-[12px] leading-tight";
+    spCellPad = "py-0.5";
   }
 
   return (
@@ -189,16 +201,11 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
             <button className="flex items-center rounded bg-white px-5 py-2.5 font-bold text-slate-900 shadow-lg transition-all hover:bg-slate-50 text-sm" onClick={() => onRegister(false)} type="button"><Save className="mr-2" size={16} /> Save Invoice</button>
           </div>
         </div>
-        <div id="printable-invoice-generator" lang="zh" className="flex w-full max-w-[210mm] h-[297mm] flex-col bg-white py-[15mm] px-[10mm] text-black shadow-2xl rounded-b-2xl print:w-[210mm] print:h-[297mm] print:max-w-none print:rounded-none print:shadow-none box-border shrink-0" style={{ fontFamily: CJK_FONT }}>
+        <div id="printable-invoice-generator" lang="zh" className="flex w-full max-w-[210mm] h-[297mm] flex-col bg-white py-[15mm] px-[10mm] text-black shadow-2xl rounded-b-2xl print:w-[210mm] print:h-[297mm] print:max-w-none print:rounded-none print:shadow-none box-border" style={{ fontFamily: CJK_FONT }}>
           
           {isSpecialFormat ? (
-            // ==========================================
-            // SPECIAL FORMAT LAYOUT (REDESIGNED HEADER)
-            // ==========================================
-            <div className="flex flex-col w-full">
-              
+            <div className="flex flex-col h-full w-full">
               <div className="flex w-full justify-between items-start border-b-2 border-slate-800 pb-4 mb-3 shrink-0">
-                {/* Left: Company Details (Fixed 55% width) */}
                 <div className="flex flex-col gap-2 w-[55%] pr-4">
                   <img src={logo} className="w-[100px] h-auto object-contain" alt="Logo" />
                   <div className="leading-snug">
@@ -211,10 +218,7 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
                     </div>
                   </div>
                 </div>
-                
-                {/* Right: Barcode & Invoice Meta (Fixed 45% width) */}
                 <div className="flex flex-col items-end w-[45%] text-right pl-4">
-                  {/* PERFECT ASPECT RATIO BARCODE */}
                   <img 
                     src={`https://bwipjs-api.metafloor.com/?bcid=code128&text=${invoiceNumber}&scale=3&height=10&includetext=true&textxalign=center`} 
                     alt="Barcode" 
@@ -222,7 +226,6 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
                   />
                   <h2 className="text-[20px] font-black tracking-[0.3em] leading-none mb-1" style={{ fontFamily: CJK_FONT }}>發票</h2>
                   <h3 className="text-[14px] font-black tracking-widest uppercase mb-3 text-black">TAX INVOICE</h3>
-                  
                   <table className="text-[12px] font-bold text-slate-800 text-right w-full max-w-[200px]">
                     <tbody>
                       <tr>
@@ -244,7 +247,6 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
                 </div>
               </div>
 
-              {/* BILL TO & DATE */}
               <div className="flex justify-between items-end mb-3 shrink-0 text-[12px] font-bold">
                 <div className="w-[65%] leading-relaxed">
                   <div className="flex items-start">
@@ -261,6 +263,92 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
                   <span className="flex-1 border-b border-slate-800 pb-0.5 text-right">{invoiceDate && !isNaN(new Date(invoiceDate).getTime()) ? new Date(invoiceDate).toLocaleDateString('en-GB').replace(/\//g, '-') : new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}</span>
                 </div>
               </div>
+
+              <div className="border border-slate-800 rounded-sm overflow-hidden shrink-0">
+                <table className={`w-full text-center ${spBaseText}`}>
+                  <thead className="border-b border-slate-800 bg-slate-100">
+                    <tr className="font-bold text-[12px] text-slate-700">
+                      <th className="py-2 px-2 w-12 border-r border-slate-300">NO.</th>
+                      <th className="py-2 px-2 text-left border-r border-slate-300">DESCRIPTION</th>
+                      <th className="py-2 px-2 w-24 border-r border-slate-300">QTY</th>
+                      <th className="py-2 px-2 w-28 border-r border-slate-300">PRICE</th>
+                      <th className="py-2 px-2 w-28">AMOUNT</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {safeItems.map((item, idx) => {
+                      const foundProduct = safeInventory.find((entry) => entry?.id === item?.itemId);
+                      const productName = foundProduct ? String(foundProduct.Name || foundProduct.name || foundProduct.Items || '') : String(item?.name || item?.Items || item?.rawSearchString || '-');
+                      return (
+                        <tr key={idx}>
+                          <td className={`${spCellPad} px-2 border-r border-slate-300 text-slate-500`}>{idx + 1}</td>
+                          <td className={`${spCellPad} px-2 text-left border-r border-slate-300 font-bold text-slate-900`}>
+                            {productName !== '-' ? (
+                              <div className="flex flex-col">
+                                <span>☐ {productName}</span>
+                                {item.remarks && <span className="text-[0.85em] text-slate-600 font-medium italic ml-[18px] leading-tight pt-0.5 break-words whitespace-pre-wrap">{item.remarks}</span>}
+                              </div>
+                            ) : '-'}
+                          </td>
+                          <td className={`${spCellPad} px-2 border-r border-slate-300 font-medium`}>{String(item?.qty || item?.quantity || 0)} {String(item?.unit || '')}</td>
+                          <td className={`${spCellPad} px-2 border-r border-slate-300 font-medium`}>${formatMoney(item?.unitPrice)}</td>
+                          <td className={`${spCellPad} px-2 font-bold`}>${formatMoney((Number(item?.qty || item?.quantity) || 0) * (Number(item?.unitPrice) || 0))}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex-grow flex flex-col items-center justify-center min-h-[60px] py-4 relative">
+                {carPlateNo && (
+                  <div className="text-center">
+                    <p className="text-[12px] font-black uppercase tracking-widest text-slate-400 mb-1">Assigned Vehicle</p>
+                    <div className="border-2 border-dashed border-slate-300 rounded-2xl px-12 py-3 text-[36px] font-black uppercase tracking-widest text-slate-800 bg-slate-50 shadow-sm">
+                      {carPlateNo}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-between items-end border-t-2 border-slate-800 pt-4 shrink-0">
+                <div className="w-[60%] text-[10px] leading-tight pr-4">
+                  <p className="font-bold mb-1">请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
+                  <p className="text-slate-600 mb-3">Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
+                  
+                  <div className="flex items-center bg-slate-50 p-2 rounded border border-slate-200">
+                    <img src={paynowQr} alt="PayNow QR Code" className="w-[50px] h-[50px] object-contain mr-3" />
+                    <div>
+                      <p className="font-bold text-slate-900">Three Leaves (Singapore) Trading Enterprise</p>
+                      <p className="text-slate-600">UEN: 53033969B &nbsp;|&nbsp; OCBC A/C: 535-846562-001</p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="w-[35%] flex flex-col items-end">
+                  <table className="w-full font-bold text-[13px] border border-slate-800 rounded-sm overflow-hidden mb-4">
+                    <tbody>
+                      <tr className="border-b border-slate-800">
+                        <td className="p-1.5 bg-slate-100 text-left pl-3 border-r border-slate-800 w-[50%]">SUBTOTAL</td>
+                        <td className="p-1.5 text-right pr-3">${formatMoney(subtotal)}</td>
+                      </tr>
+                      <tr className="border-b border-slate-800">
+                        <td className="p-1.5 bg-slate-100 text-left pl-3 border-r border-slate-800">9% GST</td>
+                        <td className="p-1.5 text-right pr-3">${formatMoney(gst)}</td>
+                      </tr>
+                      <tr className="text-[16px] text-slate-900">
+                        <td className="p-2 bg-slate-200 text-left pl-3 border-r border-slate-800">TOTAL</td>
+                        <td className="p-2 text-right pr-3 font-black">${formatMoney(total)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  
+                  <div className="w-full border-t border-slate-800 pt-1 text-center font-bold text-[11px] text-slate-500 uppercase tracking-widest mt-2">
+                    Received By / Company Stamp
+                  </div>
+                </div>
+              </div>
+
             </div>
           ) : (
             // ==========================================
@@ -292,62 +380,58 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
                   </div>
                 </div>
               </div>
+              
+              <table className={`w-full h-full flex-grow border-2 border-black text-center mb-0 mt-2 ${baseText}`} style={{ fontFamily: CJK_FONT }}>
+                <thead className="border-b-2 border-black">
+                  <tr className="font-bold bg-white text-[14px]"><th className="py-2 px-1 w-12 text-center">NO.</th><th className="py-2 px-2 text-left">DESCRIPTION</th><th className="py-2 px-1 w-24 text-center">QUANTITY</th><th className="py-2 px-1 w-32 text-center">UNIT PRICE</th><th className="py-2 px-1 w-32 text-center">AMOUNT</th></tr>
+                </thead>
+                <tbody style={{ fontFamily: CJK_FONT }}>
+                  {safeItems.map((item, idx) => {
+                    const foundProduct = safeInventory.find((entry) => entry?.id === item?.itemId);
+                    const productName = foundProduct ? String(foundProduct.Name || foundProduct.name || foundProduct.Items || '') : String(item?.name || item?.Items || item?.rawSearchString || '-');
+                    return (
+                      <tr key={idx} className="align-top text-slate-900" style={{ fontFamily: CJK_FONT }}>
+                        <td className={`px-1 text-center font-normal ${cellPad}`}>{idx + 1}</td>
+                        <td className={`px-1 text-left pl-2 font-normal ${cellPad} ${descPad}`} style={{ fontFamily: CJK_FONT }}>
+                          {productName !== '-' ? (
+                            <div className="flex flex-col">
+                              <span>☐ {productName}</span>
+                              {item.remarks && <span className="text-[0.85em] text-slate-500 italic ml-[18px] leading-tight pt-0.5 break-words whitespace-pre-wrap">{item.remarks}</span>}
+                            </div>
+                          ) : '-'}
+                        </td>
+                        <td className={`px-1 text-center font-normal ${cellPad}`} style={{ fontFamily: CJK_FONT }}>{String(item?.qty || item?.quantity || 0)} {String(item?.unit || '')}</td>
+                        <td className={`px-1 text-center font-normal ${cellPad}`}>${formatMoney(item?.unitPrice)}</td>
+                        <td className={`px-1 text-center font-normal ${cellPad}`}>
+                          ${formatMoney((Number(item?.qty || item?.quantity) || 0) * (Number(item?.unitPrice) || 0))}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  <tr className="h-full"><td></td><td></td><td></td><td></td><td></td></tr>
+                  <tr className="border-t-2 border-black font-bold h-[28px]">
+                    <td colSpan="3" rowSpan="3" className="bg-white border-r-2 border-black p-2 align-top text-left"></td>
+                    <td className={`p-1 text-center ${gstText}`}>SUBTOTAL</td><td className={`p-1 text-center ${subtotalText}`}>${formatMoney(subtotal)}</td>
+                  </tr>
+                  <tr className="font-bold h-[28px] border-t border-black"><td className={`p-1 text-center ${gstText}`}>9% GST</td><td className={`p-1 text-center ${subtotalText}`}>${formatMoney(gst)}</td></tr>
+                  <tr className="font-bold h-[32px] border-t-2 border-black"><td className="p-1 text-center text-[16px]">TOTAL</td><td className={`p-1 text-center ${totalText}`}>${formatMoney(total)}</td></tr>
+                </tbody>
+              </table>
+              <div className="flex w-full mt-4 pt-2 items-end shrink-0">
+                <div className="w-[70%] text-[12px] font-bold leading-snug pr-4">
+                  <div style={{ fontFamily: CJK_FONT }}>
+                    <p className="text-[12px]">请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p><p className="text-[10px] whitespace-nowrap text-slate-800">Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
+                    <div className="mt-2 flex items-center">
+                      <div className="w-[80px] h-[80px] shrink-0 mr-3 flex items-center justify-center"><img src={paynowQr} alt="PayNow QR Code" className="w-[80px] h-[80px] object-contain" /></div>
+                      <div className="flex flex-col justify-center text-[11px]"><p>UEN: 53033969B</p><p>A/C Name: Three Leaves (Singapore) Trading Enterprise</p><p>A/C Number: 535-846562-001</p><p>Bank Name: OCBC</p><p className="mt-0.5 font-normal text-[10px] text-slate-800">All payments must be made payable to Three Leaves (Singapore) Trading Enterprise.</p></div>
+                    </div>
+                  </div>
+                </div>
+                <div className="w-[30%] shrink-0 flex flex-col justify-end pb-1 pl-2"><div className="h-12"></div><div className="border-t-2 border-black text-center pt-1.5 text-[12px] font-bold uppercase tracking-widest">Received By</div></div>
+              </div>
             </div>
           )}
 
-          <table className={`w-full h-full flex-grow border-2 border-black text-center mb-0 mt-2 ${baseText}`} style={{ fontFamily: CJK_FONT }}>
-            <thead className="border-b-2 border-black">
-              <tr className="font-bold bg-white text-[14px]"><th className="py-2 px-1 w-12 text-center">NO.</th><th className="py-2 px-2 text-left">DESCRIPTION</th><th className="py-2 px-1 w-24 text-center">QUANTITY</th><th className="py-2 px-1 w-32 text-center">UNIT PRICE</th><th className="py-2 px-1 w-32 text-center">AMOUNT</th></tr>
-            </thead>
-            <tbody style={{ fontFamily: CJK_FONT }}>
-              {safeItems.map((item, idx) => {
-                const foundProduct = safeInventory.find((entry) => entry?.id === item?.itemId);
-                const productName = foundProduct ? String(foundProduct.Name || foundProduct.name || foundProduct.Items || '') : String(item?.name || item?.Items || item?.rawSearchString || '-');
-                return (
-                  <tr key={idx} className="align-top text-slate-900" style={{ fontFamily: CJK_FONT }}>
-                    <td className={`px-1 text-center font-normal ${cellPad}`}>{idx + 1}</td>
-                    <td className={`px-1 text-left pl-2 font-normal ${cellPad} ${descPad}`} style={{ fontFamily: CJK_FONT }}>{productName}</td>
-                    <td className={`px-1 text-center font-normal ${cellPad}`} style={{ fontFamily: CJK_FONT }}>{String(item?.qty || item?.quantity || 0)} {String(item?.unit || item?.Unit || '')}</td>
-                    <td className={`px-1 text-center font-normal ${cellPad}`}>${formatMoney(item?.unitPrice)}</td>
-                    <td className={`px-1 text-center font-normal ${cellPad}`}>${formatMoney((Number(item?.qty || item?.quantity) || 0) * (Number(item?.unitPrice) || 0))}</td>
-                  </tr>
-                );
-              })}
-              
-              <tr className="h-full">
-                <td></td>
-                <td className="text-center align-middle">
-                  {/* CLEAN TEXT CENTERED CAR PLATE */}
-                  {isSpecialFormat && carPlateNo && (
-                    <div className="inline-block text-slate-900">
-                       <span className="text-[14px] font-bold">Car Plate No: </span>
-                       <span className="text-[16px] font-black">{carPlateNo}</span>
-                    </div>
-                  )}
-                </td>
-                <td></td><td></td><td></td>
-              </tr>
-              
-              <tr className="border-t-2 border-black font-bold h-[28px]">
-                <td colSpan="3" rowSpan="3" className="bg-white border-r-2 border-black p-2 align-top text-left"></td>
-                <td className={`p-1 text-center bg-white ${gstText}`}>SUBTOTAL</td><td className={`p-1 text-center bg-white ${subtotalText}`}>${formatMoney(subtotal)}</td>
-              </tr>
-              <tr className="font-bold h-[28px] border-t border-black bg-white"><td className={`p-1 text-center ${gstText}`}>9% GST</td><td className={`p-1 text-center ${subtotalText}`}>${formatMoney(gst)}</td></tr>
-              <tr className="font-bold h-[32px] border-t-2 border-black bg-white"><td className="p-1 text-center text-[16px]">TOTAL</td><td className={`p-1 text-center ${totalText}`}>${formatMoney(total)}</td></tr>
-            </tbody>
-          </table>
-          <div className="flex w-full mt-4 pt-2 items-end shrink-0">
-            <div className="w-[70%] text-[12px] font-bold leading-snug pr-4">
-              <div style={{ fontFamily: CJK_FONT }}>
-                <p className="text-[12px]">请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p><p className="text-[10px] whitespace-nowrap text-slate-800">Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
-                <div className="mt-2 flex items-center">
-                  <div className="w-[80px] h-[80px] shrink-0 mr-3 flex items-center justify-center"><img src={paynowQr} alt="PayNow QR Code" className="w-[80px] h-[80px] object-contain" /></div>
-                  <div className="flex flex-col justify-center text-[11px]"><p>UEN: 53033969B</p><p>A/C Name: Three Leaves (Singapore) Trading Enterprise</p><p>A/C Number: 535-846562-001</p><p>Bank Name: OCBC</p><p className="mt-0.5 font-normal text-[10px] text-slate-800">All payments must be made payable to Three Leaves (Singapore) Trading Enterprise.</p></div>
-                </div>
-              </div>
-            </div>
-            <div className="w-[30%] shrink-0 flex flex-col justify-end pb-1 pl-2"><div className="h-12"></div><div className="border-t-2 border-black text-center pt-1.5 text-[12px] font-bold uppercase tracking-widest">Received By</div></div>
-          </div>
         </div>
       </div>
     </div>
@@ -375,7 +459,7 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
   const carPlateNo = invoice.carPlateNo;
   const invoiceNumber = String(invoice?.number || invoice?.id || '');
 
-  // DYNAMIC A4 SIZING ENGINE - VERTICAL SPACING FOCUS
+  // DYNAMIC A4 Sizing
   const itemCount = safeItems.length;
   let baseText = "text-[15px]";
   let cellPad = "py-1";
@@ -384,6 +468,9 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
   let subtotalText = "text-[15px]";
   let gstText = "text-[14px]";
 
+  let spBaseText = "text-[14px]";
+  let spCellPad = "py-1.5";
+
   if (itemCount > 20) {
     baseText = "text-[13px] leading-none"; 
     cellPad = "py-0"; 
@@ -391,6 +478,9 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
     totalText = "text-[15px]";
     subtotalText = "text-[13px]";
     gstText = "text-[12px]";
+    
+    spBaseText = "text-[11px] leading-tight";
+    spCellPad = "py-0";
   } else if (itemCount > 14) {
     baseText = "text-[14px] leading-tight";
     cellPad = "py-0.5";
@@ -398,6 +488,9 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
     totalText = "text-[16px]";
     subtotalText = "text-[14px]";
     gstText = "text-[13px]";
+    
+    spBaseText = "text-[12px] leading-tight";
+    spCellPad = "py-0.5";
   }
 
   return (
@@ -409,7 +502,7 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
             html, body { margin: 0 !important; padding: 0 !important; background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             body * { visibility: hidden !important; }
             #printable-invoice-history, #printable-invoice-history * { visibility: visible !important; }
-            #printable-invoice-history { position: absolute !important; left: 0 !important; top: 0 !important; width: 210mm !important; height: 297mm !important; padding: 15mm 10mm !important; margin: 0 !important; background: white !important; backdrop-filter: none !important; display: flex !important; flex-direction: column !important; }
+            #printable-invoice-history { position: absolute !important; left: 0 !important; top: 0 !important; width: 210mm !important; height: 297mm !important; padding: 15mm 10mm !important; box-sizing: border-box !important; background: white !important; backdrop-filter: none !important; display: flex !important; flex-direction: column !important; }
             *, html, body, div, p, span, h1, h2, h3, table, th, td { font-family: ${CJK_FONT} !important; }
             tr, td, th { page-break-inside: avoid; break-inside: avoid; }
           }
@@ -427,10 +520,10 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
         <div id="printable-invoice-history" lang="zh" className="flex w-full max-w-[210mm] h-[297mm] flex-col bg-white py-[15mm] px-[10mm] text-black shadow-2xl rounded-b-2xl print:w-[210mm] print:h-[297mm] print:max-w-none print:rounded-none print:shadow-none box-border" style={{ fontFamily: CJK_FONT }}>
           
           {isSpecialFormat ? (
-            <div className="flex flex-col w-full">
+            <div className="flex flex-col h-full w-full">
               <div className="flex w-full justify-between items-start border-b-2 border-slate-800 pb-4 mb-3 shrink-0">
                 <div className="flex flex-col gap-2 w-[55%] pr-4">
-                  <img src={logo} className="w-[100px] h-auto object-contain" alt="Logo" />
+                  <img src={logo} alt="Three Leaves Logo" className="w-[100px] h-auto object-contain" />
                   <div className="leading-snug">
                     <h1 className="font-black text-[16px] uppercase tracking-tight" style={{ fontFamily: CJK_FONT }}>Three Leaves (Singapore) Trading Enterprise</h1>
                     <h2 className="font-bold text-[14px] mb-1" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
@@ -488,6 +581,91 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
                   <span className="flex-1 border-b border-slate-800 pb-0.5 text-right">{invoice?.date && !isNaN(new Date(invoice.date).getTime()) ? new Date(invoice.date).toLocaleDateString('en-GB').replace(/\//g, '-') : new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}</span>
                 </div>
               </div>
+
+              <div className="border border-slate-800 rounded-sm overflow-hidden shrink-0">
+                <table className={`w-full text-center ${spBaseText}`}>
+                  <thead className="border-b border-slate-800 bg-slate-100">
+                    <tr className="font-bold text-[12px] text-slate-700">
+                      <th className="py-2 px-2 w-12 border-r border-slate-300">NO.</th>
+                      <th className="py-2 px-2 text-left border-r border-slate-300">DESCRIPTION</th>
+                      <th className="py-2 px-2 w-24 border-r border-slate-300">QTY</th>
+                      <th className="py-2 px-2 w-28 border-r border-slate-300">PRICE</th>
+                      <th className="py-2 px-2 w-28">AMOUNT</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {safeItems.map((item, idx) => {
+                      const productName = String(item?.name || item?.Items || item?.rawSearchString || '-');
+                      return (
+                        <tr key={idx}>
+                          <td className={`${spCellPad} px-2 border-r border-slate-300 text-slate-500`}>{idx + 1}</td>
+                          <td className={`${spCellPad} px-2 text-left border-r border-slate-300 font-bold text-slate-900`}>
+                            {productName !== '-' ? (
+                              <div className="flex flex-col">
+                                <span>☐ {productName}</span>
+                                {item.remarks && <span className="text-[0.85em] text-slate-600 font-medium italic ml-[18px] leading-tight pt-0.5 break-words whitespace-pre-wrap">{item.remarks}</span>}
+                              </div>
+                            ) : '-'}
+                          </td>
+                          <td className={`${spCellPad} px-2 border-r border-slate-300 font-medium`}>{String(item?.qty || item?.quantity || 0)} {String(item?.unit || '')}</td>
+                          <td className={`${spCellPad} px-2 border-r border-slate-300 font-medium`}>${formatMoney(item?.unitPrice)}</td>
+                          <td className={`${spCellPad} px-2 font-bold`}>${formatMoney((Number(item?.qty || item?.quantity) || 0) * (Number(item?.unitPrice) || 0))}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex-grow flex flex-col items-center justify-center min-h-[60px] py-4 relative">
+                {carPlateNo && (
+                  <div className="text-center">
+                    <p className="text-[12px] font-black uppercase tracking-widest text-slate-400 mb-1">Assigned Vehicle</p>
+                    <div className="border-2 border-dashed border-slate-300 rounded-2xl px-12 py-3 text-[36px] font-black uppercase tracking-widest text-slate-800 bg-slate-50 shadow-sm">
+                      {carPlateNo}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-between items-end border-t-2 border-slate-800 pt-4 shrink-0">
+                <div className="w-[60%] text-[10px] leading-tight pr-4">
+                  <p className="font-bold mb-1">请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
+                  <p className="text-slate-600 mb-3">Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
+                  
+                  <div className="flex items-center bg-slate-50 p-2 rounded border border-slate-200">
+                    <img src={paynowQr} alt="PayNow QR Code" className="w-[50px] h-[50px] object-contain mr-3" />
+                    <div>
+                      <p className="font-bold text-slate-900">Three Leaves (Singapore) Trading Enterprise</p>
+                      <p className="text-slate-600">UEN: 53033969B &nbsp;|&nbsp; OCBC A/C: 535-846562-001</p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="w-[35%] flex flex-col items-end">
+                  <table className="w-full font-bold text-[13px] border border-slate-800 rounded-sm overflow-hidden mb-4">
+                    <tbody>
+                      <tr className="border-b border-slate-800">
+                        <td className="p-1.5 bg-slate-100 text-left pl-3 border-r border-slate-800 w-[50%]">SUBTOTAL</td>
+                        <td className="p-1.5 text-right pr-3">${formatMoney(subtotal)}</td>
+                      </tr>
+                      <tr className="border-b border-slate-800">
+                        <td className="p-1.5 bg-slate-100 text-left pl-3 border-r border-slate-800">9% GST</td>
+                        <td className="p-1.5 text-right pr-3">${formatMoney(gst)}</td>
+                      </tr>
+                      <tr className="text-[16px] text-slate-900">
+                        <td className="p-2 bg-slate-200 text-left pl-3 border-r border-slate-800">TOTAL</td>
+                        <td className="p-2 text-right pr-3 font-black">${formatMoney(total)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  
+                  <div className="w-full border-t border-slate-800 pt-1 text-center font-bold text-[11px] text-slate-500 uppercase tracking-widest mt-2">
+                    Received By / Company Stamp
+                  </div>
+                </div>
+              </div>
+
             </div>
           ) : (
             <div className="flex flex-col w-full shrink-0">
@@ -506,7 +684,7 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
                     <div className="flex items-end flex-1 pr-4"><span className="shrink-0 mr-2 text-black">TO:</span><span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[13px] tracking-tight" style={{ fontFamily: CJK_FONT }}>{String(invoice?.customer || '')}</span></div>
                     <div className="flex items-end w-[35%] pl-2"><span className="shrink-0 mr-2 text-black">DATE:</span><span className="flex-1 text-center border-b border-black pb-0.5">{invoice?.date && !isNaN(new Date(invoice.date).getTime()) ? new Date(invoice.date).toLocaleDateString('en-GB').replace(/\//g, '-') : new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}</span></div>
                   </div>
-                  <div className="flex items-end w-full text-[14px] font-bold"><span className="shrink-0 mr-2 text-black">ADDRESS:</span><span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[12px] tracking-tighter" style={{ fontFamily: CJK_FONT }}>{String(customerAddress)}</span></div>
+                  <div className="flex items-end w-full text-[14px] font-bold"><span className="shrink-0 mr-2 text-black">ADDRESS:</span><span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[12px] tracking-tighter" style={{ fontFamily: CJK_FONT }}>{customerAddress}</span></div>
                 </div>
                 <div className="w-[180px] shrink-0 flex flex-col items-start pl-4 pt-1">
                   <h2 className="text-[22px] font-bold tracking-[0.4em] leading-none mb-1" style={{ fontFamily: CJK_FONT }}>發票</h2><h3 className="text-[15px] font-black tracking-wide uppercase mb-2 text-black">TAX INVOICE</h3>
@@ -516,60 +694,57 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
                   </div>
                 </div>
               </div>
+              
+              <table className={`w-full h-full flex-grow border-2 border-black text-center mb-0 mt-2 ${baseText}`} style={{ fontFamily: CJK_FONT }}>
+                <thead className="border-b-2 border-black">
+                  <tr className="font-bold bg-white text-[14px]"><th className="py-2 px-1 w-12 text-center">NO.</th><th className="py-2 px-2 text-left">DESCRIPTION</th><th className="py-2 px-1 w-24 text-center">QUANTITY</th><th className="py-2 px-1 w-32 text-center">UNIT PRICE</th><th className="py-2 px-1 w-32 text-center">AMOUNT</th></tr>
+                </thead>
+                <tbody style={{ fontFamily: CJK_FONT }}>
+                  {safeItems.map((item, idx) => {
+                    const productName = String(item?.name || item?.Items || item?.rawSearchString || '-');
+                    return (
+                      <tr key={idx} className="align-top text-slate-900" style={{ fontFamily: CJK_FONT }}>
+                        <td className={`px-1 text-center font-normal ${cellPad}`}>{idx + 1}</td>
+                        <td className={`px-1 text-left pl-2 font-normal ${cellPad} ${descPad}`} style={{ fontFamily: CJK_FONT }}>
+                          {productName !== '-' ? (
+                            <div className="flex flex-col">
+                              <span>☐ {productName}</span>
+                              {item.remarks && <span className="text-[0.85em] text-slate-500 italic ml-[18px] leading-tight pt-0.5 break-words whitespace-pre-wrap">{item.remarks}</span>}
+                            </div>
+                          ) : '-'}
+                        </td>
+                        <td className={`px-1 text-center font-normal ${cellPad}`} style={{ fontFamily: CJK_FONT }}>{String(item?.qty || item?.quantity || 0)} {String(item?.unit || '')}</td>
+                        <td className={`px-1 text-center font-normal ${cellPad}`}>${formatMoney(item?.unitPrice)}</td>
+                        <td className={`px-1 text-center font-normal ${cellPad}`}>
+                          ${formatMoney((Number(item?.qty || item?.quantity) || 0) * (Number(item?.unitPrice) || 0))}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  <tr className="h-full"><td></td><td></td><td></td><td></td><td></td></tr>
+                  <tr className="border-t-2 border-black font-bold h-[28px]">
+                    <td colSpan="3" rowSpan="3" className="bg-white border-r-2 border-black p-2 align-top text-left"></td>
+                    <td className={`p-1 text-center ${gstText}`}>SUBTOTAL</td><td className={`p-1 text-center ${subtotalText}`}>${formatMoney(subtotal)}</td>
+                  </tr>
+                  <tr className="font-bold h-[28px] border-t border-black"><td className={`p-1 text-center ${gstText}`}>9% GST</td><td className={`p-1 text-center ${subtotalText}`}>${formatMoney(gst)}</td></tr>
+                  <tr className="font-bold h-[32px] border-t-2 border-black"><td className="p-1 text-center text-[16px]">TOTAL</td><td className={`p-1 text-center ${totalText}`}>${formatMoney(total)}</td></tr>
+                </tbody>
+              </table>
+              <div className="flex w-full mt-4 pt-2 items-end shrink-0">
+                <div className="w-[70%] text-[12px] font-bold leading-snug pr-4">
+                  <div style={{ fontFamily: CJK_FONT }}>
+                    <p className="text-[12px]">请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p><p className="text-[10px] whitespace-nowrap text-slate-800">Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
+                    <div className="mt-2 flex items-center">
+                      <div className="w-[80px] h-[80px] shrink-0 mr-3 flex items-center justify-center"><img src={paynowQr} alt="PayNow QR Code" className="w-[80px] h-[80px] object-contain" /></div>
+                      <div className="flex flex-col justify-center text-[11px]"><p>UEN: 53033969B</p><p>A/C Name: Three Leaves (Singapore) Trading Enterprise</p><p>A/C Number: 535-846562-001</p><p>Bank Name: OCBC</p><p className="mt-0.5 font-normal text-[10px] text-slate-800">All payments must be made payable to Three Leaves (Singapore) Trading Enterprise.</p></div>
+                    </div>
+                  </div>
+                </div>
+                <div className="w-[30%] shrink-0 flex flex-col justify-end pb-1 pl-2"><div className="h-12"></div><div className="border-t-2 border-black text-center pt-1.5 text-[12px] font-bold uppercase tracking-widest">Received By</div></div>
+              </div>
             </div>
           )}
 
-          <table className={`w-full h-full flex-grow border-2 border-black text-center mb-0 mt-2 ${baseText}`} style={{ fontFamily: CJK_FONT }}>
-            <thead className="border-b-2 border-black">
-              <tr className="font-bold bg-white text-[14px]"><th className="py-2 px-1 w-12 text-center">NO.</th><th className="py-2 px-2 text-left">DESCRIPTION</th><th className="py-2 px-1 w-24 text-center">QUANTITY</th><th className="py-2 px-1 w-32 text-center">UNIT PRICE</th><th className="py-2 px-1 w-32 text-center">AMOUNT</th></tr>
-            </thead>
-            <tbody style={{ fontFamily: CJK_FONT }}>
-              {safeItems.map((item, idx) => {
-                const productName = String(item?.name || item?.Items || item?.rawSearchString || '-');
-                return (
-                  <tr key={idx} className="align-top text-slate-900" style={{ fontFamily: CJK_FONT }}>
-                    <td className={`px-1 text-center font-normal ${cellPad}`}>{idx + 1}</td>
-                    <td className={`px-1 text-left pl-2 font-normal ${cellPad} ${descPad}`} style={{ fontFamily: CJK_FONT }}>{productName}</td>
-                    <td className={`px-1 text-center font-normal ${cellPad}`} style={{ fontFamily: CJK_FONT }}>{String(item?.qty || item?.quantity || 0)} {String(item?.unit || '')}</td>
-                    <td className={`px-1 text-center font-normal ${cellPad}`}>${formatMoney(item?.unitPrice)}</td>
-                    <td className={`px-1 text-center font-normal ${cellPad}`}>
-                      ${formatMoney((Number(item?.qty || item?.quantity) || 0) * (Number(item?.unitPrice) || 0))}
-                    </td>
-                  </tr>
-                );
-              })}
-              <tr className="h-full">
-                <td></td>
-                <td className="text-center align-middle">
-                  {isSpecialFormat && carPlateNo && (
-                    <div className="inline-block text-slate-900">
-                       <span className="text-[14px] font-bold">Car Plate No: </span>
-                       <span className="text-[16px] font-black">{carPlateNo}</span>
-                    </div>
-                  )}
-                </td>
-                <td></td><td></td><td></td>
-              </tr>
-              <tr className="border-t-2 border-black font-bold h-[28px]">
-                <td colSpan="3" rowSpan="3" className="bg-white border-r-2 border-black p-2 align-top text-left"></td>
-                <td className={`p-1 text-center bg-white ${gstText}`}>SUBTOTAL</td><td className={`p-1 text-center bg-white ${subtotalText}`}>${formatMoney(subtotal)}</td>
-              </tr>
-              <tr className="font-bold h-[28px] border-t border-black bg-white"><td className={`p-1 text-center ${gstText}`}>9% GST</td><td className={`p-1 text-center ${subtotalText}`}>${formatMoney(gst)}</td></tr>
-              <tr className="font-bold h-[32px] border-t-2 border-black bg-white"><td className="p-1 text-center text-[16px]">TOTAL</td><td className={`p-1 text-center ${totalText}`}>${formatMoney(total)}</td></tr>
-            </tbody>
-          </table>
-          <div className="flex w-full mt-4 pt-2 items-end shrink-0">
-            <div className="w-[70%] text-[12px] font-bold leading-snug pr-4">
-              <div style={{ fontFamily: CJK_FONT }}>
-                <p className="text-[12px]">请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p><p className="text-[10px] whitespace-nowrap text-slate-800">Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
-                <div className="mt-2 flex items-center">
-                  <div className="w-[80px] h-[80px] shrink-0 mr-3 flex items-center justify-center"><img src={paynowQr} alt="PayNow QR Code" className="w-[80px] h-[80px] object-contain" /></div>
-                  <div className="flex flex-col justify-center text-[11px]"><p>UEN: 53033969B</p><p>A/C Name: Three Leaves (Singapore) Trading Enterprise</p><p>A/C Number: 535-846562-001</p><p>Bank Name: OCBC</p><p className="mt-0.5 font-normal text-[10px] text-slate-800">All payments must be made payable to Three Leaves (Singapore) Trading Enterprise.</p></div>
-                </div>
-              </div>
-            </div>
-            <div className="w-[30%] shrink-0 flex flex-col justify-end pb-1 pl-2"><div className="h-12"></div><div className="border-t-2 border-black text-center pt-1.5 text-[12px] font-bold uppercase tracking-widest">Received By</div></div>
-          </div>
         </div>
       </div>
     </div>
@@ -632,6 +807,7 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
   const [previewMode, setPreviewMode] = useState(false);
   const [autoFillNotif, setAutoFillNotif] = useState(false);
   const [priceModal, setPriceModal] = useState(null);
+  const [remarkModal, setRemarkModal] = useState(null); // NEW: State to manage remark entry modal
 
   const customer = safeCustomers.find((entry) => entry?.id === customerId);
 
@@ -696,7 +872,7 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
           const determinedUnit = String(stats.unit || product.Unit || product.unit || '箱');
           autoFilled.push({
             itemId, name: String(product.Name || product.name || product.Items || ''), unit: determinedUnit,
-            qty: Math.max(1, Math.round(stats.totalQty / stats.count)), unitPrice: getSafePrice(product, determinedUnit), picked: false, isAutoFilled: true, suggestions: []
+            qty: Math.max(1, Math.round(stats.totalQty / stats.count)), unitPrice: getSafePrice(product, determinedUnit), picked: false, isAutoFilled: true, suggestions: [], remarks: ''
           });
         }
       }
@@ -752,10 +928,10 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
 
       if (bestMatch && bestMatch.score >= 10) {
         const determinedUnit = String(bestMatch.item.Unit || bestMatch.item.unit || '箱');
-        nextDraftItems.push({ itemId: bestMatch.item.id, name: String(bestMatch.item.Name || bestMatch.item.name || bestMatch.item.Items || ''), unit: determinedUnit, qty, unitPrice: getSafePrice(bestMatch.item, determinedUnit), picked: false, rawSearchString: searchString, originalPredictedId: bestMatch.item.id, suggestions: [], isAutoFilled: true });
+        nextDraftItems.push({ itemId: bestMatch.item.id, name: String(bestMatch.item.Name || bestMatch.item.name || bestMatch.item.Items || ''), unit: determinedUnit, qty, unitPrice: getSafePrice(bestMatch.item, determinedUnit), picked: false, rawSearchString: searchString, originalPredictedId: bestMatch.item.id, suggestions: [], isAutoFilled: true, remarks: '' });
       } else {
         const topSuggestions = scoredItems.filter(si => si.score > 0).slice(0, 3).map(si => si.item);
-        nextDraftItems.push({ itemId: '', name: '', unit: '箱', qty, unitPrice: 0, picked: false, rawSearchString: searchString, originalPredictedId: null, suggestions: topSuggestions, isAutoFilled: true });
+        nextDraftItems.push({ itemId: '', name: '', unit: '箱', qty, unitPrice: 0, picked: false, rawSearchString: searchString, originalPredictedId: null, suggestions: topSuggestions, isAutoFilled: true, remarks: '' });
       }
     });
     setItems(nextDraftItems); setIsParsing(false); setParseText('');
@@ -929,7 +1105,7 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
                     <input type="text" placeholder="e.g. POC121950" value={poNumber} onChange={e => setPoNumber(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg p-2 text-sm font-bold outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500" />
                   </div>
                   <div className="flex-1">
-                    <label className="text-[10px] font-black uppercase text-gray-400 mb-1 block ml-2">Car Plate No.</label>
+                    <label className="text-[10px] font-black uppercase text-gray-400 mb-1 block">Car Plate No.</label>
                     <input type="text" placeholder="e.g. GBF4684U" value={carPlateNo} onChange={e => setCarPlateNo(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg p-2 text-sm font-bold outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500" />
                   </div>
                 </div>
@@ -985,18 +1161,34 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
                   return (
                     <tr className={`border-b font-bold transition-colors ${rowClass}`} key={`${item.itemId}-${index}`}>
                       <td className="p-4 text-center font-mono text-xs text-slate-300 align-top pt-5">{index + 1}</td>
-                      <td className="p-2 relative align-top pt-3">
+                      <td className="p-2 relative align-top pt-3 pb-3">
                         <div className="flex items-center space-x-2">
                           <input checked={item.picked || false} className="h-4 w-4 cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500 shrink-0" onChange={(event) => { const nextItems = [...items]; if (nextItems[index]) nextItems[index].picked = event.target.checked; setItems(nextItems); }} type="checkbox" />
                           <ProductSearchSelect value={item.itemId} inventory={safeInventory} isAutoFilled={isPredicted} onChange={(selectedId) => { const product = safeInventory.find((entry) => entry?.id === selectedId); if (!product) return; const nextItems = [...items]; const determinedUnit = String(product.Unit || product.unit || '箱'); if (nextItems[index]) { nextItems[index] = { ...nextItems[index], itemId: selectedId, name: String(product.Name || product.name || product.Items || ''), unit: determinedUnit, unitPrice: getSafePrice(product, determinedUnit), suggestions: [], isAutoFilled: false, rawSearchString: null }; } setItems(nextItems); }} />
                         </div>
                         
+                        {/* NEW: Inline Edit Remark Trigger & Display */}
+                        <div className="flex flex-col ml-6 mt-1">
+                          {item.remarks && (
+                            <div className="mb-1.5 text-[11px] text-slate-600 italic border-l-2 border-slate-300 pl-2 max-w-[300px] whitespace-pre-wrap break-words leading-snug">
+                              Note: {item.remarks}
+                            </div>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setRemarkModal({ index, item })}
+                            className="text-[9px] uppercase tracking-widest px-2 py-1 rounded transition-colors flex items-center bg-slate-50 text-slate-500 font-bold hover:bg-slate-200 border border-slate-200 shadow-sm w-max"
+                          >
+                            <MessageSquare size={10} className="mr-1.5" /> {item.remarks ? 'Edit Note' : 'Add Remark'}
+                          </button>
+                        </div>
+
                         {isPredicted && (
-                          <div className="ml-6 mt-1 flex items-center">
+                          <div className="ml-6 mt-1.5 flex items-center">
                             <button onClick={() => { const next = [...items]; if(next[index]) { next[index].isAutoFilled = false; next[index].rawSearchString = null; } setItems(next); }} className="text-[9px] font-black uppercase tracking-widest bg-indigo-200 text-indigo-800 px-2 py-1 rounded shadow-sm hover:bg-indigo-300 transition-colors flex items-center" type="button"><Check size={10} className="mr-1" /> Verify Match</button>
                           </div>
                         )}
-                        {item.rawSearchString && item.itemId && !isPredicted && (<p className="text-[9px] text-blue-400 font-medium ml-6 mt-1 flex items-center"><BrainCircuit size={10} className="mr-1" /> Predicted from: "{item.rawSearchString}"</p>)}
+                        {item.rawSearchString && item.itemId && !isPredicted && (<p className="text-[9px] text-blue-400 font-medium ml-6 mt-1.5 flex items-center"><BrainCircuit size={10} className="mr-1" /> Predicted from: "{item.rawSearchString}"</p>)}
                         {!item.itemId && item.suggestions && item.suggestions.length > 0 && (
                           <div className="ml-6 mt-2 mb-1 p-2.5 bg-amber-50 border border-amber-200 rounded-lg shadow-sm">
                             <p className="text-[9px] font-black uppercase tracking-widest text-amber-700 mb-2 flex items-center"><AlertTriangle size={12} className="mr-1.5" /> Did you mean?</p>
@@ -1009,7 +1201,7 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
                             </div>
                           </div>
                         )}
-                        {!item.itemId && item.rawSearchString && (!item.suggestions || item.suggestions.length === 0) && (<p className="text-[9px] text-amber-500 font-medium ml-6 mt-1 flex items-center"><AlertTriangle size={10} className="mr-1" /> No matches found for "{item.rawSearchString}"</p>)}
+                        {!item.itemId && item.rawSearchString && (!item.suggestions || item.suggestions.length === 0) && (<p className="text-[9px] text-amber-500 font-medium ml-6 mt-1.5 flex items-center"><AlertTriangle size={10} className="mr-1" /> No matches found for "{item.rawSearchString}"</p>)}
                       </td>
                       <td className="p-2 align-top pt-4">
                         <select className={`w-full border-none text-center text-xs font-bold focus:ring-0 bg-transparent m-0 cursor-pointer ${isPredicted ? 'text-indigo-600' : ''}`} onChange={(event) => { const nextItems = [...items]; const newUnit = event.target.value; if(nextItems[index]) { nextItems[index].unit = newUnit; const product = safeInventory.find(p => p?.id === nextItems[index].itemId); if (product) { nextItems[index].unitPrice = getSafePrice(product, newUnit); } } setItems(nextItems); }} value={safeItemUnit}>
@@ -1048,7 +1240,7 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
                 })}
               </tbody>
             </table>
-            <button className="mt-8 rounded bg-blue-50 px-5 py-2 text-[10px] font-bold uppercase text-blue-600 shadow-sm transition-all hover:bg-blue-100" onClick={() => setItems([...(Array.isArray(items) ? items.filter(Boolean) : []), { itemId: '', name: '', unit: '箱', qty: 1, unitPrice: 0, picked: false, suggestions: [] }])} type="button">+ Add Row Manually</button>
+            <button className="mt-8 rounded bg-blue-50 px-5 py-2 text-[10px] font-bold uppercase text-blue-600 shadow-sm transition-all hover:bg-blue-100" onClick={() => setItems([...(Array.isArray(items) ? items.filter(Boolean) : []), { itemId: '', name: '', unit: '箱', qty: 1, unitPrice: 0, picked: false, suggestions: [], remarks: '' }])} type="button">+ Add Row Manually</button>
             <div className="mt-12 flex justify-end border-t-2 border-slate-900 pt-6">
               <div className="w-72 space-y-1">
                 <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-gray-400"><span>Sub-Total ($)</span><span className="text-slate-900">${formatMoney(subtotal)}</span></div>
@@ -1070,7 +1262,7 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
       </div>
 
       {/* ========================================== */}
-      {/* PRICING MANAGER MODAL - UPDATED CASCADE */}
+      {/* PRICING MANAGER MODAL */}
       {/* ========================================== */}
       {priceModal && (
         <div className="fixed inset-0 z-[6000] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
@@ -1109,6 +1301,53 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
                     <Trash2 size={16} className="mr-3 shrink-0" /> <span className="flex-1 text-left">Clear Individual Override</span>
                   </button>
                 )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================== */}
+      {/* REMARKS MANAGER MODAL */}
+      {/* ========================================== */}
+      {remarkModal && (
+        <div className="fixed inset-0 z-[6000] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="bg-slate-900 px-6 py-4 flex justify-between items-center text-white">
+              <h2 className="text-sm font-black tracking-widest uppercase flex items-center"><MessageSquare size={16} className="mr-2 text-blue-400" /> Item Remarks</h2>
+              <button onClick={() => setRemarkModal(null)} className="hover:bg-slate-800 p-1 rounded-full transition-colors"><X size={18} /></button>
+            </div>
+            
+            <div className="p-6">
+              <p className="text-sm text-slate-500 mb-1">Adding note/remark to:</p>
+              <p className="text-base font-bold text-slate-900 mb-4">{String(remarkModal.item?.name || remarkModal.item?.Items || remarkModal.item?.rawSearchString || 'Selected Item')}</p>
+              
+              <div className="mb-6">
+                <label className="block text-[11px] font-black uppercase tracking-widest text-slate-400 mb-2">Remark / Note</label>
+                <textarea 
+                  id="remarkManagerInput" 
+                  rows={4}
+                  className="w-full text-sm font-medium text-slate-800 border-2 border-blue-100 rounded-xl p-4 outline-none focus:border-blue-500 bg-blue-50/50 resize-none shadow-inner" 
+                  defaultValue={remarkModal.item?.remarks || ''} 
+                  placeholder="Enter any special instructions, backorder notes, or highlights..."
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <button onClick={() => setRemarkModal(null)} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-3 px-4 rounded-xl transition-colors text-sm">
+                  Cancel
+                </button>
+                <button 
+                  onClick={() => {
+                    const nextItems = [...items];
+                    nextItems[remarkModal.index].remarks = document.getElementById('remarkManagerInput').value;
+                    setItems(nextItems);
+                    setRemarkModal(null);
+                  }} 
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl flex items-center justify-center transition-colors shadow-lg shadow-blue-500/20 text-sm"
+                >
+                  <Save size={16} className="mr-2 shrink-0" /> Save Remark
+                </button>
               </div>
             </div>
           </div>
