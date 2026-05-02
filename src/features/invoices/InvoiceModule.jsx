@@ -535,7 +535,7 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
                   </div>
                 </div>
                 
-                <div className="w-[40%] flex flex-col items-end text-right">
+                <div className="w-[70%] flex flex-col items-end text-right">
                   {/* PERFECTED BARCODE RENDER */}
                   <img 
                     src={`https://bwipjs-api.metafloor.com/?bcid=code128&text=${invoiceNumber}&scale=2&includetext=true&textxalign=center`} 
