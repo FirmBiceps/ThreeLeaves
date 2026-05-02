@@ -929,7 +929,7 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
                     <input type="text" placeholder="e.g. POC121950" value={poNumber} onChange={e => setPoNumber(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg p-2 text-sm font-bold outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500" />
                   </div>
                   <div className="flex-1">
-                    <label className="text-[10px] font-black uppercase text-gray-400 mb-1 block">Car Plate No.</label>
+                    <label className="text-[10px] font-black uppercase text-gray-400 mb-1 block ml-2">Car Plate No.</label>
                     <input type="text" placeholder="e.g. GBF4684U" value={carPlateNo} onChange={e => setCarPlateNo(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg p-2 text-sm font-bold outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500" />
                   </div>
                 </div>
