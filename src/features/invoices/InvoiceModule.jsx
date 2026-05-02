@@ -228,9 +228,9 @@ function InvoicePreview({ customer, gst, invoiceNumber, invoiceDate, items, onBa
                 <div className="w-[70%] flex flex-col items-end text-right">
                   {/* PERFECTED BARCODE RENDER */}
                   <img 
-                    src={`https://bwipjs-api.metafloor.com/?bcid=code128&text=${invoiceNumber}&scale=2&includetext=true&textxalign=center`} 
+                    src={`https://bwipjs-api.metafloor.com/?bcid=code128&text=${invoiceNumber}&scale=2&height=15&includetext=true&textxalign=center`} 
                     alt="Barcode" 
-                    className="h-[55px] max-w-full object-contain mb-3" 
+                    className="mb-3 max-w-full object-contain"
                   />
                   <h2 className="text-[20px] font-bold tracking-[0.4em] leading-none mb-1" style={{ fontFamily: CJK_FONT }}>發票</h2>
                   <h3 className="text-[14px] font-black tracking-wide uppercase mb-3 text-black">TAX INVOICE</h3>
