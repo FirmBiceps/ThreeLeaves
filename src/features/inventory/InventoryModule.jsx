@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { Search, Plus, Edit, Package, X, Trash2, Save, CheckCircle } from 'lucide-react';
 import { formatMoney } from '../../utils/format';
 import { supabase } from '../../lib/supabaseClient';
@@ -17,13 +17,74 @@ const DEFAULT_UNITS = [
 ];
 
 // ==========================================
-// COMPONENT 1: INVENTORY ADD/EDIT MODAL
+// COMPONENT: SUPPLIER AUTOCOMPLETE SEARCH
 // ==========================================
-function InventoryFormModal({ item, onClose, onSave, onDelete }) {
+function SupplierSearchInput({ value, onChange, inventory }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  // Dynamically generate a list of unique suppliers from existing inventory
+  const uniqueSuppliers = useMemo(() => {
+    const suppliers = inventory.map(item => item?.Supplier || item?.supplier).filter(Boolean);
+    return Array.from(new Set(suppliers)).sort();
+  }, [inventory]);
+
+  const filtered = uniqueSuppliers.filter(s => s.toLowerCase().includes(String(value || '').toLowerCase()));
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) setIsOpen(false);
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div className="relative w-full" ref={dropdownRef}>
+      <div className="relative">
+        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => {
+            onChange(e.target.value);
+            setIsOpen(true);
+          }}
+          onFocus={() => setIsOpen(true)}
+          placeholder="Search or add new supplier..."
+          className="w-full border border-slate-200 rounded-xl py-3 pl-10 pr-3 text-base text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none"
+        />
+      </div>
+      {isOpen && filtered.length > 0 && (
+        <div className="absolute z-[6000] top-full left-0 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto">
+          {filtered.map(sup => (
+            <button
+              key={sup}
+              type="button"
+              className="w-full text-left px-4 py-3 hover:bg-slate-50 text-sm font-bold text-slate-700 border-b border-slate-100 last:border-0 transition-colors"
+              onClick={() => {
+                onChange(sup);
+                setIsOpen(false);
+              }}
+            >
+              {sup}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ==========================================
+// COMPONENT: INVENTORY ADD/EDIT MODAL
+// ==========================================
+function InventoryFormModal({ item, inventory, onClose, onSave, onDelete }) {
   const [formData, setFormData] = useState({
     id: item?.id || `prod-${Date.now()}`,
     sku: item?.sku || item?.SKU || '',
     Name: item?.Name || item?.name || item?.Items || '',
+    Supplier: item?.Supplier || item?.supplier || '', // NEW FIELD
     Unit: item?.Unit || item?.unit || '箱',
     Description: item?.Description || item?.description || '',
     Packing: item?.Packing || item?.packaging || '',
@@ -95,15 +156,26 @@ function InventoryFormModal({ item, onClose, onSave, onDelete }) {
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm text-slate-500 mb-1">Description</label>
-            <input 
-              type="text" 
-              name="Description" 
-              value={formData.Description} 
-              onChange={handleChange}
-              className="w-full border border-slate-200 rounded-xl p-3 text-base text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none"
-            />
+          <div className="grid grid-cols-2 gap-4">
+            {/* NEW SUPPLIER SEARCH FIELD */}
+            <div>
+              <label className="block text-sm text-slate-500 mb-1">Supplier</label>
+              <SupplierSearchInput 
+                value={formData.Supplier}
+                onChange={(val) => setFormData({ ...formData, Supplier: val })}
+                inventory={inventory}
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-slate-500 mb-1">Description</label>
+              <input 
+                type="text" 
+                name="Description" 
+                value={formData.Description} 
+                onChange={handleChange}
+                className="w-full border border-slate-200 rounded-xl p-3 text-base text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-4 gap-4">
@@ -233,7 +305,6 @@ export function InventoryModule({ sys }) {
     }, 6000); 
   };
 
-  // BULLETPROOF FALLBACK: Ensure inventory is an array and safely convert all fields to strings before searching
   const safeInventoryArray = Array.isArray(sys?.inventory) ? sys.inventory : [];
   
   const filteredInventory = safeInventoryArray.filter((item) => {
@@ -241,13 +312,15 @@ export function InventoryModule({ sys }) {
     const name = String(item?.Name || item?.name || item?.Items || '');
     const desc = String(item?.Description || item?.description || '');
     const packing = String(item?.Packing || item?.packaging || '');
+    const supplier = String(item?.Supplier || item?.supplier || ''); // Search supplier
     
     const searchLower = String(searchTerm).toLowerCase();
     return (
       sku.toLowerCase().includes(searchLower) ||
       name.toLowerCase().includes(searchLower) ||
       desc.toLowerCase().includes(searchLower) ||
-      packing.toLowerCase().includes(searchLower)
+      packing.toLowerCase().includes(searchLower) ||
+      supplier.toLowerCase().includes(searchLower)
     );
   });
 
@@ -260,6 +333,7 @@ export function InventoryModule({ sys }) {
       const payload = {
         SKU: formData.sku,
         Name: formData.Name,
+        Supplier: formData.Supplier, // SAVING NEW SUPPLIER FIELD
         Unit: formData.Unit,
         Description: formData.Description,
         Packing: formData.Packing,
@@ -271,7 +345,6 @@ export function InventoryModule({ sys }) {
 
       if (isEditing) {
         const finalId = editingItem.id || formData.id;
-        // BULLETPROOF FALLBACK: Force finalId to string to prevent numerical crash
         const finalIdStr = String(finalId || '');
         const isUUID = finalIdStr.length === 36 && finalIdStr.includes('-');
         
@@ -384,7 +457,7 @@ export function InventoryModule({ sys }) {
   };
 
   return (
-    <div className="p-8 h-full overflow-y-auto relative">
+    <div className="p-8 h-full overflow-y-auto relative bg-slate-50/50">
       
       <div className="flex justify-between items-center mb-8">
         <div>
@@ -393,7 +466,7 @@ export function InventoryModule({ sys }) {
             Inventory Catalog
           </h1>
           <p className="text-base text-slate-500 mt-1">
-            Manage your products, packaging, and pricing details.
+            Manage your products, suppliers, packaging, and pricing details.
           </p>
         </div>
         <button 
@@ -409,7 +482,7 @@ export function InventoryModule({ sys }) {
           <Search className="text-slate-400 mr-3" size={22} />
           <input
             type="text"
-            placeholder="Search by SKU, Name, Description, or Packing..."
+            placeholder="Search by SKU, Name, Supplier, Description, or Packing..."
             className="w-full bg-transparent border-none focus:ring-0 text-base placeholder:text-slate-400 outline-none"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -421,6 +494,7 @@ export function InventoryModule({ sys }) {
             <tr className="bg-white border-b border-slate-200 text-xs uppercase tracking-widest text-slate-500 font-semibold">
               <th className="p-5 pl-8">SKU</th>
               <th className="p-5">Name</th>
+              <th className="p-5">Supplier</th>
               <th className="p-5 text-center">Unit</th>
               <th className="p-5">Description</th>
               <th className="p-5">Packing</th>
@@ -433,6 +507,7 @@ export function InventoryModule({ sys }) {
             {filteredInventory.map((item, idx) => {
               const sku = item?.sku || item?.SKU || '-';
               const name = item?.Name || item?.name || item?.Items || 'Unnamed Product';
+              const supplier = item?.Supplier || item?.supplier || '-';
               const unit = item?.Unit || item?.unit || '-';
               const desc = item?.Description || item?.description || '-';
               const packing = item?.Packing || item?.packaging || '-';
@@ -443,6 +518,7 @@ export function InventoryModule({ sys }) {
                 <tr key={item.id || `fallback-${idx}`} className="hover:bg-slate-50 transition-colors">
                   <td className="p-5 pl-8 text-sm font-mono text-slate-500 uppercase">{sku}</td>
                   <td className="p-5 text-base text-slate-800 font-medium">{name}</td>
+                  <td className="p-5 text-sm font-bold text-indigo-600">{supplier}</td>
                   <td className="p-5 text-center">
                     <span className="text-sm text-slate-600 border border-slate-200 px-3 py-1 rounded-md bg-white">
                       {unit}
@@ -478,7 +554,7 @@ export function InventoryModule({ sys }) {
             
             {filteredInventory.length === 0 && (
               <tr>
-                <td colSpan="8" className="p-12 text-center text-base text-slate-500">
+                <td colSpan="9" className="p-12 text-center text-base text-slate-500">
                   No products match your search.
                 </td>
               </tr>
@@ -490,6 +566,7 @@ export function InventoryModule({ sys }) {
       {isModalOpen && (
         <InventoryFormModal 
           item={editingItem} 
+          inventory={safeInventoryArray}
           onClose={() => {
             setIsModalOpen(false);
             setEditingItem(null);
