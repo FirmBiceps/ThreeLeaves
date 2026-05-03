@@ -138,7 +138,7 @@ function CustomerSearchSelect({ value, customers, onChange, disabled }) {
 // ==========================================
 function InvoicePreview({ 
   mode = 'generator', // 'generator' | 'history'
-  customer, gst, invoiceNumber, invoiceDate, items, 
+  customer, gst, invoiceNumber, invoiceDate, items, remarks, // NEW: added remarks prop
   onBack, onRegister, onPrint, onEdit, onClose, 
   paymentTerms, subtotal, sys, total, existingInvoice, isSpecialFormat, poNumber, carPlateNo 
 }) {
@@ -319,7 +319,7 @@ function InvoicePreview({
             </div>
           )}
 
-          {/* UNIFIED TABLE STRUCTURE (Preserves continuous borders and empty spacer rows) */}
+          {/* UNIFIED TABLE STRUCTURE */}
           <table className={`w-full h-full flex-grow border-2 border-black text-center mb-0 mt-2 ${isSpecialFormat ? spBaseText : baseText}`} style={{ fontFamily: CJK_FONT }}>
             <thead className="border-b-2 border-black">
               <tr className="font-bold bg-white text-[14px]"><th className="py-2 px-1 w-12 text-center">NO.</th><th className="py-2 px-2 text-left">DESCRIPTION</th><th className="py-2 px-1 w-24 text-center">QUANTITY</th><th className="py-2 px-1 w-32 text-center">UNIT PRICE</th><th className="py-2 px-1 w-32 text-center">AMOUNT</th></tr>
@@ -335,12 +335,8 @@ function InvoicePreview({
                     <td className={`px-1 text-center font-normal ${isSpecialFormat ? spCellPad : cellPad}`}>{idx + 1}</td>
                     <td className={`px-1 text-left pl-2 font-normal ${isSpecialFormat ? spCellPad : cellPad} ${isSpecialFormat ? '' : descPad}`} style={{ fontFamily: CJK_FONT }}>
                       {!isBlank ? (
-                        <div className="flex flex-col">
-                          <span>☐ {productName}</span>
-                          {item.remarks && <span className="text-[0.85em] text-slate-600 font-medium italic ml-[18px] leading-tight pt-0.5 break-words whitespace-pre-wrap">{item.remarks}</span>}
-                        </div>
+                        <span>☐ {productName}</span>
                       ) : (
-                        // GHOST CHECKBOX: Preserves exact placeholder line-height and spacing!
                         <div className="text-transparent select-none">☐</div>
                       )}
                     </td>
@@ -367,14 +363,21 @@ function InvoicePreview({
               </tr>
               
               <tr className="border-t-2 border-black font-bold h-[28px]">
-                <td colSpan="3" rowSpan="3" className="bg-white border-r-2 border-black p-2 align-top text-left"></td>
+                {/* NEW: DEDICATED INVOICE REMARKS CONTAINER */}
+                <td colSpan="3" rowSpan="3" className="bg-white border-r-2 border-black p-2 align-top text-left">
+                  {(!isSpecialFormat && remarks) && (
+                    <div className="w-full max-h-[72px] overflow-hidden text-[11px] font-normal text-slate-800 whitespace-pre-wrap break-words leading-tight" style={{ fontFamily: CJK_FONT }}>
+                      <span className="font-bold underline block mb-0.5">Remarks / Notes:</span>
+                      {remarks}
+                    </div>
+                  )}
+                </td>
                 <td className={`p-1 text-center bg-white ${gstText}`}>SUBTOTAL</td><td className={`p-1 text-center bg-white ${subtotalText}`}>${formatMoney(subtotal)}</td>
               </tr>
               <tr className="font-bold h-[28px] border-t border-black bg-white"><td className={`p-1 text-center ${gstText}`}>9% GST</td><td className={`p-1 text-center ${subtotalText}`}>${formatMoney(gst)}</td></tr>
               <tr className="font-bold h-[32px] border-t-2 border-black bg-white"><td className="p-1 text-center text-[16px]">TOTAL</td><td className={`p-1 text-center ${totalText}`}>${formatMoney(total)}</td></tr>
             </tbody>
           </table>
-          
           <div className="flex w-full mt-4 pt-2 items-end shrink-0">
             <div className="w-[70%] text-[12px] font-bold leading-snug pr-4">
               <div style={{ fontFamily: CJK_FONT }}>
@@ -412,6 +415,7 @@ function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
       invoiceNumber={invoice.number || invoice.id}
       invoiceDate={invoice.date}
       items={invoice.items}
+      remarks={invoice.remarks} // Passing saved remarks to the preview
       onPrint={() => window.print()}
       onEdit={() => onEdit(invoice)}
       onClose={onClose}
@@ -438,6 +442,10 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
   const [isSpecialFormat, setIsSpecialFormat] = useState(existingInvoice?.isSpecialFormat || false);
   const [poNumber, setPoNumber] = useState(existingInvoice?.poNumber || '');
   const [carPlateNo, setCarPlateNo] = useState(existingInvoice?.carPlateNo || '');
+  
+  // NEW GLOBAL REMARKS STATE
+  const [invoiceRemarks, setInvoiceRemarks] = useState(existingInvoice?.remarks || '');
+  const [isRemarkModalOpen, setIsRemarkModalOpen] = useState(false);
 
   const safeInventory = Array.isArray(sys?.inventory) ? sys.inventory : [];
   const safeCustomers = Array.isArray(sys?.customers) ? sys.customers : [];
@@ -482,7 +490,6 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
   const [previewMode, setPreviewMode] = useState(false);
   const [autoFillNotif, setAutoFillNotif] = useState(false);
   const [priceModal, setPriceModal] = useState(null);
-  const [remarkModal, setRemarkModal] = useState(null);
 
   const customer = safeCustomers.find((entry) => entry?.id === customerId);
 
@@ -497,11 +504,18 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
   const getSafePrice = (product, unit = '箱') => {
     if (!product) return 0;
     const ruleKey = `${product.id}|${unit}`;
-    if (customer?.custom_prices && typeof customer.custom_prices === 'object' && customer.custom_prices[ruleKey] !== undefined) return Number(customer.custom_prices[ruleKey]) || 0;
+    
+    if (customer?.custom_prices && typeof customer.custom_prices === 'object' && customer.custom_prices[ruleKey] !== undefined) {
+      return Number(customer.custom_prices[ruleKey]) || 0;
+    }
+    
     if (customer?.pricing_group_id) {
       const assignedGroup = safeGroups.find(g => g.id === customer.pricing_group_id);
-      if (assignedGroup?.prices && typeof assignedGroup.prices === 'object' && assignedGroup.prices[ruleKey] !== undefined) return Number(assignedGroup.prices[ruleKey]) || 0;
+      if (assignedGroup?.prices && typeof assignedGroup.prices === 'object' && assignedGroup.prices[ruleKey] !== undefined) {
+        return Number(assignedGroup.prices[ruleKey]) || 0;
+      }
     }
+    
     let price = product.Price || product.unitPrice || product['Unit Price (SG)'] || 0;
     return Number(price) || 0;
   };
@@ -509,7 +523,9 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
   useEffect(() => {
     const originalCustomer = existingInvoice?.customerId || '';
     if (existingInvoice && customerId === originalCustomer) return; 
+
     if (!customerId) { setItems([]); setAutoFillNotif(false); return; }
+
     if (!isAutofillEnabled) {
       setItems(prevItems => prevItems.filter(i => i && !i.isAutoFilled));
       setAutoFillNotif(false);
@@ -538,7 +554,7 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
           const determinedUnit = String(stats.unit || product.Unit || product.unit || '箱');
           autoFilled.push({
             itemId, name: String(product.Name || product.name || product.Items || ''), unit: determinedUnit,
-            qty: Math.max(1, Math.round(stats.totalQty / stats.count)), unitPrice: getSafePrice(product, determinedUnit), picked: false, isAutoFilled: true, suggestions: [], remarks: ''
+            qty: Math.max(1, Math.round(stats.totalQty / stats.count)), unitPrice: getSafePrice(product, determinedUnit), picked: false, isAutoFilled: true, suggestions: []
           });
         }
       }
@@ -594,10 +610,10 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
 
       if (bestMatch && bestMatch.score >= 10) {
         const determinedUnit = String(bestMatch.item.Unit || bestMatch.item.unit || '箱');
-        nextDraftItems.push({ itemId: bestMatch.item.id, name: String(bestMatch.item.Name || bestMatch.item.name || bestMatch.item.Items || ''), unit: determinedUnit, qty, unitPrice: getSafePrice(bestMatch.item, determinedUnit), picked: false, rawSearchString: searchString, originalPredictedId: bestMatch.item.id, suggestions: [], isAutoFilled: true, remarks: '' });
+        nextDraftItems.push({ itemId: bestMatch.item.id, name: String(bestMatch.item.Name || bestMatch.item.name || bestMatch.item.Items || ''), unit: determinedUnit, qty, unitPrice: getSafePrice(bestMatch.item, determinedUnit), picked: false, rawSearchString: searchString, originalPredictedId: bestMatch.item.id, suggestions: [], isAutoFilled: true });
       } else {
         const topSuggestions = scoredItems.filter(si => si.score > 0).slice(0, 3).map(si => si.item);
-        nextDraftItems.push({ itemId: '', name: '', unit: '箱', qty, unitPrice: 0, picked: false, rawSearchString: searchString, originalPredictedId: null, suggestions: topSuggestions, isAutoFilled: true, remarks: '' });
+        nextDraftItems.push({ itemId: '', name: '', unit: '箱', qty, unitPrice: 0, picked: false, rawSearchString: searchString, originalPredictedId: null, suggestions: topSuggestions, isAutoFilled: true });
       }
     });
     setItems(nextDraftItems); setIsParsing(false); setParseText('');
@@ -616,17 +632,25 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
       number: String(invoiceNumber), customerId, customer: String(customer?.name || existingInvoice?.customer || 'Unknown Customer'),
       region: String(customer?.region || existingInvoice?.region || ''), date: String(invoiceDate), items: finalItems, total,
       status: invoiceStatus, deliveryStatus: existingInvoice ? String(existingInvoice.deliveryStatus || 'Pending') : 'Pending', paymentTerms: String(paymentTerms),
-      isSpecialFormat: !!isSpecialFormat, poNumber: poNumber || null, carPlateNo: carPlateNo || null 
+      isSpecialFormat: !!isSpecialFormat, poNumber: poNumber || null, carPlateNo: carPlateNo || null,
+      remarks: invoiceRemarks // Saving global remarks
     };
 
     try {
       const { error } = await supabase.from('invoices').upsert([invoice]);
       if (error) throw error;
-      if (existingInvoice) sys.setInvoices(safeInvoices.map(inv => inv?.id === existingInvoice.id ? invoice : inv)); 
-      else sys.setInvoices([...safeInvoices, invoice]); 
+
+      if (existingInvoice) { 
+        sys.setInvoices(safeInvoices.map(inv => inv?.id === existingInvoice.id ? invoice : inv)); 
+      } else { 
+        sys.setInvoices([...safeInvoices, invoice]); 
+      }
       
-      if (printAfter) setTimeout(() => { window.print(); onClose(); }, 500); else onClose();
-    } catch (err) { alert(`CRITICAL ERROR: Failed to save invoice to database.\n\n${err.message}`); }
+      if (printAfter) { setTimeout(() => { window.print(); onClose(); }, 500); } else { onClose(); }
+
+    } catch (err) {
+      alert(`CRITICAL ERROR: Failed to save invoice to database.\n\n${err.message}`);
+    }
   };
 
   const executePriceSave = async (type, newPriceStr) => {
@@ -663,17 +687,18 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
         sys.setCustomers(safeCustomers.map(c => c?.id === customer.id ? { ...c, custom_prices: updatedCustomPrices } : c));
         
         const fallbackPrice = getSafePrice(product, item.unit); 
-        const nextItems = [...items];
+        const nextItems = [...(Array.isArray(items) ? items : [])];
         if (nextItems[index]) nextItems[index].unitPrice = fallbackPrice;
         setItems(nextItems);
         setPriceModal(null);
         return;
       }
 
-      const nextItems = [...items];
+      const nextItems = [...(Array.isArray(items) ? items : [])];
       if (nextItems[index]) nextItems[index].unitPrice = newPrice;
       setItems(nextItems);
       setPriceModal(null);
+
     } catch (error) { alert(`Database Update Failed: ${error.message}`); }
   };
 
@@ -682,6 +707,7 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
       <InvoicePreview
         mode="generator"
         customer={customer} gst={gst} invoiceNumber={invoiceNumber} invoiceDate={invoiceDate} items={items}
+        remarks={invoiceRemarks}
         onBack={() => setPreviewMode(false)} onRegister={handleRegister} paymentTerms={paymentTerms}
         subtotal={subtotal} sys={sys} total={total} existingInvoice={existingInvoice}
         isSpecialFormat={isSpecialFormat} poNumber={poNumber} carPlateNo={carPlateNo}
@@ -826,21 +852,6 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
                           <ProductSearchSelect value={item.itemId} inventory={safeInventory} isAutoFilled={isPredicted} onChange={(selectedId) => { const product = safeInventory.find((entry) => entry?.id === selectedId); if (!product) return; const nextItems = [...items]; const determinedUnit = String(product.Unit || product.unit || '箱'); if (nextItems[index]) { nextItems[index] = { ...nextItems[index], itemId: selectedId, name: String(product.Name || product.name || product.Items || ''), unit: determinedUnit, unitPrice: getSafePrice(product, determinedUnit), suggestions: [], isAutoFilled: false, rawSearchString: null }; } setItems(nextItems); }} />
                         </div>
                         
-                        <div className="flex flex-col ml-6 mt-1">
-                          {item.remarks && (
-                            <div className="mb-1.5 text-[11px] text-slate-600 italic border-l-2 border-slate-300 pl-2 max-w-[300px] whitespace-pre-wrap break-words leading-snug">
-                              Note: {item.remarks}
-                            </div>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => setRemarkModal({ index, item })}
-                            className="text-[9px] uppercase tracking-widest px-2 py-1 rounded transition-colors flex items-center bg-slate-50 text-slate-500 font-bold hover:bg-slate-200 border border-slate-200 shadow-sm w-max"
-                          >
-                            <MessageSquare size={10} className="mr-1.5" /> {item.remarks ? 'Edit Note' : 'Add Remark'}
-                          </button>
-                        </div>
-
                         {isPredicted && (
                           <div className="ml-6 mt-1.5 flex items-center">
                             <button onClick={() => { const next = [...items]; if(next[index]) { next[index].isAutoFilled = false; next[index].rawSearchString = null; } setItems(next); }} className="text-[9px] font-black uppercase tracking-widest bg-indigo-200 text-indigo-800 px-2 py-1 rounded shadow-sm hover:bg-indigo-300 transition-colors flex items-center" type="button"><Check size={10} className="mr-1" /> Verify Match</button>
@@ -898,8 +909,21 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
                 })}
               </tbody>
             </table>
-            <button className="mt-8 rounded bg-blue-50 px-5 py-2 text-[10px] font-bold uppercase text-blue-600 shadow-sm transition-all hover:bg-blue-100" onClick={() => setItems([...(Array.isArray(items) ? items.filter(Boolean) : []), { itemId: '', name: '', unit: '箱', qty: 1, unitPrice: 0, picked: false, suggestions: [], remarks: '' }])} type="button">+ Add Row Manually</button>
-            <div className="mt-12 flex justify-end border-t-2 border-slate-900 pt-6">
+            
+            <div className="flex gap-2 mt-8">
+              <button className="rounded bg-blue-50 px-5 py-2 text-[10px] font-bold uppercase text-blue-600 shadow-sm transition-all hover:bg-blue-100" onClick={() => setItems([...(Array.isArray(items) ? items.filter(Boolean) : []), { itemId: '', name: '', unit: '箱', qty: 1, unitPrice: 0, picked: false, suggestions: [] }])} type="button">+ Add Row Manually</button>
+              <button className="rounded bg-indigo-50 px-5 py-2 text-[10px] font-bold uppercase text-indigo-600 shadow-sm transition-all hover:bg-indigo-100 flex items-center" onClick={() => setIsRemarkModalOpen(true)} type="button"><MessageSquare size={12} className="mr-1.5"/> Add / Edit Invoice Remarks</button>
+            </div>
+
+            <div className="mt-8 flex justify-between border-t-2 border-slate-900 pt-6">
+              <div className="w-[50%]">
+                {invoiceRemarks && (
+                  <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-200">
+                     <h4 className="text-[10px] font-black uppercase tracking-widest text-yellow-600 mb-1">Invoice Remarks</h4>
+                     <p className="text-sm font-medium text-slate-700 whitespace-pre-wrap">{invoiceRemarks}</p>
+                  </div>
+                )}
+              </div>
               <div className="w-72 space-y-1">
                 <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-gray-400"><span>Sub-Total ($)</span><span className="text-slate-900">${formatMoney(subtotal)}</span></div>
                 <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-gray-400"><span>GST 9% Included</span><span className="text-slate-900">${formatMoney(gst)}</span></div>
@@ -966,45 +990,41 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
       )}
 
       {/* ========================================== */}
-      {/* REMARKS MANAGER MODAL */}
+      {/* INVOICE REMARKS MANAGER MODAL */}
       {/* ========================================== */}
-      {remarkModal && (
+      {isRemarkModalOpen && (
         <div className="fixed inset-0 z-[6000] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
             <div className="bg-slate-900 px-6 py-4 flex justify-between items-center text-white">
-              <h2 className="text-sm font-black tracking-widest uppercase flex items-center"><MessageSquare size={16} className="mr-2 text-blue-400" /> Item Remarks</h2>
-              <button onClick={() => setRemarkModal(null)} className="hover:bg-slate-800 p-1 rounded-full transition-colors"><X size={18} /></button>
+              <h2 className="text-sm font-black tracking-widest uppercase flex items-center"><MessageSquare size={16} className="mr-2 text-blue-400" /> Invoice Remarks</h2>
+              <button onClick={() => setIsRemarkModalOpen(false)} className="hover:bg-slate-800 p-1 rounded-full transition-colors"><X size={18} /></button>
             </div>
             
             <div className="p-6">
-              <p className="text-sm text-slate-500 mb-1">Adding note/remark to:</p>
-              <p className="text-base font-bold text-slate-900 mb-4">{String(remarkModal.item?.name || remarkModal.item?.Items || remarkModal.item?.rawSearchString || 'Selected Item')}</p>
+              <p className="text-sm text-slate-500 mb-4">Add notes or special instructions for this invoice. These will appear in the bottom-left corner of the normal invoice template.</p>
               
               <div className="mb-6">
-                <label className="block text-[11px] font-black uppercase tracking-widest text-slate-400 mb-2">Remark / Note</label>
                 <textarea 
-                  id="remarkManagerInput" 
-                  rows={4}
+                  id="invoiceRemarkInput" 
+                  rows={5}
                   className="w-full text-sm font-medium text-slate-800 border-2 border-blue-100 rounded-xl p-4 outline-none focus:border-blue-500 bg-blue-50/50 resize-none shadow-inner" 
-                  defaultValue={remarkModal.item?.remarks || ''} 
+                  defaultValue={invoiceRemarks} 
                   placeholder="Enter any special instructions, backorder notes, or highlights..."
                 />
               </div>
 
               <div className="flex gap-3">
-                <button onClick={() => setRemarkModal(null)} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-3 px-4 rounded-xl transition-colors text-sm">
+                <button onClick={() => setIsRemarkModalOpen(false)} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-3 px-4 rounded-xl transition-colors text-sm">
                   Cancel
                 </button>
                 <button 
                   onClick={() => {
-                    const nextItems = [...items];
-                    nextItems[remarkModal.index].remarks = document.getElementById('remarkManagerInput').value;
-                    setItems(nextItems);
-                    setRemarkModal(null);
+                    setInvoiceRemarks(document.getElementById('invoiceRemarkInput').value);
+                    setIsRemarkModalOpen(false);
                   }} 
                   className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl flex items-center justify-center transition-colors shadow-lg shadow-blue-500/20 text-sm"
                 >
-                  <Save size={16} className="mr-2 shrink-0" /> Save Remark
+                  <Save size={16} className="mr-2 shrink-0" /> Save Remarks
                 </button>
               </div>
             </div>
