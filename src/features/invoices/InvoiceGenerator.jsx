@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
-import { FileText, MessageSquare, X, Search, BrainCircuit, Sparkles, AlertTriangle, Settings, Layers, User, Trash2, ScanBarcode, Check, Save } from 'lucide-react';
+import { FileText, MessageSquare, X, Search, BrainCircuit, Sparkles, AlertTriangle, Settings, Layers, User, Trash2, ScanBarcode, Check, Save, Eye } from 'lucide-react';
 import { CompanyHeader } from '../../components/shared/CompanyHeader';
 import { UNIT_OPTIONS } from '../../data/company';
 import { formatMoney } from '../../utils/format';
