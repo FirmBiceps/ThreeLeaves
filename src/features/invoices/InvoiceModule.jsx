@@ -10,7 +10,10 @@ export function InvoiceModule({ sys }) {
   const [filter, setFilter] = useState('All');
   const [termFilter, setTermFilter] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortOption, setSortOption] = useState('date_desc');
+  
+  // CHANGED: Default sort is now Invoice No. (Highest)
+  const [sortOption, setSortOption] = useState('number_desc'); 
+  
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 30;
 
@@ -82,10 +85,14 @@ export function InvoiceModule({ sys }) {
       const totA = Number(a?.total) || 0; const totB = Number(b?.total) || 0;
       const custA = String(a?.customer || ''); const custB = String(b?.customer || '');
       switch (sortOption) {
-        case 'date_asc': return dateA - dateB; case 'number_desc': return numB.localeCompare(numA, undefined, { numeric: true });
-        case 'number_asc': return numA.localeCompare(numB, undefined, { numeric: true }); case 'total_desc': return totB - totA;
-        case 'total_asc': return totA - totB; case 'customer_asc': return custA.localeCompare(custB);
-        case 'customer_desc': return custB.localeCompare(custA); case 'date_desc': default: return dateB - dateA;
+        case 'date_asc': return dateA - dateB; 
+        case 'number_desc': return numB.localeCompare(numA, undefined, { numeric: true });
+        case 'number_asc': return numA.localeCompare(numB, undefined, { numeric: true }); 
+        case 'total_desc': return totB - totA;
+        case 'total_asc': return totA - totB; 
+        case 'customer_asc': return custA.localeCompare(custB);
+        case 'customer_desc': return custB.localeCompare(custA); 
+        case 'date_desc': default: return dateB - dateA;
       }
     });
     return result;
@@ -120,9 +127,14 @@ export function InvoiceModule({ sys }) {
               <div className="relative flex items-center bg-white border rounded-xl shadow-sm px-3 py-2 w-full sm:w-48 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
                 <ArrowUpDown className="text-slate-400 mr-2 shrink-0" size={16} />
                 <select className="w-full bg-transparent outline-none text-xs font-bold text-slate-700 cursor-pointer appearance-none" value={sortOption} onChange={(e) => setSortOption(e.target.value)}>
-                  <option value="date_desc">Date (Newest First)</option><option value="date_asc">Date (Oldest First)</option><option value="number_desc">Invoice No. (Highest)</option>
-                  <option value="number_asc">Invoice No. (Lowest)</option><option value="total_desc">Amount (Highest)</option><option value="total_asc">Amount (Lowest)</option>
-                  <option value="customer_asc">Customer (A-Z)</option><option value="customer_desc">Customer (Z-A)</option>
+                  <option value="number_desc">Invoice No. (Highest)</option>
+                  <option value="number_asc">Invoice No. (Lowest)</option>
+                  <option value="date_desc">Date (Newest First)</option>
+                  <option value="date_asc">Date (Oldest First)</option>
+                  <option value="total_desc">Amount (Highest)</option>
+                  <option value="total_asc">Amount (Lowest)</option>
+                  <option value="customer_asc">Customer (A-Z)</option>
+                  <option value="customer_desc">Customer (Z-A)</option>
                 </select>
               </div>
 
