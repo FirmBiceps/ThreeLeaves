@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FileText, Plus, Filter, ArrowUpDown, Search, ScanBarcode, CheckCircle, AlertCircle, ChevronDown, Trash2 } from 'lucide-react';
+import { FileText, Plus, Filter, ArrowUpDown, Search, ScanBarcode, CheckCircle, AlertCircle, ChevronDown, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { formatMoney } from '../../utils/format';
 import { supabase } from '../../lib/supabaseClient';
 import { InvoiceGenerator } from './InvoiceGenerator';
@@ -10,10 +10,9 @@ export function InvoiceModule({ sys }) {
   const [filter, setFilter] = useState('All');
   const [termFilter, setTermFilter] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
+  const [sortOption, setSortOption] = useState('number_desc');
   
-  // CHANGED: Default sort is now Invoice No. (Highest)
-  const [sortOption, setSortOption] = useState('number_desc'); 
-  
+  // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 30;
 
@@ -22,6 +21,11 @@ export function InvoiceModule({ sys }) {
 
   const [pricingGroups, setPricingGroups] = useState([]);
   
+  // Auto-reset back to Page 1 whenever the user searches or changes a filter
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filter, termFilter, sortOption]);
+
   useEffect(() => {
     const fetchGroups = async () => {
       try {
@@ -98,6 +102,7 @@ export function InvoiceModule({ sys }) {
     return result;
   }, [safeInvoices, filter, termFilter, searchTerm, sortOption]);
 
+  const totalPages = Math.ceil(filteredInvoices.length / ITEMS_PER_PAGE) || 1;
   const paginatedInvoices = filteredInvoices.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
   return (
@@ -108,8 +113,8 @@ export function InvoiceModule({ sys }) {
           <button className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-medium shadow-lg hover:bg-blue-700" onClick={() => setIsGeneratorOpen(true)}><Plus className="mr-2" size={18} /> New Invoice</button>
         </div>
 
-        <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-          <div className="flex flex-wrap justify-between items-center border-b bg-slate-50 p-4 gap-4">
+        <div className="bg-white rounded-3xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
+          <div className="flex flex-wrap justify-between items-center border-b bg-slate-50 p-4 gap-4 shrink-0">
             <div className="flex bg-white rounded-lg p-1 border shadow-sm">
               {['All', 'Today', 'This Week', 'This Month'].map((opt) => (
                 <button key={opt} onClick={() => setFilter(opt)} className={`px-4 py-1.5 text-[11px] font-black uppercase rounded-md ${filter === opt ? 'bg-slate-800 text-white' : 'text-slate-500'}`}>{opt}</button>
@@ -145,38 +150,69 @@ export function InvoiceModule({ sys }) {
             </div>
           </div>
 
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="text-xs uppercase tracking-widest text-slate-500 font-semibold border-b">
-                <th className="p-5 pl-8">Invoice No.</th><th className="p-5">Date</th><th className="p-5">Customer</th><th className="p-5 text-center">Terms</th><th className="p-5 text-right">Total</th><th className="p-5 text-center">Status</th><th className="p-5 text-center w-20">Delete</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-sm">
-              {paginatedInvoices.map((inv) => (
-                <tr key={inv?.id} className="hover:bg-blue-50 cursor-pointer transition-colors group" onClick={() => setPreviewInvoice(inv)}>
-                  <td className="p-5 pl-8 font-mono font-bold text-blue-600">
-                    #{String(inv?.number || inv?.id || '')}
-                    {inv?.isSpecialFormat && <span className="ml-2 bg-purple-100 text-purple-700 border border-purple-200 px-1.5 py-0.5 rounded text-[8px] uppercase tracking-widest font-black inline-flex items-center"><ScanBarcode size={8} className="mr-0.5" /> Spec</span>}
-                  </td>
-                  <td className="p-5 text-slate-500">{String(inv?.date || '')}</td>
-                  <td className="p-5 text-slate-800">{String(inv?.customer || '')}</td>
-                  <td className="p-5 text-center"><span className="text-xs font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-1 rounded-md whitespace-nowrap">{inv?.paymentTerms === 'cod' ? 'C.O.D' : '30 Days'}</span></td>
-                  <td className="p-5 text-right font-black text-slate-900">${formatMoney(inv?.total)}</td>
-                  <td className="p-5 text-center">
-                    <div className="relative inline-flex items-center" onClick={(e) => e.stopPropagation()}>
-                      <select value={inv?.status || 'Unpaid'} onChange={(e) => handleStatusChange(inv.id, e.target.value)} className={`appearance-none cursor-pointer pl-8 pr-8 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest outline-none transition-all ${(inv?.status || 'Unpaid') === 'Paid' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200 hover:bg-emerald-200' : 'bg-orange-100 text-orange-700 border border-orange-200 hover:bg-orange-200'}`}>
-                        <option value="Paid">PAID</option><option value="Unpaid">UNPAID</option>
-                      </select>
-                      <div className="absolute left-2.5 pointer-events-none">{(inv?.status || 'Unpaid') === 'Paid' ? <CheckCircle size={12} className="text-emerald-600" /> : <AlertCircle size={12} className="text-orange-600" />}</div>
-                      <div className="absolute right-2.5 pointer-events-none"><ChevronDown size={12} className={(inv?.status || 'Unpaid') === 'Paid' ? "text-emerald-600" : "text-orange-600"} /></div>
-                    </div>
-                  </td>
-                  <td className="p-5 text-center"><button onClick={(e) => handleDeleteInvoice(e, inv?.id)} className="p-2 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"><Trash2 size={18} /></button></td>
+          <div className="flex-1 overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="text-xs uppercase tracking-widest text-slate-500 font-semibold border-b">
+                  <th className="p-5 pl-8">Invoice No.</th><th className="p-5">Date</th><th className="p-5">Customer</th><th className="p-5 text-center">Terms</th><th className="p-5 text-right">Total</th><th className="p-5 text-center">Status</th><th className="p-5 text-center w-20">Delete</th>
                 </tr>
-              ))}
-              {paginatedInvoices.length === 0 && (<tr><td colSpan="7" className="p-12 text-center text-sm font-bold text-slate-400">No invoices match your current search and sorting criteria.</td></tr>)}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-sm">
+                {paginatedInvoices.map((inv) => (
+                  <tr key={inv?.id} className="hover:bg-blue-50 cursor-pointer transition-colors group" onClick={() => setPreviewInvoice(inv)}>
+                    <td className="p-5 pl-8 font-mono font-bold text-blue-600">
+                      #{String(inv?.number || inv?.id || '')}
+                      {inv?.isSpecialFormat && <span className="ml-2 bg-purple-100 text-purple-700 border border-purple-200 px-1.5 py-0.5 rounded text-[8px] uppercase tracking-widest font-black inline-flex items-center"><ScanBarcode size={8} className="mr-0.5" /> Spec</span>}
+                    </td>
+                    <td className="p-5 text-slate-500">{String(inv?.date || '')}</td>
+                    <td className="p-5 text-slate-800">{String(inv?.customer || '')}</td>
+                    <td className="p-5 text-center"><span className="text-xs font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-1 rounded-md whitespace-nowrap">{inv?.paymentTerms === 'cod' ? 'C.O.D' : '30 Days'}</span></td>
+                    <td className="p-5 text-right font-black text-slate-900">${formatMoney(inv?.total)}</td>
+                    <td className="p-5 text-center">
+                      <div className="relative inline-flex items-center" onClick={(e) => e.stopPropagation()}>
+                        <select value={inv?.status || 'Unpaid'} onChange={(e) => handleStatusChange(inv.id, e.target.value)} className={`appearance-none cursor-pointer pl-8 pr-8 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest outline-none transition-all ${(inv?.status || 'Unpaid') === 'Paid' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200 hover:bg-emerald-200' : 'bg-orange-100 text-orange-700 border border-orange-200 hover:bg-orange-200'}`}>
+                          <option value="Paid">PAID</option><option value="Unpaid">UNPAID</option>
+                        </select>
+                        <div className="absolute left-2.5 pointer-events-none">{(inv?.status || 'Unpaid') === 'Paid' ? <CheckCircle size={12} className="text-emerald-600" /> : <AlertCircle size={12} className="text-orange-600" />}</div>
+                        <div className="absolute right-2.5 pointer-events-none"><ChevronDown size={12} className={(inv?.status || 'Unpaid') === 'Paid' ? "text-emerald-600" : "text-orange-600"} /></div>
+                      </div>
+                    </td>
+                    <td className="p-5 text-center"><button onClick={(e) => handleDeleteInvoice(e, inv?.id)} className="p-2 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"><Trash2 size={18} /></button></td>
+                  </tr>
+                ))}
+                {paginatedInvoices.length === 0 && (<tr><td colSpan="7" className="p-12 text-center text-sm font-bold text-slate-400">No invoices match your current search and sorting criteria.</td></tr>)}
+              </tbody>
+            </table>
+          </div>
+
+          {/* ===== PAGINATION CONTROLS ===== */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-8 py-4 border-t border-slate-100 bg-white shrink-0">
+              <span className="text-xs text-slate-500 font-bold uppercase tracking-widest">
+                Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1} to {Math.min(currentPage * ITEMS_PER_PAGE, filteredInvoices.length)} of {filteredInvoices.length} invoices
+              </span>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                  className="px-4 py-2 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center shadow-sm"
+                >
+                  <ChevronLeft size={16} className="mr-1" /> Prev
+                </button>
+                <div className="flex items-center px-4 font-black text-xs text-slate-700 uppercase tracking-widest">
+                  Page {currentPage} of {totalPages}
+                </div>
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                  className="px-4 py-2 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center shadow-sm"
+                >
+                  Next <ChevronRight size={16} className="ml-1" />
+                </button>
+              </div>
+            </div>
+          )}
+
         </div>
       </div>
 
