@@ -229,19 +229,33 @@ export function InvoicePreview({
                 <td></td><td></td><td></td>
               </tr>
               
+              {/* ===== DEDICATED INVOICE REMARKS 2-ROW SPLIT ===== */}
               <tr className="border-t-2 border-black font-bold h-[28px]">
-                <td colSpan="3" rowSpan="3" className="bg-white border-r-2 border-black p-2 align-top text-left">
-                  {(!isSpecialFormat && remarks) && (
-                    <div className="w-full max-h-[72px] overflow-hidden text-[11px] font-normal text-slate-800 whitespace-pre-wrap break-words leading-tight" style={{ fontFamily: CJK_FONT }}>
-                      <span className="font-bold underline block mb-0.5">Remarks / Notes:</span>
+                {!isSpecialFormat ? (
+                  <td colSpan="3" className="bg-white border-r-2 border-black px-2 py-1 align-middle text-left text-[12px] font-bold text-slate-800">
+                    Remarks:
+                  </td>
+                ) : (
+                  <td colSpan="3" rowSpan="3" className="bg-white border-r-2 border-black p-2 align-top text-left"></td>
+                )}
+                <td className={`p-1 text-center bg-white ${gstText}`}>SUBTOTAL</td>
+                <td className={`p-1 text-center bg-white ${subtotalText}`}>${formatMoney(subtotal)}</td>
+              </tr>
+              <tr className="font-bold h-[28px] border-t border-black bg-white">
+                {!isSpecialFormat && (
+                  <td colSpan="3" rowSpan="2" className="bg-white border-r-2 border-black px-2 py-1 align-top text-left">
+                    <div className="w-full max-h-[44px] overflow-hidden text-[11px] font-normal text-slate-800 whitespace-pre-wrap break-words leading-tight" style={{ fontFamily: CJK_FONT }}>
                       {remarks}
                     </div>
-                  )}
-                </td>
-                <td className={`p-1 text-center bg-white ${gstText}`}>SUBTOTAL</td><td className={`p-1 text-center bg-white ${subtotalText}`}>${formatMoney(subtotal)}</td>
+                  </td>
+                )}
+                <td className={`p-1 text-center ${gstText}`}>9% GST</td>
+                <td className={`p-1 text-center ${subtotalText}`}>${formatMoney(gst)}</td>
               </tr>
-              <tr className="font-bold h-[28px] border-t border-black bg-white"><td className={`p-1 text-center ${gstText}`}>9% GST</td><td className={`p-1 text-center ${subtotalText}`}>${formatMoney(gst)}</td></tr>
-              <tr className="font-bold h-[32px] border-t-2 border-black bg-white"><td className="p-1 text-center text-[16px]">TOTAL</td><td className={`p-1 text-center ${totalText}`}>${formatMoney(total)}</td></tr>
+              <tr className="font-bold h-[32px] border-t-2 border-black bg-white">
+                <td className="p-1 text-center text-[16px]">TOTAL</td>
+                <td className={`p-1 text-center ${totalText}`}>${formatMoney(total)}</td>
+              </tr>
             </tbody>
           </table>
           <div className="flex w-full mt-4 pt-2 items-end shrink-0">
