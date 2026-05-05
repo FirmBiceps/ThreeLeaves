@@ -151,7 +151,10 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
   const [paymentTerms, setPaymentTerms] = useState(existingInvoice?.paymentTerms || '30_days');
 
   const autoInvoiceNumber = useMemo(() => {
-    if (existingInvoice && invoiceDate === existingInvoice.date) return String(existingInvoice.number || ''); 
+    // BUGFIX: If an existing invoice is being edited, ALWAYS keep its original number.
+    // Do not run the auto-generator just because the date changed!
+    if (existingInvoice) return String(existingInvoice.number || ''); 
+
     const dateObj = new Date(invoiceDate);
     if (isNaN(dateObj.getTime())) return '';
 
@@ -172,6 +175,8 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
   }, [safeInvoices, existingInvoice, invoiceDate]);
 
   const [invoiceNumber, setInvoiceNumber] = useState(autoInvoiceNumber);
+  
+  // Ensure the state updates when autoInvoiceNumber changes (only applies to new invoices now)
   useEffect(() => { setInvoiceNumber(autoInvoiceNumber); }, [autoInvoiceNumber]);
   
   const [isParsing, setIsParsing] = useState(false);
@@ -540,7 +545,7 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
                           <input checked={item.picked || false} className="h-4 w-4 cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500 shrink-0" onChange={(event) => { const nextItems = [...items]; if (nextItems[index]) nextItems[index].picked = event.target.checked; setItems(nextItems); }} type="checkbox" />
                           <ProductSearchSelect value={item.itemId} inventory={safeInventory} isAutoFilled={isPredicted} onChange={(selectedId) => { const product = safeInventory.find((entry) => entry?.id === selectedId); if (!product) return; const nextItems = [...items]; const determinedUnit = String(product.Unit || product.unit || '箱'); if (nextItems[index]) { nextItems[index] = { ...nextItems[index], itemId: selectedId, name: String(product.Name || product.name || product.Items || ''), unit: determinedUnit, unitPrice: getSafePrice(product, determinedUnit), suggestions: [], isAutoFilled: false, rawSearchString: null }; } setItems(nextItems); }} />
                         </div>
-                        
+
                         {isPredicted && (
                           <div className="ml-6 mt-1.5 flex items-center">
                             <button onClick={() => { const next = [...items]; if(next[index]) { next[index].isAutoFilled = false; next[index].rawSearchString = null; } setItems(next); }} className="text-[9px] font-black uppercase tracking-widest bg-indigo-200 text-indigo-800 px-2 py-1 rounded shadow-sm hover:bg-indigo-300 transition-colors flex items-center" type="button"><Check size={10} className="mr-1" /> Verify Match</button>
