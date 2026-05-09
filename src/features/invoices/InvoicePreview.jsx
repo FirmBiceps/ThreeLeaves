@@ -72,21 +72,23 @@ export function InvoicePreview({
           <div className="flex items-center">
             {mode === 'generator' ? <Eye size={24} className="mr-3 text-blue-400" /> : <FileText size={24} className="mr-3 text-blue-400" />}
             <div>
-              <h2 className="text-sm font-black tracking-widest uppercase text-slate-200">{mode === 'generator' ? 'Invoice Layout Check' : 'A4 Print Preview'}</h2>
+              <h2 className="text-sm font-black tracking-widest uppercase text-slate-200">{mode === 'generator' ? 'Invoice Print Preview' : 'A4 Print Preview'}</h2>
               <p className="text-lg font-bold text-white leading-none mt-0.5">#{String(invoiceNumber)}</p>
             </div>
           </div>
           <div className="flex items-center space-x-3">
             {mode === 'generator' ? (
               <>
-                <button className="flex items-center rounded bg-slate-800 px-5 py-2.5 font-bold text-white transition-all hover:bg-slate-700 border border-slate-700 text-sm" onClick={onBack} type="button"><ChevronLeft size={16} className="mr-1" /> Edit Draft</button>
-                <button className="flex items-center rounded bg-white px-5 py-2.5 font-bold text-slate-900 shadow-lg transition-all hover:bg-slate-50 text-sm" onClick={() => onRegister(false)} type="button"><Save className="mr-2" size={16} /> Save Invoice</button>
+                {/* NEW: Print Button directly in Generator Preview */}
+                <button onClick={onPrint} className="flex items-center text-sm font-bold bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl transition-colors shadow-lg"><Printer size={18} className="mr-2" /> Print Invoice</button>
+                <button onClick={onBack} className="flex items-center text-sm font-bold bg-slate-800 hover:bg-slate-700 text-white px-5 py-2.5 rounded-xl transition-colors border border-slate-700"><ChevronLeft size={16} className="mr-2" /> Back to Edit</button>
+                <button onClick={onClose} className="hover:bg-slate-700 text-white p-2.5 rounded-full transition-colors ml-2 bg-slate-800"><X size={20} /></button>
               </>
             ) : (
               <>
-                <button onClick={onPrint} className="flex items-center text-sm font-bold bg-blue-600 hover:bg-blue-500 px-5 py-2.5 rounded-xl transition-colors shadow-lg"><Printer size={18} className="mr-2" /> Print</button>
-                <button onClick={onEdit} className="flex items-center text-sm font-bold bg-slate-800 hover:bg-slate-700 px-5 py-2.5 rounded-xl transition-colors border border-slate-700"><Edit size={16} className="mr-2" /> Edit</button>
-                <button onClick={onClose} className="hover:bg-slate-700 p-2.5 rounded-full transition-colors ml-2 bg-slate-800"><X size={20} /></button>
+                <button onClick={onPrint} className="flex items-center text-sm font-bold bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl transition-colors shadow-lg"><Printer size={18} className="mr-2" /> Print</button>
+                <button onClick={onEdit} className="flex items-center text-sm font-bold bg-slate-800 hover:bg-slate-700 text-white px-5 py-2.5 rounded-xl transition-colors border border-slate-700"><Edit size={16} className="mr-2" /> Edit</button>
+                <button onClick={onClose} className="hover:bg-slate-700 text-white p-2.5 rounded-full transition-colors ml-2 bg-slate-800"><X size={20} /></button>
               </>
             )}
           </div>
@@ -229,7 +231,6 @@ export function InvoicePreview({
                 <td></td><td></td><td></td>
               </tr>
               
-              {/* ===== DEDICATED INVOICE REMARKS 2-ROW SPLIT ===== */}
               <tr className="border-t-2 border-black font-bold h-[28px]">
                 {!isSpecialFormat ? (
                   <td colSpan="3" className="bg-white border-r-2 border-black px-2 py-1 align-middle text-left text-[12px] font-bold text-slate-800">
