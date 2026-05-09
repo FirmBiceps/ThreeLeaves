@@ -550,6 +550,45 @@ export function CustomerModule({ sys }) {
     } catch(err) { alert(`Error removing custom price: ${err.message}`); }
   };
 
+  const handleDeleteCustomer = async (e, customerId, customerName) => {
+    e.stopPropagation(); // Prevents clicking the row from opening an edit modal
+    
+    // FIRST LAYER OF PROTECTION: Browser Confirmation
+    const isConfirmed = window.confirm(`WARNING: Are you absolutely sure you want to permanently delete "${customerName}"?\n\nThis action cannot be undone.`);
+    
+    if (isConfirmed) {
+      try {
+        // SECOND LAYER OF PROTECTION (Database execution)
+        const { error } = await supabase
+          .from('customers')
+          .delete()
+          .eq('id', customerId);
+          
+        if (error) {
+          // Check if error is related to foreign key constraints (e.g. invoices attached to customer)
+          if (error.code === '23503') {
+            throw new Error("Cannot delete this customer because they have existing invoices tied to them. Please reassign or delete their invoices first.");
+          }
+          throw error;
+        }
+        
+        // Update local React state instantly so the table refreshes
+        const updatedCustomers = safeCustomers.filter(c => c?.id !== customerId);
+        sys.setCustomers(updatedCustomers);
+        
+        // If the deleted customer was currently selected, close the detail view
+        if (selectedCustomer?.customer?.id === customerId) {
+          setSelectedCustomer(null);
+        }
+        
+        alert(`Success: "${customerName}" has been removed from the database.`);
+        
+      } catch (err) {
+        alert(`Delete Failed:\n${err.message}`);
+      }
+    }
+  };
+
   if (selectedCustomer) {
     const statusStyle = STATUS_STYLES[selectedCustomer.status] || STATUS_STYLES.inactive;
     const customPrices = selectedCustomer.customer.custom_prices || {};
@@ -787,7 +826,7 @@ export function CustomerModule({ sys }) {
               <th className="p-4 text-center">Trend</th>
               <th className="p-4 text-right">Lifetime Rev.</th>
               <th className="p-4 text-center">Last Order</th>
-              <th className="p-4 pr-6 text-right">Details</th>
+              <th className="p-4 pr-6 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 text-sm">
@@ -814,7 +853,18 @@ export function CustomerModule({ sys }) {
                   <td className="p-4 text-center"><TrendIcon className={`inline-block ${trendColor}`} size={18} /></td>
                   <td className="p-4 text-right font-mono text-lg font-black tracking-tighter text-slate-900">${formatMoneyWhole(entry.totalRevenue)}</td>
                   <td className="p-4 text-center text-xs font-bold text-slate-500">{entry.daysSinceLast === 999 ? '-' : `${entry.daysSinceLast}d ago`}</td>
-                  <td className="p-4 pr-6 text-right"><span className="inline-flex items-center rounded-lg bg-blue-50 p-2 text-[10px] font-black uppercase tracking-widest text-blue-600 transition-colors hover:bg-blue-100">View <ArrowRight className="ml-1" size={12} /></span></td>
+                  <td className="p-4 pr-6 text-right">
+                    <div className="flex justify-end items-center space-x-2">
+                      <span className="inline-flex items-center rounded-lg bg-blue-50 p-2 text-[10px] font-black uppercase tracking-widest text-blue-600 transition-colors hover:bg-blue-100">View <ArrowRight className="ml-1" size={12} /></span>
+                      <button 
+                        onClick={(e) => handleDeleteCustomer(e, entry.customer.id, entry.customer.name)} 
+                        className="p-2 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all" 
+                        title="Delete Customer"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               );
             })}
