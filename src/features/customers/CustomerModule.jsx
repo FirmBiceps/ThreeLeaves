@@ -24,9 +24,9 @@ const EMPTY_CUSTOMER = {
 
 const CJK_FONT = '"Microsoft YaHei", "微软雅黑", "PingFang SC", "Hiragino Sans GB", "SimHei", "黑体", "SimSun", "宋体", serif';
 
-// ==========================================
-// COMPONENT: QUOTATION PDF GENERATOR (MULTI-PAGE OPTIMIZED)
-// ==========================================
+// ============================================================================
+// COMPONENT: QUOTATION PDF GENERATOR (STRICT 30-ITEMS-PER-PAGE CHUNKING)
+// ============================================================================
 function QuotationPreviewModal({ group, sys, onClose }) {
   const safeInventory = Array.isArray(sys?.inventory) ? sys.inventory : [];
   
@@ -40,16 +40,15 @@ function QuotationPreviewModal({ group, sys, onClose }) {
 
   const today = new Date().toLocaleDateString('en-GB').replace(/\//g, '-');
 
-  // DYNAMIC MULTI-PAGE TEXT SCALING ENGINE
-  let baseText = "text-[14px]";
-  let cellPad = "py-2.5";
-  
-  if (pricesList.length > 30) {
-    baseText = "text-[11px] leading-tight";
-    cellPad = "py-1";
-  } else if (pricesList.length > 20) {
-    baseText = "text-[12px] leading-snug";
-    cellPad = "py-1.5";
+  // CHUNKING ENGINE: Divide items into exact arrays of 30 items each
+  const ITEMS_PER_PAGE = 30;
+  const pages = [];
+  for (let i = 0; i < pricesList.length; i += ITEMS_PER_PAGE) {
+    pages.push(pricesList.slice(i, i + ITEMS_PER_PAGE));
+  }
+  // Ensure at least one page renders even if the group has no pricing rules yet
+  if (pages.length === 0) {
+    pages.push([]);
   }
 
   return (
@@ -59,7 +58,7 @@ function QuotationPreviewModal({ group, sys, onClose }) {
           @media print {
             @page { 
               size: A4; 
-              margin: 15mm !important; 
+              margin: 0 !important; 
             }
             html, body { 
               margin: 0 !important; 
@@ -68,51 +67,44 @@ function QuotationPreviewModal({ group, sys, onClose }) {
               color: black !important;
               -webkit-print-color-adjust: exact; 
               print-color-adjust: exact; 
-              height: auto !important;
-              overflow: visible !important;
             }
             body * { visibility: hidden !important; }
-            #printable-quotation-wrapper, #printable-quotation-wrapper * { visibility: visible !important; }
+            #printable-quotation-spooler, #printable-quotation-spooler * { visibility: visible !important; }
             
-            /* Perfectly static, fluid multi-page block layout */
-            #printable-quotation-wrapper { 
-              position: static !important; 
+            #printable-quotation-spooler { 
+              position: absolute !important; 
+              left: 0 !important; 
+              top: 0 !important; 
               width: 100% !important; 
-              max-width: none !important;
-              min-height: auto !important; 
-              height: auto !important; 
               padding: 0 !important; 
               margin: 0 !important; 
               background: white !important; 
-              backdrop-filter: none !important; 
-              box-sizing: border-box !important; 
               display: block !important; 
-              overflow: visible !important;
             }
-            *, html, body, div, p, span, h1, h2, h3, table, th, td { font-family: ${CJK_FONT} !important; }
             
-            table {
-              display: table !important;
-              width: 100% !important;
-              border-collapse: collapse !important;
-            }
-            thead {
-              display: table-header-group !important;
-            }
-            tr { 
-              page-break-inside: avoid !important; 
-              break-inside: avoid !important; 
-            }
-            td, th { 
-              page-break-inside: avoid !important; 
-              break-inside: avoid !important; 
+            *, html, body, div, p, span, h1, h2, h3, table, th, td { font-family: ${CJK_FONT} !important; }
+
+            /* Force a flawless page break between each generated A4 container */
+            .a4-quotation-page {
+              page-break-after: always !important;
+              break-after: always !important;
+              width: 210mm !important;
+              height: 297mm !important;
+              padding: 12mm 15mm !important;
+              box-sizing: border-box !important;
+              display: flex !important;
+              flex-direction: column !important;
+              justify-content: space-between !important;
+              overflow: hidden !important;
             }
           }
         `}
       </style>
+
       <div className="flex min-h-full flex-col items-center py-12 print:block print:py-0 print:m-0">
         
-        <div className="w-full max-w-[210mm] shrink-0 bg-slate-900 px-8 py-4 flex justify-between items-center text-white rounded-t-2xl shadow-2xl print:hidden border-b-4 border-emerald-500">
+        {/* ACTION BAR (Hidden during printing) */}
+        <div className="w-full max-w-[210mm] shrink-0 bg-slate-900 px-8 py-4 flex justify-between items-center text-white rounded-t-2xl shadow-2xl print:hidden border-b-4 border-emerald-500 mb-4">
           <div className="flex items-center">
             <FileText size={24} className="mr-3 text-emerald-400" />
             <div>
@@ -121,78 +113,113 @@ function QuotationPreviewModal({ group, sys, onClose }) {
             </div>
           </div>
           <div className="flex items-center space-x-3">
-            <button onClick={() => window.print()} className="flex items-center text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl transition-colors shadow-lg"><Printer size={18} className="mr-2" /> Print PDF</button>
-            <button onClick={onClose} className="hover:bg-slate-700 text-white p-2.5 rounded-full transition-colors ml-2 bg-slate-800"><X size={20} /></button>
+            <button onClick={() => window.print()} className="flex items-center text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl transition-colors shadow-lg">
+              <Printer size={18} className="mr-2" /> Print PDF ({pages.length} Page{pages.length > 1 ? 's' : ''})
+            </button>
+            <button onClick={onClose} className="hover:bg-slate-700 text-white p-2.5 rounded-full transition-colors ml-2 bg-slate-800">
+              <X size={20} />
+            </button>
           </div>
         </div>
         
-        <div id="printable-quotation-wrapper" lang="zh" className="flex w-full max-w-[210mm] min-h-[297mm] flex-col bg-white py-[15mm] px-[15mm] text-black shadow-2xl rounded-b-2xl print:w-full print:min-h-0 print:h-auto print:max-w-none print:rounded-none print:shadow-none print:p-0 box-border" style={{ fontFamily: CJK_FONT }}>
-          
-          <div className="flex flex-col w-full shrink-0 border-b-2 border-black pb-6 mb-6">
-            <h1 className="font-black text-[22px] tracking-tight text-center mb-1" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
-            <h2 className="font-bold text-[18px] text-center mb-2" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
-            <div className="text-center text-slate-600 font-bold text-[11px] leading-relaxed tracking-tight">
-              <p>CO.REG NO.53033969B &nbsp;|&nbsp; GST REG NO. M90355440L</p>
-              <p>280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
-              <p>HP: 97578869 (Mr Ye) &nbsp;|&nbsp; HP: 91113505 (Min) &nbsp;|&nbsp; 3leaves.sg@gmail.com</p>
+        {/* MAPPED SPOOLER CONTAINER */}
+        <div id="printable-quotation-spooler" className="flex flex-col items-center gap-8 print:gap-0 print:block w-full">
+          {pages.map((pageItems, pageIndex) => (
+            <div 
+              key={pageIndex} 
+              className="a4-quotation-page w-[210mm] h-[297mm] bg-white p-[12mm_15mm] text-black shadow-2xl rounded-2xl print:rounded-none print:shadow-none box-border flex flex-col justify-between shrink-0" 
+              style={{ fontFamily: CJK_FONT }}
+            >
+              
+              {/* === STRICT HEADER SECTION (Repeated exactly per page) === */}
+              <div className="w-full shrink-0">
+                <div className="flex flex-col w-full border-b-2 border-black pb-3 mb-4">
+                  <h1 className="font-black text-[20px] tracking-tight text-center leading-none mb-1" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
+                  <h2 className="font-bold text-[16px] text-center leading-none mb-2" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
+                  <div className="text-center text-slate-600 font-bold text-[10px] leading-tight tracking-tight">
+                    <p>CO.REG NO.53033969B &nbsp;|&nbsp; GST REG NO. M90355440L</p>
+                    <p>280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
+                    <p>HP: 97578869 (Mr Ye) &nbsp;|&nbsp; HP: 91113505 (Min) &nbsp;|&nbsp; 3leaves.sg@gmail.com</p>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-end mb-3">
+                  <div>
+                    <h2 className="text-[24px] font-black tracking-[0.2em] leading-none mb-1">QUOTATION</h2>
+                    <h3 className="text-[12px] font-bold text-slate-600 uppercase tracking-widest">Group Pricing: {group.name}</h3>
+                  </div>
+                  <div className="text-right text-[12px] font-bold">
+                    <p className="text-slate-500 mb-0.5">DATE:</p>
+                    <p className="border-b border-black pb-0.5 min-w-[100px] inline-block text-center">{today}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* === STRICT BODY SECTION (Exactly 30 fixed-height rows per page) === */}
+              <div className="w-full flex-1 flex flex-col justify-start overflow-hidden my-auto">
+                <table className="w-full border-2 border-black text-center text-[12px] border-collapse" style={{ fontFamily: CJK_FONT }}>
+                  <thead className="border-b-2 border-black bg-slate-50 shrink-0">
+                    <tr className="font-bold text-slate-800 h-[24px]">
+                      <th className="py-1 px-1 w-12 border-r border-black text-center">NO.</th>
+                      <th className="py-1 px-3 text-left border-r border-black">DESCRIPTION (产品名称)</th>
+                      <th className="py-1 px-1 w-24 border-r border-black text-center">UNIT (单位)</th>
+                      <th className="py-1 px-1 w-28 text-center">UNIT PRICE (单价)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-black">
+                    {/* Render existing items for this page chunk */}
+                    {pageItems.map((item, idx) => {
+                      const absoluteIndex = pageIndex * ITEMS_PER_PAGE + idx + 1;
+                      return (
+                        <tr key={idx} className="h-[21px] align-middle text-slate-900 overflow-hidden">
+                          <td className="py-0 px-1 border-r border-black text-center font-medium leading-none">{absoluteIndex}</td>
+                          <td className="py-0 px-3 text-left border-r border-black font-bold truncate max-w-[300px] leading-none">{item.name}</td>
+                          <td className="py-0 px-1 border-r border-black text-center font-medium leading-none">{item.unit}</td>
+                          <td className="py-0 px-1 font-black text-center leading-none">${formatMoney(item.price)}</td>
+                        </tr>
+                      );
+                    })}
+
+                    {/* Fill extra space with perfectly anchored blank rows to maintain identical layout heights */}
+                    {pageItems.length < ITEMS_PER_PAGE && Array.from({ length: ITEMS_PER_PAGE - pageItems.length }).map((_, i) => (
+                      <tr key={`blank-${i}`} className="h-[21px] align-middle">
+                        <td className="py-0 border-r border-black"></td>
+                        <td className="py-0 border-r border-black"></td>
+                        <td className="py-0 border-r border-black"></td>
+                        <td className="py-0"></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* === STRICT FOOTER SECTION (Repeated exactly per page) === */}
+              <div className="w-full pt-3 border-t border-slate-200 text-[11px] font-bold text-slate-600 shrink-0 flex justify-between items-end mt-2">
+                <div>
+                  <p className="mb-0.5 text-slate-800 font-black">Terms & Conditions:</p>
+                  <ul className="list-disc pl-4 space-y-0.5 text-[10px]">
+                    <li>All prices quoted are in Singapore Dollars (SGD) and are subject to 9% GST.</li>
+                    <li>This quotation is valid for 30 days from the date of issue.</li>
+                    <li>Prices are strictly confidential and applicable only to assigned group members.</li>
+                  </ul>
+                </div>
+                <div className="text-right text-[10px] font-black tracking-widest text-slate-400 shrink-0 pb-0.5">
+                  PAGE {pageIndex + 1} OF {pages.length}
+                </div>
+              </div>
+
             </div>
-          </div>
-
-          <div className="flex justify-between items-end mb-6 shrink-0">
-            <div>
-              <h2 className="text-[28px] font-black tracking-[0.2em] leading-none mb-2">QUOTATION</h2>
-              <h3 className="text-[14px] font-bold text-slate-600 uppercase tracking-widest">Group Pricing: {group.name}</h3>
-            </div>
-            <div className="text-right text-[14px] font-bold">
-              <p className="text-slate-500 mb-1">DATE:</p>
-              <p className="border-b border-black pb-0.5 min-w-[120px] inline-block text-center">{today}</p>
-            </div>
-          </div>
-
-          <table className={`w-full flex-grow border-2 border-black text-center ${baseText} mb-8`} style={{ fontFamily: CJK_FONT }}>
-            <thead className="border-b-2 border-black bg-slate-50">
-              <tr className="font-bold text-slate-800">
-                <th className="py-3 px-2 w-16 border-r border-black">NO.</th>
-                <th className="py-3 px-4 text-left border-r border-black">DESCRIPTION (产品名称)</th>
-                <th className="py-3 px-2 w-28 border-r border-black">UNIT (单位)</th>
-                <th className="py-3 px-2 w-32">UNIT PRICE (单价)</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-black">
-              {pricesList.map((item, idx) => (
-                <tr key={idx} className="align-middle text-slate-900">
-                  <td className={`${cellPad} px-2 border-r border-black`}>{idx + 1}</td>
-                  <td className={`${cellPad} px-4 text-left border-r border-black font-bold`}>{item.name}</td>
-                  <td className={`${cellPad} px-2 border-r border-black`}>{item.unit}</td>
-                  <td className={`${cellPad} px-2 font-black`}>${formatMoney(item.price)}</td>
-                </tr>
-              ))}
-              {pricesList.length === 0 && (
-                <tr>
-                  <td colSpan="4" className="py-12 text-center text-slate-400 font-bold">No pricing rules defined for this group.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-
-          <div className="mt-auto pt-6 text-[12px] font-bold text-slate-600 shrink-0 page-break-avoid">
-            <p className="mb-1 text-slate-800">Terms & Conditions:</p>
-            <ul className="list-disc pl-5 space-y-1">
-              <li>All prices quoted are in Singapore Dollars (SGD) and are subject to 9% GST.</li>
-              <li>This quotation is valid for 30 days from the date of issue.</li>
-              <li>Prices are strictly confidential and applicable only to assigned group members.</li>
-            </ul>
-          </div>
-
+          ))}
         </div>
+
       </div>
     </div>
   );
 }
 
-// ==========================================
+// ============================================================================
 // COMPONENT: SEARCHABLE PRODUCT DROPDOWN
-// ==========================================
+// ============================================================================
 function ProductSearchSelect({ value, inventory, onChange }) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -247,9 +274,9 @@ function ProductSearchSelect({ value, inventory, onChange }) {
   );
 }
 
-// ==========================================
+// ============================================================================
 // COMPONENT: PRICING GROUP MANAGER
-// ==========================================
+// ============================================================================
 function PricingGroupManager({ sys, groups, setGroups, onClose }) {
   const safeGroups = Array.isArray(groups) ? groups : [];
   const safeInventory = Array.isArray(sys?.inventory) ? sys.inventory : [];
@@ -564,9 +591,9 @@ function PricingGroupManager({ sys, groups, setGroups, onClose }) {
   );
 }
 
-// ==========================================
+// ============================================================================
 // COMPONENT: CUSTOMER EDIT FORM
-// ==========================================
+// ============================================================================
 function CustomerFormModal({ initialValue, onClose, onSave, groups }) {
   const [form, setForm] = useState(initialValue);
   const safeGroups = Array.isArray(groups) ? groups : [];
@@ -600,9 +627,9 @@ function CustomerFormModal({ initialValue, onClose, onSave, groups }) {
   );
 }
 
-// ==========================================
+// ============================================================================
 // MAIN DASHBOARD COMPONENT
-// ==========================================
+// ============================================================================
 export function CustomerModule({ sys }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isGroupManagerOpen, setIsGroupManagerOpen] = useState(false);
