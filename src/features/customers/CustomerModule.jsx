@@ -61,50 +61,62 @@ function QuotationPreviewModal({ group, sys, onClose }) {
               margin: 0 !important; 
             }
             
-            /* 1. Hide everything else in the app by default */
+            /* 1. Hide everything else in the app and flatten their heights/margins/padding to 0 so they occupy exactly 0 vertical layout space */
             body * { 
               visibility: hidden !important; 
+              height: 0 !important;
+              padding: 0 !important;
+              margin: 0 !important;
+              overflow: hidden !important;
             }
 
-            /* 2. MAGIC BULLET: Force html, body, #root, and EVERY ancestor wrapping this modal to become fully untrapped, static, expanding block elements */
+            /* 2. Unflatten and display all ancestor wrappers from html down to our modal */
             html, body,
             html :has(.quotation-modal-wrapper) {
               position: static !important;
               display: block !important;
-              width: auto !important;
+              width: 100% !important;
               height: auto !important;
               max-height: none !important;
               overflow: visible !important;
               padding: 0 !important;
               margin: 0 !important;
-              transform: none !important;
-              box-shadow: none !important;
               background: white !important;
+              visibility: visible !important;
             }
             
-            /* 3. Make the modal wrapper and all its contents visible */
+            /* 3. Unflatten and make the modal wrapper and all its contents fully visible */
             .quotation-modal-wrapper, 
             .quotation-modal-wrapper * { 
               visibility: visible !important; 
-            }
-            
-            /* 4. Allow the spooler to flow naturally across multiple pages */
-            #printable-quotation-spooler { 
-              position: static !important; 
-              display: block !important; 
-              width: 100% !important; 
-              height: auto !important; 
+              height: auto !important;
               max-height: none !important;
               overflow: visible !important;
-              padding: 0 !important; 
-              margin: 0 !important; 
             }
             
+            /* 4. Hide the print action button bar entirely */
+            .print-action-bar, .print-action-bar * {
+              display: none !important;
+              height: 0 !important;
+              margin: 0 !important;
+              padding: 0 !important;
+            }
+
             *, html, body, div, p, span, h1, h2, h3, table, th, td { 
               font-family: ${CJK_FONT} !important; 
             }
 
-            /* 5. Force a flawless page break after each generated A4 container */
+            /* 5. Set the spooler to flow cleanly from the absolute top-left */
+            #printable-quotation-spooler { 
+              position: static !important; 
+              display: block !important; 
+              width: 210mm !important; 
+              height: auto !important; 
+              padding: 0 !important; 
+              margin: 0 !important; 
+            }
+
+            /* 6. Define exact A4 dimensions per chunked page with mandatory page breaks */
             .a4-quotation-page {
               page-break-after: always !important;
               break-after: always !important;
@@ -117,7 +129,9 @@ function QuotationPreviewModal({ group, sys, onClose }) {
               justify-content: space-between !important;
               overflow: hidden !important;
               margin: 0 !important;
-              float: none !important;
+              background: white !important;
+              box-shadow: none !important;
+              border-radius: 0 !important;
             }
           }
         `}
@@ -126,7 +140,7 @@ function QuotationPreviewModal({ group, sys, onClose }) {
       <div className="flex min-h-full flex-col items-center py-12 print:block print:py-0 print:m-0">
         
         {/* ACTION BAR (Hidden during printing) */}
-        <div className="w-full max-w-[210mm] shrink-0 bg-slate-900 px-8 py-4 flex justify-between items-center text-white rounded-t-2xl shadow-2xl print:hidden border-b-4 border-emerald-500 mb-4">
+        <div className="print-action-bar w-full max-w-[210mm] shrink-0 bg-slate-900 px-8 py-4 flex justify-between items-center text-white rounded-t-2xl shadow-2xl border-b-4 border-emerald-500 mb-4">
           <div className="flex items-center">
             <FileText size={24} className="mr-3 text-emerald-400" />
             <div>
@@ -145,11 +159,11 @@ function QuotationPreviewModal({ group, sys, onClose }) {
         </div>
         
         {/* MAPPED SPOOLER CONTAINER */}
-        <div id="printable-quotation-spooler" className="flex flex-col items-center gap-8 print:gap-0 print:block w-full">
+        <div id="printable-quotation-spooler" className="flex flex-col items-center gap-8 w-full">
           {pages.map((pageItems, pageIndex) => (
             <div 
               key={pageIndex} 
-              className="a4-quotation-page w-[210mm] h-[297mm] bg-white p-[12mm_15mm] text-black shadow-2xl rounded-2xl print:rounded-none print:shadow-none box-border flex flex-col justify-between shrink-0" 
+              className="a4-quotation-page w-[210mm] h-[297mm] bg-white p-[12mm_15mm] text-black shadow-2xl rounded-2xl box-border flex flex-col justify-between shrink-0" 
               style={{ fontFamily: CJK_FONT }}
             >
               
@@ -178,10 +192,10 @@ function QuotationPreviewModal({ group, sys, onClose }) {
               </div>
 
               {/* === STRICT BODY SECTION (Exactly 30 fixed-height rows per page) === */}
-              <div className="w-full flex-1 flex flex-col justify-start overflow-hidden my-auto">
+              <div className="w-full flex-1 flex flex-col justify-start overflow-hidden my-3">
                 <table className="w-full border-2 border-black text-center text-[12px] border-collapse" style={{ fontFamily: CJK_FONT }}>
                   <thead className="border-b-2 border-black bg-slate-50 shrink-0">
-                    <tr className="font-bold text-slate-800 h-[24px]">
+                    <tr className="font-bold text-slate-800 h-[25px]">
                       <th className="py-1 px-1 w-12 border-r border-black text-center">NO.</th>
                       <th className="py-1 px-3 text-left border-r border-black">DESCRIPTION (产品名称)</th>
                       <th className="py-1 px-1 w-24 border-r border-black text-center">UNIT (单位)</th>
@@ -193,7 +207,7 @@ function QuotationPreviewModal({ group, sys, onClose }) {
                     {pageItems.map((item, idx) => {
                       const absoluteIndex = pageIndex * ITEMS_PER_PAGE + idx + 1;
                       return (
-                        <tr key={idx} className="h-[21px] align-middle text-slate-900 overflow-hidden">
+                        <tr key={idx} className="h-[23px] align-middle text-slate-900 overflow-hidden">
                           <td className="py-0 px-1 border-r border-black text-center font-medium leading-none">{absoluteIndex}</td>
                           <td className="py-0 px-3 text-left border-r border-black font-bold truncate max-w-[300px] leading-none">{item.name}</td>
                           <td className="py-0 px-1 border-r border-black text-center font-medium leading-none">{item.unit}</td>
@@ -204,7 +218,7 @@ function QuotationPreviewModal({ group, sys, onClose }) {
 
                     {/* Fill extra space with perfectly anchored blank rows to maintain identical layout heights */}
                     {pageItems.length < ITEMS_PER_PAGE && Array.from({ length: ITEMS_PER_PAGE - pageItems.length }).map((_, i) => (
-                      <tr key={`blank-${i}`} className="h-[21px] align-middle">
+                      <tr key={`blank-${i}`} className="h-[23px] align-middle">
                         <td className="py-0 border-r border-black"></td>
                         <td className="py-0 border-r border-black"></td>
                         <td className="py-0 border-r border-black"></td>
@@ -406,7 +420,7 @@ function PricingGroupManager({ sys, groups, setGroups, onClose }) {
 
   return (
     <div className="fixed inset-0 z-[6000] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-5xl h-[80vh] overflow-hidden animate-in fade-in zoom-in-95 duration-200 flex flex-col">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-5xl h-[80vh] overflow-hidden flex flex-col">
         <div className="bg-slate-900 px-6 py-4 flex justify-between items-center text-white shrink-0">
           <h2 className="text-base font-black tracking-widest uppercase flex items-center">
             <Layers size={18} className="mr-2 text-blue-400" /> Pricing Group Manager
