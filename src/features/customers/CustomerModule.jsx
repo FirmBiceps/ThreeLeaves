@@ -25,7 +25,7 @@ const EMPTY_CUSTOMER = {
 const CJK_FONT = '"Microsoft YaHei", "微软雅黑", "PingFang SC", "Hiragino Sans GB", "SimHei", "黑体", "SimSun", "宋体", serif';
 
 // ==========================================
-// COMPONENT: QUOTATION PDF GENERATOR (A4 OPTIMIZED)
+// COMPONENT: QUOTATION PDF GENERATOR (MULTI-PAGE OPTIMIZED)
 // ==========================================
 function QuotationPreviewModal({ group, sys, onClose }) {
   const safeInventory = Array.isArray(sys?.inventory) ? sys.inventory : [];
@@ -57,38 +57,55 @@ function QuotationPreviewModal({ group, sys, onClose }) {
       <style type="text/css">
         {`
           @media print {
-            @page { size: A4; margin: 0 !important; }
+            @page { 
+              size: A4; 
+              margin: 15mm !important; 
+            }
             html, body { 
               margin: 0 !important; 
               padding: 0 !important; 
               background: white !important; 
+              color: black !important;
               -webkit-print-color-adjust: exact; 
               print-color-adjust: exact; 
+              height: auto !important;
+              overflow: visible !important;
             }
             body * { visibility: hidden !important; }
             #printable-quotation-wrapper, #printable-quotation-wrapper * { visibility: visible !important; }
             
-            /* Enable fluid page expansion for multiple pages */
+            /* Perfectly static, fluid multi-page block layout */
             #printable-quotation-wrapper { 
-              position: absolute !important; 
-              left: 0 !important; 
-              top: 0 !important; 
-              width: 210mm !important; 
-              min-height: 297mm !important; 
-              padding: 15mm 15mm !important; 
+              position: static !important; 
+              width: 100% !important; 
+              max-width: none !important;
+              min-height: auto !important; 
+              height: auto !important; 
+              padding: 0 !important; 
               margin: 0 !important; 
               background: white !important; 
               backdrop-filter: none !important; 
               box-sizing: border-box !important; 
-              display: flex !important; 
-              flex-direction: column !important;
+              display: block !important; 
+              overflow: visible !important;
             }
             *, html, body, div, p, span, h1, h2, h3, table, th, td { font-family: ${CJK_FONT} !important; }
             
-            /* Crucial: Prevent items from awkwardly splitting across pages */
-            tr, td, th { 
-              page-break-inside: avoid; 
-              break-inside: avoid; 
+            table {
+              display: table !important;
+              width: 100% !important;
+              border-collapse: collapse !important;
+            }
+            thead {
+              display: table-header-group !important;
+            }
+            tr { 
+              page-break-inside: avoid !important; 
+              break-inside: avoid !important; 
+            }
+            td, th { 
+              page-break-inside: avoid !important; 
+              break-inside: avoid !important; 
             }
           }
         `}
@@ -109,7 +126,7 @@ function QuotationPreviewModal({ group, sys, onClose }) {
           </div>
         </div>
         
-        <div id="printable-quotation-wrapper" lang="zh" className="flex w-full max-w-[210mm] min-h-[297mm] flex-col bg-white py-[15mm] px-[15mm] text-black shadow-2xl rounded-b-2xl print:w-[210mm] print:min-h-[297mm] print:max-w-none print:rounded-none print:shadow-none box-border" style={{ fontFamily: CJK_FONT }}>
+        <div id="printable-quotation-wrapper" lang="zh" className="flex w-full max-w-[210mm] min-h-[297mm] flex-col bg-white py-[15mm] px-[15mm] text-black shadow-2xl rounded-b-2xl print:w-full print:min-h-0 print:h-auto print:max-w-none print:rounded-none print:shadow-none print:p-0 box-border" style={{ fontFamily: CJK_FONT }}>
           
           <div className="flex flex-col w-full shrink-0 border-b-2 border-black pb-6 mb-6">
             <h1 className="font-black text-[22px] tracking-tight text-center mb-1" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
