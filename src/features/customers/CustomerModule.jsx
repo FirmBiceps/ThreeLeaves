@@ -52,7 +52,7 @@ function QuotationPreviewModal({ group, sys, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[7000] overflow-y-auto bg-slate-950/90 print:static print:block print:bg-white print:p-0 print:backdrop-filter-none">
+    <div className="quotation-modal-wrapper fixed inset-0 z-[7000] overflow-y-auto bg-slate-950/90 print:static print:block print:bg-white print:p-0 print:backdrop-filter-none">
       <style type="text/css">
         {`
           @media print {
@@ -67,19 +67,39 @@ function QuotationPreviewModal({ group, sys, onClose }) {
               color: black !important;
               -webkit-print-color-adjust: exact; 
               print-color-adjust: exact; 
+              height: auto !important;
+              max-height: none !important;
+              overflow: visible !important;
             }
             body * { visibility: hidden !important; }
-            #printable-quotation-spooler, #printable-quotation-spooler * { visibility: visible !important; }
             
+            /* Make the wrapper and spooler entirely static, visible block elements */
+            .quotation-modal-wrapper, 
+            .quotation-modal-wrapper * { 
+              visibility: visible !important; 
+            }
+            
+            .quotation-modal-wrapper { 
+              position: static !important; 
+              display: block !important; 
+              height: auto !important; 
+              max-height: none !important;
+              overflow: visible !important; 
+              padding: 0 !important; 
+              margin: 0 !important; 
+              background: white !important; 
+            }
+
             #printable-quotation-spooler { 
-              position: absolute !important; 
-              left: 0 !important; 
-              top: 0 !important; 
+              position: static !important; 
               width: 100% !important; 
+              height: auto !important; 
+              max-height: none !important;
               padding: 0 !important; 
               margin: 0 !important; 
               background: white !important; 
               display: block !important; 
+              overflow: visible !important;
             }
             
             *, html, body, div, p, span, h1, h2, h3, table, th, td { font-family: ${CJK_FONT} !important; }
@@ -96,6 +116,8 @@ function QuotationPreviewModal({ group, sys, onClose }) {
               flex-direction: column !important;
               justify-content: space-between !important;
               overflow: hidden !important;
+              margin: 0 !important;
+              float: none !important;
             }
           }
         `}
