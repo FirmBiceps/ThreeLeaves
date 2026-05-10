@@ -22,7 +22,7 @@ const EMPTY_CUSTOMER = {
   payment_terms: '30_days', pricing_group_id: '', custom_prices: {}, 
 };
 
-// CJK Font Stack matching your invoice preview exactly
+// Robust CJK Font Stack matching your working invoice preview exactly
 const CJK_FONT = '"Microsoft YaHei", "微软雅黑", "PingFang SC", "Hiragino Sans GB", "SimHei", "黑体", "SimSun", "宋体", serif';
 
 // ============================================================================
@@ -41,7 +41,7 @@ function QuotationPreviewModal({ group, sys, onClose }) {
 
   const today = new Date().toLocaleDateString('en-GB').replace(/\//g, '-');
 
-  // CHUNKING ENGINE: Divide items into exact arrays of 30 items each
+  // STRICT CHUNKING ENGINE: Divide items into exact arrays of 30 items each
   const ITEMS_PER_PAGE = 30;
   const pages = [];
   for (let i = 0; i < pricesList.length; i += ITEMS_PER_PAGE) {
@@ -55,7 +55,7 @@ function QuotationPreviewModal({ group, sys, onClose }) {
   return (
     <div className="fixed inset-0 z-[7000] overflow-y-auto bg-slate-950/90 print:bg-white print:p-0">
       
-      {/* ===== ENHANCED PRINT STYLES (MODIFIED FOR STATIC MULTI-PAGE FLOW) ===== */}
+      {/* ===== CRITICALLY ENGINEERED MULTI-PAGE PRINT STYLES ===== */}
       <style type="text/css">
         {`
           @media print {
@@ -64,20 +64,17 @@ function QuotationPreviewModal({ group, sys, onClose }) {
               size: A4;
             }
 
-            /* 1. Ensure the document resets default backgrounds and padding */
             html, body {
               margin: 0 !important;
               padding: 0 !important;
               background: white !important;
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
+              height: auto !important;
+              overflow: visible !important;
             }
 
-            /* 2. Hide everything else in the app */
-            body * { visibility: hidden; }
-            #printable-quotation-spooler, #printable-quotation-spooler * { visibility: visible; }
-            
-            /* 3. CRITICAL: Untrap all ancestor wrappers from html down to the spooler so pagination isn't blocked */
+            /* 1. Untrap all ancestor wrappers leading to the spooler so pagination flows naturally */
             html, body, #root,
             html :has(#printable-quotation-spooler) {
               position: static !important;
@@ -90,23 +87,40 @@ function QuotationPreviewModal({ group, sys, onClose }) {
               margin: 0 !important;
               background: white !important;
             }
+
+            /* 2. Hide all elements visually */
+            body * { visibility: hidden; }
+
+            /* 3. MAGIC BULLET: Target all external siblings/cousins occupying invisible height above the modal and collapse them out of the layout entirely */
+            body *:not(:has(#printable-quotation-spooler)):not(#printable-quotation-spooler *) {
+              position: absolute !important;
+              height: 0 !important;
+              width: 0 !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              overflow: hidden !important;
+              border: none !important;
+            }
+
+            /* 4. Make our spooler and its internal structure visible and standard block/table flow */
+            #printable-quotation-spooler, 
+            #printable-quotation-spooler * { 
+              visibility: visible; 
+            }
             
-            /* 4. CRITICAL: Spooler MUST be static (not absolute) to naturally spill over to pages 2, 3, 4, etc. */
             #printable-quotation-spooler {
               position: static !important;
               width: 210mm !important;
               height: auto !important;
-              min-height: auto !important;
               max-height: none !important;
               padding: 0 !important;
               margin: 0 !important;
               background: white !important;
               box-sizing: border-box !important;
               display: block !important;
-              overflow: visible !important;
             }
 
-            /* 5. Define exact A4 dimensions per chunked page container with mandatory page breaks */
+            /* 5. Force strict A4 dimensions per page chunk with hard page breaks */
             .a4-quotation-page {
               page-break-after: always !important;
               break-after: always !important;
@@ -123,7 +137,7 @@ function QuotationPreviewModal({ group, sys, onClose }) {
               float: none !important;
             }
 
-            /* Force the CJK font stack on the entire print container */
+            /* Force the robust font stack */
             #printable-quotation-spooler,
             #printable-quotation-spooler * {
               font-family: ${CJK_FONT} !important;
@@ -144,7 +158,7 @@ function QuotationPreviewModal({ group, sys, onClose }) {
           <div className="flex items-center">
             <FileText size={24} className="mr-3 text-emerald-400" />
             <div>
-              <h2 className="text-sm font-black tracking-widest uppercase text-slate-200">Quotation Print Preview</h2>
+              <h2 className="text-sm font-black tracking-widest uppercase text-slate-200">A4 Quotation Preview</h2>
               <p className="text-lg font-bold text-white leading-none mt-0.5">{group.name}</p>
             </div>
           </div>
@@ -161,7 +175,7 @@ function QuotationPreviewModal({ group, sys, onClose }) {
           </div>
         </div>
         
-        {/* ===== MAPPED SPOOLER CONTAINER ===== */}
+        {/* ===== MAPPED SPOOLER CONTAINER MATCHING INVOICE PREVIEW ===== */}
         <div 
           id="printable-quotation-spooler" 
           className="flex flex-col items-center gap-8 print:gap-0 print:block w-full shrink-0" 
@@ -176,35 +190,55 @@ function QuotationPreviewModal({ group, sys, onClose }) {
               
               {/* === STRICT HEADER SECTION (Repeated identically per page) === */}
               <div className="w-full shrink-0">
-                <div className="flex flex-col w-full border-b-2 border-black pb-2 mb-3 text-center leading-tight pt-1">
-                  <h1 className="font-bold text-[14px]" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
-                  <h2 className="font-bold text-[13px] mb-1" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
-                  <p className="font-bold text-[10px] mb-0.5">CO.REG NO.53033969B &nbsp;&nbsp;&nbsp; GST REG NO. M90355440L</p>
-                  <p className="text-[10px] mb-0.5">280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
-                  <p className="text-[10px]">HP: 97578869 (Mr Ye) &nbsp; HP: 91113505 (Min) &nbsp; Email: 3leaves.sg@gmail.com</p>
+                <div className="flex justify-between items-start mb-4 border-b-2 border-black pb-4">
+                  <div className="w-[20%]">
+                    {/* Clean fallback text if image path is not accessible */}
+                    <div className="font-black text-[18px] tracking-tighter text-emerald-700 border-2 border-emerald-700 p-1 text-center rounded">
+                      THREE<br/>LEAVES
+                    </div>
+                  </div>
+
+                  <div className="w-[60%] text-center leading-tight pt-1">
+                    <h1 className="font-bold text-[14px]" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
+                    <h2 className="font-bold text-[13px] mb-1" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
+                    <p className="font-bold text-[10px] mb-0.5">CO.REG NO.53033969B &nbsp;&nbsp;&nbsp; GST REG NO. M90355440L</p>
+                    <p className="text-[10px] mb-0.5">280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
+                    <p className="text-[10px]">HP: 97578869 (Mr Ye) &nbsp; HP: 91113505 (Min) &nbsp; Email: 3leaves.sg@gmail.com</p>
+                  </div>
+
+                  <div className="w-[20%] flex flex-col items-end pt-1">
+                    <div className="text-center w-full mb-1">
+                      <h2 className="text-[18px] font-bold tracking-[0.2em] leading-none mb-0.5" style={{ fontFamily: CJK_FONT }}>报价单</h2>
+                      <h3 className="text-[12px] font-bold tracking-widest uppercase">QUOTATION</h3>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="flex justify-between items-end mb-2">
-                  <div>
-                    <h2 className="text-[18px] font-bold tracking-[0.2em] leading-none mb-0.5" style={{ fontFamily: CJK_FONT }}>QUOTATION</h2>
-                    <h3 className="text-[12px] font-bold text-slate-600 uppercase tracking-widest">Group Pricing: {group.name}</h3>
+                <div className="flex justify-between items-end mb-2 font-bold text-[13px]">
+                  <div className="flex items-end w-[65%] pr-4 leading-tight">
+                    <span className="w-16 shrink-0 text-slate-500 font-bold text-[12px]">GROUP:</span>
+                    <span className="flex-1 uppercase border-b border-black pb-0.5 font-black text-[14px]" style={{ fontFamily: CJK_FONT }}>
+                      {group.name}
+                    </span>
                   </div>
-                  <div className="text-right text-[12px] font-bold leading-tight">
-                    <span className="font-bold mr-2 text-slate-500">DATE:</span>
-                    <span className="border-b border-black pb-0.5 inline-block text-center min-w-[100px]">{today}</span>
+                  <div className="flex items-end w-[35%] pl-4 leading-tight justify-end">
+                    <span className="w-12 shrink-0 text-slate-500 font-bold text-[12px] text-right mr-2">DATE:</span>
+                    <span className="w-24 text-center border-b border-black pb-0.5 font-bold">
+                      {today}
+                    </span>
                   </div>
                 </div>
               </div>
 
               {/* === STRICT BODY SECTION (Exactly 30 locked-height rows per page) === */}
-              <div className="w-full flex-1 flex flex-col justify-start overflow-hidden my-1">
+              <div className="w-full flex-1 flex flex-col justify-start overflow-hidden my-2">
                 <table className="w-full border-2 border-black text-center text-[12px] border-collapse leading-tight" style={{ fontFamily: CJK_FONT }}>
                   <thead className="border-b-2 border-black bg-slate-50 shrink-0">
-                    <tr className="font-bold text-slate-800 h-[24px]">
-                      <th className="py-0.5 px-1 w-12 border-r border-black text-center">NO.</th>
-                      <th className="py-0.5 px-2 text-left border-r border-black pl-2">DESCRIPTION (产品名称)</th>
-                      <th className="py-0.5 px-1 w-20 border-r border-black text-center">UNIT (单位)</th>
-                      <th className="py-0.5 px-1 w-28 text-center">UNIT PRICE (单价)</th>
+                    <tr className="font-bold text-slate-800 h-[26px]">
+                      <th className="py-0 px-1 w-10 border-r border-black text-center align-middle">NO.</th>
+                      <th className="py-0 px-2 text-left border-r border-black pl-2 align-middle">DESCRIPTION (产品名称)</th>
+                      <th className="py-0 px-1 w-20 border-r border-black text-center align-middle">UNIT</th>
+                      <th className="py-0 px-1 w-28 text-center align-middle">UNIT PRICE</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-black" style={{ fontFamily: CJK_FONT }}>
@@ -212,18 +246,18 @@ function QuotationPreviewModal({ group, sys, onClose }) {
                     {pageItems.map((item, idx) => {
                       const absoluteIndex = pageIndex * ITEMS_PER_PAGE + idx + 1;
                       return (
-                        <tr key={idx} className="h-[22px] align-middle text-slate-900 overflow-hidden" style={{ fontFamily: CJK_FONT }}>
-                          <td className="py-0 px-1 border-r border-black text-center font-medium leading-none">{absoluteIndex}</td>
-                          <td className="py-0 px-2 text-left border-r border-black font-bold pl-2 truncate max-w-[320px] leading-none" style={{ fontFamily: CJK_FONT }}>{item.name}</td>
-                          <td className="py-0 px-1 border-r border-black text-center font-medium leading-none">{item.unit}</td>
-                          <td className="py-0 px-1 font-black text-center leading-none">${formatMoney(item.price)}</td>
+                        <tr key={idx} className="h-[25px] align-middle text-slate-900 overflow-hidden" style={{ fontFamily: CJK_FONT }}>
+                          <td className="py-0 px-1 border-r border-black text-center font-medium text-[12px]">{absoluteIndex}</td>
+                          <td className="py-0 px-2 text-left border-r border-black font-bold text-[12px] pl-2 truncate max-w-[350px]" style={{ fontFamily: CJK_FONT }}>{item.name}</td>
+                          <td className="py-0 px-1 border-r border-black text-center font-medium text-[12px]">{item.unit}</td>
+                          <td className="py-0 px-1 font-black text-center text-[12px]">${formatMoney(item.price)}</td>
                         </tr>
                       );
                     })}
 
                     {/* Pad the remaining rows perfectly so the layout height never collapses or shifts */}
                     {pageItems.length < ITEMS_PER_PAGE && Array.from({ length: ITEMS_PER_PAGE - pageItems.length }).map((_, i) => (
-                      <tr key={`blank-${i}`} className="h-[22px] align-middle">
+                      <tr key={`blank-${i}`} className="h-[25px] align-middle">
                         <td className="py-0 border-r border-black"></td>
                         <td className="py-0 border-r border-black"></td>
                         <td className="py-0 border-r border-black"></td>
@@ -235,7 +269,7 @@ function QuotationPreviewModal({ group, sys, onClose }) {
               </div>
 
               {/* === STRICT FOOTER SECTION (Repeated identically per page) === */}
-              <div className="w-full pt-2 border-t border-slate-200 text-[11px] font-bold text-slate-600 shrink-0 flex justify-between items-end mt-1 leading-tight">
+              <div className="w-full pt-3 border-t border-slate-200 text-[11px] font-bold text-slate-600 shrink-0 flex justify-between items-end mt-1 leading-tight">
                 <div>
                   <p className="mb-0.5 text-slate-800 font-bold">Terms & Conditions:</p>
                   <ul className="list-disc pl-4 space-y-0.5 text-[10px]">
