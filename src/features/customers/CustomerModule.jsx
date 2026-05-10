@@ -442,7 +442,11 @@ function PricingGroupManager({ sys, groups, setGroups, onClose }) {
                                 <div>
                                   <p className="text-sm font-bold text-slate-800">{member.name}</p>
                                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-0.5">{member.region || 'No Region'}</p>
-                                text-red-400 hover:text-red-600 bg-white hover:bg-red-50 border border-slate-200 px-2 py-1.5 rounded flex items-center text-[10px] font-bold uppercase transition-colors shadow-sm">
+                                </div>
+                                <button 
+                                  onClick={() => handleRemoveMember(member.id)} 
+                                  className="text-red-400 hover:text-red-600 bg-white hover:bg-red-50 border border-slate-200 px-2 py-1.5 rounded flex items-center text-[10px] font-bold uppercase transition-colors shadow-sm"
+                                >
                                   <UserMinus size={12} className="mr-1" /> Remove
                                 </button>
                               </div>
