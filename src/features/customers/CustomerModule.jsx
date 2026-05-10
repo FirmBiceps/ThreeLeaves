@@ -60,51 +60,51 @@ function QuotationPreviewModal({ group, sys, onClose }) {
               size: A4; 
               margin: 0 !important; 
             }
-            html, body { 
-              margin: 0 !important; 
-              padding: 0 !important; 
-              background: white !important; 
-              color: black !important;
-              -webkit-print-color-adjust: exact; 
-              print-color-adjust: exact; 
+            
+            /* 1. Hide everything else in the app by default */
+            body * { 
+              visibility: hidden !important; 
+            }
+
+            /* 2. MAGIC BULLET: Force html, body, #root, and EVERY ancestor wrapping this modal to become fully untrapped, static, expanding block elements */
+            html, body,
+            html :has(.quotation-modal-wrapper) {
+              position: static !important;
+              display: block !important;
+              width: auto !important;
               height: auto !important;
               max-height: none !important;
               overflow: visible !important;
+              padding: 0 !important;
+              margin: 0 !important;
+              transform: none !important;
+              box-shadow: none !important;
+              background: white !important;
             }
-            body * { visibility: hidden !important; }
             
-            /* Make the wrapper and spooler entirely static, visible block elements */
+            /* 3. Make the modal wrapper and all its contents visible */
             .quotation-modal-wrapper, 
             .quotation-modal-wrapper * { 
               visibility: visible !important; 
             }
             
-            .quotation-modal-wrapper { 
-              position: static !important; 
-              display: block !important; 
-              height: auto !important; 
-              max-height: none !important;
-              overflow: visible !important; 
-              padding: 0 !important; 
-              margin: 0 !important; 
-              background: white !important; 
-            }
-
+            /* 4. Allow the spooler to flow naturally across multiple pages */
             #printable-quotation-spooler { 
               position: static !important; 
+              display: block !important; 
               width: 100% !important; 
               height: auto !important; 
               max-height: none !important;
+              overflow: visible !important;
               padding: 0 !important; 
               margin: 0 !important; 
-              background: white !important; 
-              display: block !important; 
-              overflow: visible !important;
             }
             
-            *, html, body, div, p, span, h1, h2, h3, table, th, td { font-family: ${CJK_FONT} !important; }
+            *, html, body, div, p, span, h1, h2, h3, table, th, td { 
+              font-family: ${CJK_FONT} !important; 
+            }
 
-            /* Force a flawless page break between each generated A4 container */
+            /* 5. Force a flawless page break after each generated A4 container */
             .a4-quotation-page {
               page-break-after: always !important;
               break-after: always !important;
