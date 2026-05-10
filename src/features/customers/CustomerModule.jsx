@@ -25,7 +25,7 @@ const EMPTY_CUSTOMER = {
 const CJK_FONT = '"Microsoft YaHei", "微软雅黑", "PingFang SC", "Hiragino Sans GB", "SimHei", "黑体", "SimSun", "宋体", serif';
 
 // ==========================================
-// COMPONENT: QUOTATION PDF GENERATOR
+// COMPONENT: QUOTATION PDF GENERATOR (A4 OPTIMIZED)
 // ==========================================
 function QuotationPreviewModal({ group, sys, onClose }) {
   const safeInventory = Array.isArray(sys?.inventory) ? sys.inventory : [];
@@ -40,18 +40,56 @@ function QuotationPreviewModal({ group, sys, onClose }) {
 
   const today = new Date().toLocaleDateString('en-GB').replace(/\//g, '-');
 
+  // DYNAMIC MULTI-PAGE TEXT SCALING ENGINE
+  let baseText = "text-[14px]";
+  let cellPad = "py-2.5";
+  
+  if (pricesList.length > 30) {
+    baseText = "text-[11px] leading-tight";
+    cellPad = "py-1";
+  } else if (pricesList.length > 20) {
+    baseText = "text-[12px] leading-snug";
+    cellPad = "py-1.5";
+  }
+
   return (
     <div className="fixed inset-0 z-[7000] overflow-y-auto bg-slate-950/90 print:static print:block print:bg-white print:p-0 print:backdrop-filter-none">
       <style type="text/css">
         {`
           @media print {
             @page { size: A4; margin: 0 !important; }
-            html, body { margin: 0 !important; padding: 0 !important; background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            html, body { 
+              margin: 0 !important; 
+              padding: 0 !important; 
+              background: white !important; 
+              -webkit-print-color-adjust: exact; 
+              print-color-adjust: exact; 
+            }
             body * { visibility: hidden !important; }
             #printable-quotation-wrapper, #printable-quotation-wrapper * { visibility: visible !important; }
-            #printable-quotation-wrapper { position: absolute !important; left: 0 !important; top: 0 !important; width: 210mm !important; min-height: 297mm !important; padding: 15mm 15mm !important; margin: 0 !important; background: white !important; backdrop-filter: none !important; box-sizing: border-box !important; display: flex !important; flex-direction: column !important;}
+            
+            /* Enable fluid page expansion for multiple pages */
+            #printable-quotation-wrapper { 
+              position: absolute !important; 
+              left: 0 !important; 
+              top: 0 !important; 
+              width: 210mm !important; 
+              min-height: 297mm !important; 
+              padding: 15mm 15mm !important; 
+              margin: 0 !important; 
+              background: white !important; 
+              backdrop-filter: none !important; 
+              box-sizing: border-box !important; 
+              display: flex !important; 
+              flex-direction: column !important;
+            }
             *, html, body, div, p, span, h1, h2, h3, table, th, td { font-family: ${CJK_FONT} !important; }
-            tr, td, th { page-break-inside: avoid; break-inside: avoid; }
+            
+            /* Crucial: Prevent items from awkwardly splitting across pages */
+            tr, td, th { 
+              page-break-inside: avoid; 
+              break-inside: avoid; 
+            }
           }
         `}
       </style>
@@ -71,7 +109,7 @@ function QuotationPreviewModal({ group, sys, onClose }) {
           </div>
         </div>
         
-        <div id="printable-quotation-wrapper" lang="zh" className="flex w-full max-w-[210mm] min-h-[297mm] flex-col bg-white py-[15mm] px-[15mm] text-black shadow-2xl rounded-b-2xl print:w-[210mm] print:h-[297mm] print:max-w-none print:rounded-none print:shadow-none box-border" style={{ fontFamily: CJK_FONT }}>
+        <div id="printable-quotation-wrapper" lang="zh" className="flex w-full max-w-[210mm] min-h-[297mm] flex-col bg-white py-[15mm] px-[15mm] text-black shadow-2xl rounded-b-2xl print:w-[210mm] print:min-h-[297mm] print:max-w-none print:rounded-none print:shadow-none box-border" style={{ fontFamily: CJK_FONT }}>
           
           <div className="flex flex-col w-full shrink-0 border-b-2 border-black pb-6 mb-6">
             <h1 className="font-black text-[22px] tracking-tight text-center mb-1" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
@@ -94,7 +132,7 @@ function QuotationPreviewModal({ group, sys, onClose }) {
             </div>
           </div>
 
-          <table className="w-full flex-grow border-2 border-black text-center text-[14px] mb-8" style={{ fontFamily: CJK_FONT }}>
+          <table className={`w-full flex-grow border-2 border-black text-center ${baseText} mb-8`} style={{ fontFamily: CJK_FONT }}>
             <thead className="border-b-2 border-black bg-slate-50">
               <tr className="font-bold text-slate-800">
                 <th className="py-3 px-2 w-16 border-r border-black">NO.</th>
@@ -106,10 +144,10 @@ function QuotationPreviewModal({ group, sys, onClose }) {
             <tbody className="divide-y divide-black">
               {pricesList.map((item, idx) => (
                 <tr key={idx} className="align-middle text-slate-900">
-                  <td className="py-2.5 px-2 border-r border-black">{idx + 1}</td>
-                  <td className="py-2.5 px-4 text-left border-r border-black font-bold">{item.name}</td>
-                  <td className="py-2.5 px-2 border-r border-black">{item.unit}</td>
-                  <td className="py-2.5 px-2 font-black">${formatMoney(item.price)}</td>
+                  <td className={`${cellPad} px-2 border-r border-black`}>{idx + 1}</td>
+                  <td className={`${cellPad} px-4 text-left border-r border-black font-bold`}>{item.name}</td>
+                  <td className={`${cellPad} px-2 border-r border-black`}>{item.unit}</td>
+                  <td className={`${cellPad} px-2 font-black`}>${formatMoney(item.price)}</td>
                 </tr>
               ))}
               {pricesList.length === 0 && (
@@ -120,7 +158,7 @@ function QuotationPreviewModal({ group, sys, onClose }) {
             </tbody>
           </table>
 
-          <div className="mt-auto pt-6 text-[12px] font-bold text-slate-600 shrink-0">
+          <div className="mt-auto pt-6 text-[12px] font-bold text-slate-600 shrink-0 page-break-avoid">
             <p className="mb-1 text-slate-800">Terms & Conditions:</p>
             <ul className="list-disc pl-5 space-y-1">
               <li>All prices quoted are in Singapore Dollars (SGD) and are subject to 9% GST.</li>
