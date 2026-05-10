@@ -58,105 +58,44 @@ export function InvoicePreview({
         {`
           @media print {
             @page { size: A4; margin: 0 !important; }
-            
-            /* 1. Reset standard backgrounds and untrap layouts */
-            html, body { 
-              margin: 0 !important; 
-              padding: 0 !important; 
-              background: white !important; 
-              -webkit-print-color-adjust: exact; 
-              print-color-adjust: exact; 
-              height: auto !important;
-              overflow: visible !important;
-            }
-            
-            /* 2. Hide everything else visually by default */
-            body * { visibility: hidden; }
-            
-            /* 3. CRITICAL UNTRAPPING: Force all ancestor wrappers from html down to our printable wrapper to become fully un-trapped, static, visible block elements */
-            html, body, #root,
-            html :has(#printable-invoice-wrapper) {
-              position: static !important;
-              display: block !important;
-              width: auto !important;
-              height: auto !important;
-              max-height: none !important;
-              overflow: visible !important;
-              padding: 0 !important;
-              margin: 0 !important;
-              background: white !important;
-            }
-
-            /* 4. MAGIC BULLET: Target all external siblings/cousins occupying invisible layout height above the modal and collapse them entirely */
-            body *:not(:has(#printable-invoice-wrapper)):not(#printable-invoice-wrapper *) {
-              position: absolute !important;
-              height: 0 !important;
-              width: 0 !important;
-              margin: 0 !important;
-              padding: 0 !important;
-              overflow: hidden !important;
-              border: none !important;
-            }
-
-            /* 5. Make our spooler and its internal structure visible and standard block flow */
-            #printable-invoice-wrapper, 
-            #printable-invoice-wrapper * { 
-              visibility: visible; 
-            }
-            
-            #printable-invoice-wrapper { 
-              position: static !important; 
-              width: 210mm !important; 
-              min-height: 297mm !important; 
-              height: auto !important;
-              max-height: none !important;
-              padding: 15mm 10mm !important; 
-              margin: 0 !important; 
-              background: white !important; 
-              box-sizing: border-box !important; 
-              display: flex !important; 
-              flex-direction: column !important;
-              overflow: visible !important;
-            }
-            
+            html, body { margin: 0 !important; padding: 0 !important; background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            body * { visibility: hidden !important; }
+            #printable-invoice-wrapper, #printable-invoice-wrapper * { visibility: visible !important; }
+            #printable-invoice-wrapper { position: absolute !important; left: 0 !important; top: 0 !important; width: 210mm !important; height: 297mm !important; padding: 15mm 10mm !important; margin: 0 !important; background: white !important; backdrop-filter: none !important; box-sizing: border-box !important; display: flex !important; flex-direction: column !important;}
             *, html, body, div, p, span, h1, h2, h3, table, th, td { font-family: ${CJK_FONT} !important; }
             tr, td, th { page-break-inside: avoid; break-inside: avoid; }
           }
         `}
       </style>
       <div className="flex min-h-full flex-col items-center py-12 print:block print:py-0 print:m-0">
-        
-        {/* TOP ACTION BAR */}
         <div className="w-full max-w-[210mm] shrink-0 bg-slate-900 px-8 py-4 flex justify-between items-center text-white rounded-t-2xl shadow-2xl print:hidden border-b-4 border-blue-600">
           <div className="flex items-center">
             {mode === 'generator' ? <Eye size={24} className="mr-3 text-blue-400" /> : <FileText size={24} className="mr-3 text-blue-400" />}
             <div>
-              <h2 className="text-sm font-black tracking-widest uppercase text-slate-200">{mode === 'generator' ? 'Invoice Print Preview' : 'A4 Print Preview'}</h2>
+              <h2 className="text-sm font-black tracking-widest uppercase text-slate-200">{mode === 'generator' ? 'Invoice Layout Check' : 'A4 Print Preview'}</h2>
               <p className="text-lg font-bold text-white leading-none mt-0.5">#{String(invoiceNumber)}</p>
             </div>
           </div>
           <div className="flex items-center space-x-3">
             {mode === 'generator' ? (
               <>
-                <button onClick={onPrint} className="flex items-center text-sm font-bold bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl transition-colors shadow-lg"><Printer size={18} className="mr-2" /> Print Invoice</button>
-                <button onClick={onBack} className="flex items-center text-sm font-bold bg-slate-800 hover:bg-slate-700 text-white px-5 py-2.5 rounded-xl transition-colors border border-slate-700"><ChevronLeft size={16} className="mr-2" /> Back to Edit</button>
-                <button onClick={onClose} className="hover:bg-slate-700 text-white p-2.5 rounded-full transition-colors ml-2 bg-slate-800"><X size={20} /></button>
+                <button className="flex items-center rounded bg-slate-800 px-5 py-2.5 font-bold text-white transition-all hover:bg-slate-700 border border-slate-700 text-sm" onClick={onBack} type="button"><ChevronLeft size={16} className="mr-1" /> Edit Draft</button>
+                <button className="flex items-center rounded bg-white px-5 py-2.5 font-bold text-slate-900 shadow-lg transition-all hover:bg-slate-50 text-sm" onClick={() => onRegister(false)} type="button"><Save className="mr-2" size={16} /> Save Invoice</button>
               </>
             ) : (
               <>
-                <button onClick={onPrint} className="flex items-center text-sm font-bold bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl transition-colors shadow-lg"><Printer size={18} className="mr-2" /> Print</button>
-                <button onClick={onEdit} className="flex items-center text-sm font-bold bg-slate-800 hover:bg-slate-700 text-white px-5 py-2.5 rounded-xl transition-colors border border-slate-700"><Edit size={16} className="mr-2" /> Edit</button>
-                <button onClick={onClose} className="hover:bg-slate-700 text-white p-2.5 rounded-full transition-colors ml-2 bg-slate-800"><X size={20} /></button>
+                <button onClick={onPrint} className="flex items-center text-sm font-bold bg-blue-600 hover:bg-blue-500 px-5 py-2.5 rounded-xl transition-colors shadow-lg"><Printer size={18} className="mr-2" /> Print</button>
+                <button onClick={onEdit} className="flex items-center text-sm font-bold bg-slate-800 hover:bg-slate-700 px-5 py-2.5 rounded-xl transition-colors border border-slate-700"><Edit size={16} className="mr-2" /> Edit</button>
+                <button onClick={onClose} className="hover:bg-slate-700 p-2.5 rounded-full transition-colors ml-2 bg-slate-800"><X size={20} /></button>
               </>
             )}
           </div>
         </div>
         
-        {/* PRINTABLE INVOICE CONTENT */}
-        <div id="printable-invoice-wrapper" lang="zh" className="flex w-full max-w-[210mm] min-h-[297mm] flex-col bg-white py-[15mm] px-[10mm] text-black shadow-2xl print:w-[210mm] print:h-auto print:max-w-none print:rounded-none print:shadow-none box-border" style={{ fontFamily: CJK_FONT }}>
+        <div id="printable-invoice-wrapper" lang="zh" className="flex w-full max-w-[210mm] h-[297mm] flex-col bg-white py-[15mm] px-[10mm] text-black shadow-2xl rounded-b-2xl print:w-[210mm] print:h-[297mm] print:max-w-none print:rounded-none print:shadow-none box-border" style={{ fontFamily: CJK_FONT }}>
           
           {isSpecialFormat ? (
-            <div className="flex flex-col h-full w-full shrink-0">
+            <div className="flex flex-col h-full w-full">
               <div className="flex w-full justify-between items-start border-b-2 border-slate-800 pb-4 mb-3 shrink-0">
                 <div className="flex flex-col gap-2 w-[55%] pr-4">
                   <img src={logo} className="w-[100px] h-auto object-contain" alt="Logo" />
@@ -248,7 +187,7 @@ export function InvoicePreview({
             </div>
           )}
 
-          <table className={`w-full flex-grow border-2 border-black text-center mb-0 mt-2 ${isSpecialFormat ? spBaseText : baseText}`} style={{ fontFamily: CJK_FONT }}>
+          <table className={`w-full h-full flex-grow border-2 border-black text-center mb-0 mt-2 ${isSpecialFormat ? spBaseText : baseText}`} style={{ fontFamily: CJK_FONT }}>
             <thead className="border-b-2 border-black">
               <tr className="font-bold bg-white text-[14px]"><th className="py-2 px-1 w-12 text-center">NO.</th><th className="py-2 px-2 text-left">DESCRIPTION</th><th className="py-2 px-1 w-24 text-center">QUANTITY</th><th className="py-2 px-1 w-32 text-center">UNIT PRICE</th><th className="py-2 px-1 w-32 text-center">AMOUNT</th></tr>
             </thead>
@@ -290,6 +229,7 @@ export function InvoicePreview({
                 <td></td><td></td><td></td>
               </tr>
               
+              {/* ===== DEDICATED INVOICE REMARKS 2-ROW SPLIT ===== */}
               <tr className="border-t-2 border-black font-bold h-[28px]">
                 {!isSpecialFormat ? (
                   <td colSpan="3" className="bg-white border-r-2 border-black px-2 py-1 align-middle text-left text-[12px] font-bold text-slate-800">
@@ -331,44 +271,6 @@ export function InvoicePreview({
             <div className="w-[30%] shrink-0 flex flex-col justify-end pb-1 pl-2"><div className="h-12"></div><div className="border-t-2 border-black text-center pt-1.5 text-[12px] font-bold uppercase tracking-widest">Received By</div></div>
           </div>
         </div>
-
-        {/* NEW: BOTTOM ACTION BAR (Highly requested so user doesn't have to scroll back up) */}
-        <div className="w-full max-w-[210mm] shrink-0 bg-slate-900 px-8 py-4 flex justify-between items-center text-white rounded-b-2xl shadow-2xl print:hidden border-t-4 border-emerald-500 mt-4">
-          <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Invoice Actions</p>
-            <p className="text-sm font-bold text-slate-200">Data already securely saved to database</p>
-          </div>
-          <div className="flex items-center space-x-3">
-            <button 
-              onClick={onPrint} 
-              className="flex items-center text-sm font-bold bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl transition-colors shadow-lg"
-            >
-              <Printer size={18} className="mr-2" /> Print Invoice
-            </button>
-            {mode === 'generator' ? (
-              <button 
-                onClick={onBack} 
-                className="flex items-center text-sm font-bold bg-slate-800 hover:bg-slate-700 text-white px-5 py-2.5 rounded-xl transition-colors border border-slate-700"
-              >
-                <ChevronLeft size={16} className="mr-2" /> Back to Edit
-              </button>
-            ) : (
-              <button 
-                onClick={onEdit} 
-                className="flex items-center text-sm font-bold bg-slate-800 hover:bg-slate-700 text-white px-5 py-2.5 rounded-xl transition-colors border border-slate-700"
-              >
-                <Edit size={16} className="mr-2" /> Edit
-              </button>
-            )}
-            <button 
-              onClick={onClose} 
-              className="flex items-center text-sm font-black bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2.5 rounded-xl transition-colors shadow-lg"
-            >
-              <Save size={16} className="mr-2" /> Save & Exit
-            </button>
-          </div>
-        </div>
-
       </div>
     </div>
   );
