@@ -55,7 +55,7 @@ function QuotationPreviewModal({ group, sys, onClose }) {
   return (
     <div className="fixed inset-0 z-[7000] overflow-y-auto bg-slate-950/90 print:bg-white print:p-0">
       
-      {/* ===== ENHANCED PRINT STYLES MATCHING INVOICEPREVIEW (1).JSX ===== */}
+      {/* ===== ENHANCED PRINT STYLES (MODIFIED FOR STATIC MULTI-PAGE FLOW) ===== */}
       <style type="text/css">
         {`
           @media print {
@@ -64,6 +64,7 @@ function QuotationPreviewModal({ group, sys, onClose }) {
               size: A4;
             }
 
+            /* 1. Ensure the document resets default backgrounds and padding */
             html, body {
               margin: 0 !important;
               padding: 0 !important;
@@ -72,24 +73,40 @@ function QuotationPreviewModal({ group, sys, onClose }) {
               print-color-adjust: exact;
             }
 
+            /* 2. Hide everything else in the app */
             body * { visibility: hidden; }
             #printable-quotation-spooler, #printable-quotation-spooler * { visibility: visible; }
             
-            #printable-quotation-spooler {
-              position: absolute !important;
-              left: 0 !important;
-              top: 0 !important;
-              width: 210mm !important;
-              min-height: 297mm !important;
+            /* 3. CRITICAL: Untrap all ancestor wrappers from html down to the spooler so pagination isn't blocked */
+            html, body, #root,
+            html :has(#printable-quotation-spooler) {
+              position: static !important;
+              display: block !important;
+              width: auto !important;
               height: auto !important;
+              max-height: none !important;
+              overflow: visible !important;
+              padding: 0 !important;
+              margin: 0 !important;
+              background: white !important;
+            }
+            
+            /* 4. CRITICAL: Spooler MUST be static (not absolute) to naturally spill over to pages 2, 3, 4, etc. */
+            #printable-quotation-spooler {
+              position: static !important;
+              width: 210mm !important;
+              height: auto !important;
+              min-height: auto !important;
+              max-height: none !important;
               padding: 0 !important;
               margin: 0 !important;
               background: white !important;
               box-sizing: border-box !important;
               display: block !important;
+              overflow: visible !important;
             }
 
-            /* Define exact A4 dimensions per chunked page with mandatory page breaks */
+            /* 5. Define exact A4 dimensions per chunked page container with mandatory page breaks */
             .a4-quotation-page {
               page-break-after: always !important;
               break-after: always !important;
@@ -103,9 +120,10 @@ function QuotationPreviewModal({ group, sys, onClose }) {
               overflow: hidden !important;
               margin: 0 !important;
               background: white !important;
+              float: none !important;
             }
 
-            /* Force the font on the entire print container */
+            /* Force the CJK font stack on the entire print container */
             #printable-quotation-spooler,
             #printable-quotation-spooler * {
               font-family: ${CJK_FONT} !important;
@@ -143,7 +161,7 @@ function QuotationPreviewModal({ group, sys, onClose }) {
           </div>
         </div>
         
-        {/* ===== MAPPED SPOOLER CONTAINER MATCHING INVOICE PREVIEW ===== */}
+        {/* ===== MAPPED SPOOLER CONTAINER ===== */}
         <div 
           id="printable-quotation-spooler" 
           className="flex flex-col items-center gap-8 print:gap-0 print:block w-full shrink-0" 
