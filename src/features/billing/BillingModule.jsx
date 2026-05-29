@@ -358,7 +358,7 @@ export function BillingModule({ sys }) {
       </div>
 
       {/* ========================================================================= */}
-      {/* EXCLUSIVE PRINT UI (RE-FORMATTED AND MULTI-PAGE CHUNKED) */}
+      {/* PRINT UI (Kept off-screen so images load, brought to center during ZIP or Print) */}
       {/* ========================================================================= */}
       <div id="print-ui" className={isZipping ? "absolute left-[-9999px] top-0 opacity-100 z-[-100] block" : "hidden"}>
         {statementsToPrint.map((data, index) => {
@@ -376,10 +376,10 @@ export function BillingModule({ sys }) {
                 const isLastPage = pageIndex === pages.length - 1;
 
                 return (
-                  <div key={pageIndex} className="page-break w-[210mm] h-[297mm] bg-white p-[15mm] text-black flex flex-col mx-auto box-border relative" style={{ fontFamily: CJK_FONT }}>
+                  <div key={pageIndex} className="page-break w-[210mm] min-h-[297mm] bg-white p-[15mm] text-black flex flex-col mx-auto box-border relative" style={{ fontFamily: CJK_FONT }}>
                     
                     {/* Header Section */}
-                    <div className="flex w-full mb-4 justify-between shrink-0">
+                    <div className="flex w-full mb-6 justify-between shrink-0">
                       <div className="flex-1 flex flex-col pr-4">
                         <div className="flex items-center mb-5">
                           <div className="w-[110px] h-[80px] shrink-0 mr-4 flex items-center justify-center">
@@ -419,13 +419,13 @@ export function BillingModule({ sys }) {
                       </div>
                     </div>
 
-                    {/* Formatted Table Section */}
+                    {/* Formatted Table Section without Grid Borders */}
                     <div className="w-full flex-1 flex flex-col justify-start overflow-hidden">
-                      <table className="w-full text-[15px] border-2 border-black text-center mb-0 border-collapse" style={{ fontFamily: CJK_FONT }}>
-                        <thead className="border-b-2 border-black">
-                          <tr className="font-bold bg-white text-[14px] border-b-2 border-black">
-                            <th className="py-2 px-3 border-r-2 border-black text-center w-40">DATE</th>
-                            <th className="py-2 px-3 border-r-2 border-black text-center">INVOICE NO.</th>
+                      <table className="w-full text-[15px] text-center mb-0 border-collapse" style={{ fontFamily: CJK_FONT }}>
+                        <thead>
+                          <tr className="font-bold bg-white text-[14px] border-y-2 border-black">
+                            <th className="py-2 px-3 text-center w-40">DATE</th>
+                            <th className="py-2 px-3 text-center">INVOICE NO.</th>
                             <th className="py-2 px-3 text-left w-56 pl-5">AMOUNT</th>
                           </tr>
                         </thead>
@@ -434,9 +434,9 @@ export function BillingModule({ sys }) {
                           {pageItems.map((inv) => {
                             const billed = Number(inv.total) || 0;
                             return (
-                              <tr key={inv.id} className="h-[28px] align-middle border-b border-black">
-                                <td className="p-1 border-r-2 border-black text-center font-medium">{inv.date ? new Date(inv.date).toLocaleDateString('en-GB').replace(/\//g, '-') : '-'}</td>
-                                <td className="p-1 border-r-2 border-black text-center font-bold text-black">#{inv.number || inv.id}</td>
+                              <tr key={inv.id} className="h-[28px] align-middle">
+                                <td className="p-1 text-center font-medium">{inv.date ? new Date(inv.date).toLocaleDateString('en-GB').replace(/\//g, '-') : '-'}</td>
+                                <td className="p-1 text-center font-bold text-black">#{inv.number || inv.id}</td>
                                 <td className="p-1 text-left pl-5 font-bold text-black">${formatMoney(billed)}</td>
                               </tr>
                             );
@@ -444,9 +444,9 @@ export function BillingModule({ sys }) {
                           
                           {/* Padding Empty Rows to anchor the layout */}
                           {pageItems.length < ITEMS_PER_PAGE && Array.from({ length: ITEMS_PER_PAGE - pageItems.length }).map((_, i) => (
-                            <tr key={`blank-${i}`} className="h-[28px] align-middle border-b border-black">
-                              <td className="border-r-2 border-black"></td>
-                              <td className="border-r-2 border-black"></td>
+                            <tr key={`blank-${i}`} className="h-[28px] align-middle">
+                              <td></td>
+                              <td></td>
                               <td></td>
                             </tr>
                           ))}
@@ -455,21 +455,21 @@ export function BillingModule({ sys }) {
                           {isLastPage && data.previousOutstanding > 0 ? (
                             <>
                               <tr className="h-[28px] align-middle border-t-2 border-black bg-white">
-                                <td colSpan="2" className="py-1 px-4 border-r-2 border-black text-right font-bold text-[13px] tracking-wide">THIS MONTH TOTAL:</td>
+                                <td colSpan="2" className="py-1 px-4 text-right font-bold text-[13px] tracking-wide">THIS MONTH TOTAL:</td>
                                 <td className="py-1 text-left pl-5 font-bold text-[14px]">${formatMoney(data.totalBilled)}</td>
                               </tr>
-                              <tr className="h-[28px] align-middle border-b-2 border-black bg-white">
-                                <td colSpan="2" className="py-1 px-4 border-r-2 border-black text-right font-bold text-[13px] text-slate-600 tracking-wide">PREV. OUTSTANDING:</td>
+                              <tr className="h-[28px] align-middle bg-white">
+                                <td colSpan="2" className="py-1 px-4 text-right font-bold text-[13px] text-slate-600 tracking-wide">PREV. OUTSTANDING:</td>
                                 <td className="py-1 text-left pl-5 font-bold text-[14px] text-slate-600">${formatMoney(data.previousOutstanding)}</td>
                               </tr>
-                              <tr className="h-[40px] align-middle bg-slate-100 border-b-2 border-black">
-                                <td colSpan="2" className="py-2 px-4 border-r-2 border-black text-right font-black text-[16px] text-red-600 tracking-widest uppercase">OVERALL TOTAL DUE:</td>
+                              <tr className="h-[40px] align-middle bg-slate-100 border-y-2 border-black">
+                                <td colSpan="2" className="py-2 px-4 text-right font-black text-[16px] text-red-600 tracking-widest uppercase">OVERALL TOTAL DUE:</td>
                                 <td className="py-2 text-left pl-5 font-black text-[18px] text-red-600">${formatMoney(data.overallDue)}</td>
                               </tr>
                             </>
                           ) : isLastPage ? (
-                            <tr className="h-[40px] align-middle bg-slate-100 border-t-2 border-black">
-                              <td colSpan="2" className="py-2 px-4 border-r-2 border-black text-right font-black text-[16px] tracking-widest uppercase">TOTAL AMOUNT DUE:</td>
+                            <tr className="h-[40px] align-middle bg-slate-100 border-y-2 border-black">
+                              <td colSpan="2" className="py-2 px-4 text-right font-black text-[16px] tracking-widest uppercase">TOTAL AMOUNT DUE:</td>
                               <td className="py-2 text-left pl-5 font-black text-[18px] text-red-600">${formatMoney(data.totalBilled)}</td>
                             </tr>
                           ) : null}
@@ -478,7 +478,7 @@ export function BillingModule({ sys }) {
                     </div>
 
                     {/* Footer Section */}
-                    <div className="flex w-full mt-2 pt-3 items-end shrink-0 border-t-2 border-black relative">
+                    <div className="flex w-full mt-2 pt-3 items-end shrink-0 relative">
                       <div className="w-[70%] text-[12px] font-bold leading-snug pr-4">
                         <div style={{ fontFamily: CJK_FONT }}>
                           <p className="text-[12px]">请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
