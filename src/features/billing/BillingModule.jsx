@@ -9,7 +9,7 @@ const CJK_FONT = '"Microsoft YaHei", "微软雅黑", "PingFang SC", "Hiragino Sa
 // ============================================================================
 // COMPONENT: STATEMENT PDF GENERATOR (STRICT A4 MULTI-PAGE CHUNKING)
 // ============================================================================
-function BillingModule({ customer, monthStr, invoices, onClose }) {
+function StatementPreviewModal({ customer, monthStr, invoices, onClose }) {
   const today = new Date().toLocaleDateString('en-GB').replace(/\//g, '-');
   
   // Calculate Grand Total
@@ -244,7 +244,7 @@ function BillingModule({ customer, monthStr, invoices, onClose }) {
 // ============================================================================
 // MAIN DASHBOARD COMPONENT
 // ============================================================================
-export function StatementModule({ sys }) {
+export function BillingModule({ sys }) {
   const safeCustomers = Array.isArray(sys?.customers) ? sys.customers : [];
   const safeInvoices = Array.isArray(sys?.invoices) ? sys.invoices : [];
 
