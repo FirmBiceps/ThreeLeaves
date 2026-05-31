@@ -139,8 +139,10 @@ export function BillingModule({ sys }) {
     setTimeout(async () => {
       try {
         const zip = new JSZip();
-        const printContainer = document.getElementById('print-pages-container');
-        const statementNodes = printContainer.children;
+        // Wait an extra moment to ensure the DOM is fully rendered before capturing
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        const customerWrappers = document.querySelectorAll('.customer-print-wrapper');
         const d = new Date(`${selectedMonth}-01`);
         const monthShort = d.toLocaleString('en-US', { month: 'short' });
         const yearShort = String(d.getFullYear()).slice(-2);
@@ -148,17 +150,33 @@ export function BillingModule({ sys }) {
 
         for (let i = 0; i < analytics.allCustomerStats.length; i++) {
           const data = analytics.allCustomerStats[i];
-          const node = statementNodes[i];
-          if (!node) continue;
+          const wrapper = customerWrappers[i];
+          
+          if (!wrapper) continue;
 
-          const canvas = await html2canvas(node, { scale: 2, useCORS: true, logging: false });
-          const imgData = canvas.toDataURL('image/jpeg', 1.0);
-          
+          // Intelligently locate all separate A4 pages for this specific customer
+          const pages = wrapper.querySelectorAll('.a4-statement-page');
           const pdf = new jsPDF('p', 'mm', 'a4');
-          const pdfWidth = pdf.internal.pageSize.getWidth();
-          const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-          
-          pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+
+          for (let p = 0; p < pages.length; p++) {
+            const pageNode = pages[p];
+            const canvas = await html2canvas(pageNode, { 
+              scale: 2, 
+              useCORS: true, 
+              logging: false 
+            });
+            const imgData = canvas.toDataURL('image/jpeg', 1.0);
+            
+            const pdfWidth = 210; // A4 Width in mm
+            const pdfHeight = 297; // A4 Height in mm
+            
+            pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+            
+            // If there is another page for this customer, add a new page to the PDF
+            if (p < pages.length - 1) {
+              pdf.addPage();
+            }
+          }
           
           const customerNameSafe = data.customerName.replace(/[<>:"/\\|?*]/g, '').trim();
           const fileName = `${customerNameSafe}_${monthShort}_${yearShort}.pdf`;
@@ -209,6 +227,21 @@ export function BillingModule({ sys }) {
     <div id="print-portal-root" className="absolute left-[-9999px] top-0 z-[-100] bg-white text-black" style={{ width: '210mm' }}>
       <style type="text/css">
         {`
+          /* BASE A4 DIMENSIONS - Applies both on screen (for ZIP capture) and in print */
+          .a4-statement-page { 
+            width: 210mm; 
+            height: 297mm; 
+            padding: 10mm 15mm; 
+            box-sizing: border-box; 
+            display: flex; 
+            flex-direction: column; 
+            justify-content: space-between; 
+            background: white; 
+            margin-bottom: 10px;
+          }
+          
+          table { border-collapse: collapse; width: 100%; }
+          
           @media print {
             @page { size: A4; margin: 0 !important; }
             html, body { 
@@ -237,21 +270,13 @@ export function BillingModule({ sys }) {
               visibility: visible !important; 
             }
             
-            /* STRICT A4 DIMENSIONS */
+            /* FORCE HARD PAGE BREAKS DURING NATIVE PRINT */
             .a4-statement-page { 
-              width: 210mm !important; 
-              height: 297mm !important; 
-              padding: 10mm 15mm !important; 
-              box-sizing: border-box !important; 
+              margin-bottom: 0 !important;
               page-break-after: always !important; 
               break-after: always !important; 
-              display: flex !important; 
-              flex-direction: column !important; 
-              justify-content: space-between !important; 
-              background: white !important; 
             }
             
-            table { border-collapse: collapse !important; width: 100% !important; }
             tr, td, th { page-break-inside: avoid; break-inside: avoid; }
           }
         `}
@@ -374,13 +399,13 @@ export function BillingModule({ sys }) {
                                 <td colSpan="3" className="py-1 px-4 text-right font-bold text-[12px] tracking-wide text-slate-600">PREV. OUTSTANDING:</td>
                                 <td className="py-1 text-right font-bold text-[13px] text-slate-600 pr-4">${formatMoney(data.previousOutstanding)}</td>
                               </tr>
-                              <tr className="h-[36px] align-middle border-t border-b-2 border-black">
+                              <tr className="h-[36px] align-middle border-y-2 border-black">
                                 <td colSpan="3" className="py-2 px-4 text-right font-black text-[14px] tracking-widest uppercase text-black">OVERALL TOTAL DUE:</td>
                                 <td className="py-2 text-right font-black text-[16px] text-black pr-4">${formatMoney(data.overallDue)}</td>
                               </tr>
                             </>
                           ) : isLastPage ? (
-                            <tr className="h-[36px] align-middle border-t-2 border-b-2 border-black">
+                            <tr className="h-[36px] align-middle border-y-2 border-black">
                               <td colSpan="3" className="py-2 px-4 text-right font-black text-[14px] tracking-widest uppercase text-black">TOTAL AMOUNT DUE:</td>
                               <td className="py-2 text-right font-black text-[16px] text-black pr-4">${formatMoney(data.totalBilled)}</td>
                             </tr>
