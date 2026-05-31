@@ -322,30 +322,34 @@ export function BillingModule({ sys }) {
 
                     {/* --- CUSTOMER INFO --- */}
                     <div className="w-full shrink-0 flex justify-between items-end mb-4 font-bold text-[13px] leading-tight">
-                      <div className="w-[70%] pr-4">
-                        <div className="flex items-end mb-1.5">
+                      
+                      {/* Left Block: Bounded tightly to prevent overlap */}
+                      <div className="w-[65%] pr-4 flex flex-col min-w-0 overflow-hidden shrink-0">
+                        <div className="flex items-end mb-1.5 w-full min-w-0">
                           <span className="w-12 shrink-0 text-slate-500 font-bold text-[12px]">TO:</span>
-                          <span className="flex-1 uppercase border-b border-black pb-0.5 font-black text-[14px]" style={{ fontFamily: CJK_FONT }}>
+                          <span className="flex-1 uppercase border-b border-black pb-0.5 font-black text-[14px] whitespace-nowrap overflow-hidden text-ellipsis block" style={{ fontFamily: CJK_FONT }}>
                             {data.customerName}
                           </span>
                         </div>
-                        <div className="flex items-end">
+                        <div className="flex items-end w-full min-w-0">
                           <span className="w-20 shrink-0 text-slate-500 font-bold text-[12px]">ADDRESS:</span>
-                          <span className="flex-1 uppercase border-b border-black pb-0.5 text-[12px] truncate" style={{ fontFamily: CJK_FONT }}>
+                          <span className="flex-1 uppercase border-b border-black pb-0.5 text-[12px] whitespace-nowrap overflow-hidden text-ellipsis block" style={{ fontFamily: CJK_FONT }}>
                             {data.customer?.address || '-'}
                           </span>
                         </div>
                       </div>
-                      <div className="w-[30%] pl-4 flex flex-col items-end justify-end">
+
+                      {/* Right Block: Safe from horizontal push */}
+                      <div className="w-[35%] pl-4 flex flex-col items-end justify-end shrink-0">
                         <div className="flex items-end mb-1.5 w-full justify-end">
                           <span className="shrink-0 text-slate-500 font-bold text-[12px] mr-2">STMT MONTH:</span>
-                          <span className="w-24 text-center border-b border-black pb-0.5 font-black text-[13px] uppercase">
+                          <span className="w-24 text-center border-b border-black pb-0.5 font-black text-[13px] uppercase inline-block">
                             {displayMonth}
                           </span>
                         </div>
                         <div className="flex items-end w-full justify-end">
                           <span className="shrink-0 text-slate-500 font-bold text-[12px] mr-2">TERMS:</span>
-                          <span className="w-24 text-center border-b border-black pb-0.5 font-bold text-[12px] uppercase">
+                          <span className="w-24 text-center border-b border-black pb-0.5 font-bold text-[12px] uppercase inline-block">
                             {data.customer?.payment_terms === 'cod' ? 'C.O.D' : '30 DAYS'}
                           </span>
                         </div>
@@ -399,13 +403,13 @@ export function BillingModule({ sys }) {
                                 <td colSpan="3" className="py-1 px-4 text-right font-bold text-[12px] tracking-wide text-slate-600">PREV. OUTSTANDING:</td>
                                 <td className="py-1 text-right font-bold text-[13px] text-slate-600 pr-4">${formatMoney(data.previousOutstanding)}</td>
                               </tr>
-                              <tr className="h-[36px] align-middle border-y-2 border-black">
+                              <tr className="h-[36px] align-middle border-t border-b-2 border-black">
                                 <td colSpan="3" className="py-2 px-4 text-right font-black text-[14px] tracking-widest uppercase text-black">OVERALL TOTAL DUE:</td>
                                 <td className="py-2 text-right font-black text-[16px] text-black pr-4">${formatMoney(data.overallDue)}</td>
                               </tr>
                             </>
                           ) : isLastPage ? (
-                            <tr className="h-[36px] align-middle border-y-2 border-black">
+                            <tr className="h-[36px] align-middle border-t-2 border-b-2 border-black">
                               <td colSpan="3" className="py-2 px-4 text-right font-black text-[14px] tracking-widest uppercase text-black">TOTAL AMOUNT DUE:</td>
                               <td className="py-2 text-right font-black text-[16px] text-black pr-4">${formatMoney(data.totalBilled)}</td>
                             </tr>
