@@ -224,10 +224,65 @@ export function BillingModule({ sys }) {
         {`
           @media print {
             @page { size: A4; margin: 0 !important; }
-            html, body { margin: 0 !important; padding: 0 !important; background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            .page-break { page-break-after: always !important; break-after: page !important; }
+            html, body, #root { 
+              margin: 0 !important; 
+              padding: 0 !important; 
+              background: white !important; 
+              -webkit-print-color-adjust: exact; 
+              print-color-adjust: exact; 
+              height: auto !important;
+              min-height: 100% !important;
+              overflow: visible !important;
+            }
+            
+            /* Hide the main application UI cleanly */
+            body * { visibility: hidden; }
             #screen-ui { display: none !important; }
-            #print-ui { display: block !important; position: static !important; width: 100% !important; opacity: 1 !important; z-index: auto !important; }
+            
+            /* Untrap ancestor wrappers */
+            html :has(#print-ui) {
+              position: static !important;
+              display: block !important;
+              width: auto !important;
+              height: auto !important;
+              max-height: none !important;
+              overflow: visible !important;
+            }
+
+            /* Completely remove sibling wrappers that push content down */
+            body *:not(:has(#print-ui)):not(#print-ui *) {
+              position: absolute !important;
+              height: 0 !important;
+              width: 0 !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              overflow: hidden !important;
+              border: none !important;
+            }
+
+            #print-ui, #print-ui * { visibility: visible; }
+            #print-ui { 
+              display: block !important; 
+              position: static !important; 
+              width: 100% !important; 
+              opacity: 1 !important; 
+            }
+
+            .a4-statement-page { 
+              width: 210mm !important; 
+              height: 297mm !important; 
+              padding: 10mm 15mm !important; 
+              box-sizing: border-box !important;
+              page-break-after: always !important; 
+              break-after: always !important; 
+              display: flex !important;
+              flex-direction: column !important;
+              justify-content: space-between !important;
+              background: white !important;
+            }
+
+            table { border-collapse: collapse !important; width: 100% !important; }
+            tr, td, th { page-break-inside: avoid; break-inside: avoid; }
           }
         `}
       </style>
@@ -395,12 +450,12 @@ export function BillingModule({ sys }) {
       </div>
 
       {/* ========================================================================= */}
-      {/* EXCLUSIVE PRINT UI (RE-FORMATTED WITHOUT GRID BORDERS) */}
+      {/* EXCLUSIVE PRINT UI (RE-FORMATTED FOR PERFECT A4 FIT) */}
       {/* ========================================================================= */}
       <div id="print-ui" className={isZipping ? "absolute left-[-9999px] top-0 opacity-100 z-[-100] block" : "hidden"}>
         {statementsToPrint.map((data, index) => {
-          // CHUNKING: Split the customer's invoices into pages of exactly 22 invoices each
-          const ITEMS_PER_PAGE = 22;
+          // STRICT CHUNKING: Safe array size (18) to leave ample room for headers and footers
+          const ITEMS_PER_PAGE = 18;
           const pages = [];
           for (let i = 0; i < data.invoices.length; i += ITEMS_PER_PAGE) {
             pages.push(data.invoices.slice(i, i + ITEMS_PER_PAGE));
@@ -413,66 +468,70 @@ export function BillingModule({ sys }) {
                 const isLastPage = pageIndex === pages.length - 1;
 
                 return (
-                  <div key={pageIndex} className="page-break w-[210mm] min-h-[297mm] bg-white p-[15mm] text-black flex flex-col mx-auto box-border relative" style={{ fontFamily: CJK_FONT }}>
+                  <div key={pageIndex} className="a4-statement-page" style={{ fontFamily: CJK_FONT }}>
                     
                     {/* Header Section */}
-                    <div className="flex w-full mb-6 justify-between shrink-0">
-                      <div className="flex-1 flex flex-col pr-4">
-                        <div className="flex items-center mb-5">
-                          <div className="w-[110px] h-[80px] shrink-0 mr-4 flex items-center justify-center">
-                            <img src={logo} alt="Three Leaves Logo" className="w-[110px] h-[80px] object-contain" />
-                          </div>
-                          <div className="flex-1 text-left leading-snug pt-2 whitespace-nowrap overflow-visible">
-                            <h1 className="font-black text-[17px]" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
-                            <h2 className="font-bold text-[16px] mb-1" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
-                            <div className="text-[#d55e2d] font-bold text-[10px] leading-tight tracking-tighter">
-                              <p>CO.REG NO.53033969B &nbsp;&nbsp; GST REG NO. M90355440L</p>
-                              <p>280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
-                              <p>HP: 97578869 (Mr Ye) &nbsp;&nbsp; HP: 91113505 (Min) &nbsp;&nbsp; Email: 3leaves.sg@gmail.com</p>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex justify-between items-end w-full mb-2 text-[14px] font-bold">
-                          <div className="flex items-end flex-1 pr-4">
-                            <span className="shrink-0 mr-2 text-black">TO:</span>
-                            <span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[13px] tracking-tight" style={{ fontFamily: CJK_FONT }}>{data.customerName}</span>
-                          </div>
-                          <div className="flex items-end w-[40%] pl-2">
-                            <span className="shrink-0 mr-2 text-black">STMT MONTH:</span>
-                            <span className="flex-1 text-center border-b border-black pb-0.5 uppercase">{displayMonth}</span>
-                          </div>
-                        </div>
-
-                        <div className="flex justify-between items-end w-full text-[14px] font-bold">
-                          <div className="flex items-end flex-1 pr-4">
-                            <span className="shrink-0 mr-2 text-black">ADDRESS:</span>
-                            <span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[12px] tracking-tighter" style={{ fontFamily: CJK_FONT }}>{data.customer?.address || ''}</span>
-                          </div>
-                          <div className="flex items-end w-[40%] pl-2">
-                            <span className="shrink-0 mr-2 text-black">TERMS:</span>
-                            <span className="flex-1 text-center border-b border-black pb-0.5 uppercase text-[13px]">
-                              {data.customer?.payment_terms === 'cod' ? 'C.O.D' : '30 DAYS'}
-                            </span>
-                          </div>
-                        </div>
+                    <div className="flex w-full mb-5 justify-between items-start shrink-0 border-b-2 border-black pb-3">
+                      
+                      <div className="w-[100px] shrink-0">
+                        <img src={logo} alt="Three Leaves Logo" className="w-[100px] h-auto object-contain" />
                       </div>
 
-                      <div className="w-[180px] shrink-0 flex flex-col items-start pl-4 pt-1">
-                        <h2 className="text-[22px] font-bold tracking-[0.4em] leading-none mb-1" style={{ fontFamily: CJK_FONT }}>结账单</h2>
-                        <h3 className="text-[15px] font-black tracking-wide uppercase mb-6 text-black">STATEMENT</h3>
+                      <div className="flex-1 text-center px-2 flex flex-col items-center justify-start pt-1">
+                        <h1 className="font-black text-[15px] tracking-tight mb-1" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
+                        <h2 className="font-bold text-[14px] mb-1" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
+                        <p className="font-bold text-[9px] mb-0.5 tracking-tight">CO.REG NO.53033969B &nbsp;|&nbsp; GST REG NO. M90355440L</p>
+                        <p className="text-[9px] mb-0.5 tracking-tight">280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
+                        <p className="text-[9px] tracking-tight">HP: 97578869 (Mr Ye) &nbsp;|&nbsp; HP: 91113505 (Min) &nbsp;|&nbsp; Email: 3leaves.sg@gmail.com</p>
+                      </div>
+
+                      <div className="w-[100px] shrink-0 flex flex-col items-end pt-1">
+                        <h2 className="text-[20px] font-black tracking-widest leading-none mb-1" style={{ fontFamily: CJK_FONT }}>结账单</h2>
+                        <h3 className="text-[12px] font-black uppercase text-black">STATEMENT</h3>
                       </div>
                     </div>
 
-                    {/* Formatted Table Section without Grid Borders */}
+                    {/* Customer Info Box */}
+                    <div className="w-full shrink-0 flex justify-between items-end mb-4 font-bold text-[13px] leading-tight">
+                      <div className="w-[70%] pr-4">
+                        <div className="flex items-end mb-1.5">
+                          <span className="w-12 shrink-0 text-slate-500 font-bold text-[12px]">TO:</span>
+                          <span className="flex-1 uppercase border-b border-black pb-0.5 font-black text-[14px]" style={{ fontFamily: CJK_FONT }}>
+                            {data.customerName}
+                          </span>
+                        </div>
+                        <div className="flex items-end">
+                          <span className="w-20 shrink-0 text-slate-500 font-bold text-[12px]">ADDRESS:</span>
+                          <span className="flex-1 uppercase border-b border-black pb-0.5 text-[12px] truncate" style={{ fontFamily: CJK_FONT }}>
+                            {data.customer?.address || '-'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="w-[30%] pl-4 flex flex-col items-end justify-end">
+                        <div className="flex items-end mb-1.5 w-full justify-end">
+                          <span className="shrink-0 text-slate-500 font-bold text-[12px] mr-2">STMT MONTH:</span>
+                          <span className="w-24 text-center border-b border-black pb-0.5 font-black text-[13px] uppercase">
+                            {displayMonth}
+                          </span>
+                        </div>
+                        <div className="flex items-end w-full justify-end">
+                          <span className="shrink-0 text-slate-500 font-bold text-[12px] mr-2">TERMS:</span>
+                          <span className="w-24 text-center border-b border-black pb-0.5 font-bold text-[12px] uppercase">
+                            {data.customer?.payment_terms === 'cod' ? 'C.O.D' : '30 DAYS'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Formatted Table Section */}
                     <div className="w-full flex-1 flex flex-col justify-start overflow-hidden">
-                      <table className="w-full text-[15px] text-center mb-0 border-collapse" style={{ fontFamily: CJK_FONT }}>
+                      <table className="w-full text-[13px] text-center mb-0 border-collapse" style={{ fontFamily: CJK_FONT }}>
                         <thead>
-                          <tr className="font-bold text-[14px] border-y-2 border-black">
-                            <th className="py-2 px-3 text-center w-24">NO.</th>
-                            <th className="py-2 px-3 text-center w-40">DATE</th>
-                            <th className="py-2 px-3 text-center">INVOICE NO.</th>
-                            <th className="py-2 px-3 text-right w-56 pr-5">AMOUNT</th>
+                          <tr className="font-bold text-[13px] border-y-2 border-black">
+                            <th className="py-2 px-2 text-center w-12">NO.</th>
+                            <th className="py-2 px-2 text-center w-32">DATE</th>
+                            <th className="py-2 px-2 text-center">INVOICE NO.</th>
+                            <th className="py-2 px-2 text-right w-48 pr-4">AMOUNT</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -485,12 +544,12 @@ export function BillingModule({ sys }) {
                                 <td className="p-1 text-center font-medium">{absoluteIndex}</td>
                                 <td className="p-1 text-center font-medium">{inv.date ? new Date(inv.date).toLocaleDateString('en-GB').replace(/\//g, '-') : '-'}</td>
                                 <td className="p-1 text-center font-bold text-black">#{inv.number || inv.id}</td>
-                                <td className="p-1 text-right pr-5 font-bold text-black">${formatMoney(billed)}</td>
+                                <td className="p-1 text-right font-bold text-black pr-4">${formatMoney(billed)}</td>
                               </tr>
                             );
                           })}
                           
-                          {/* Padding Empty Rows to anchor the layout */}
+                          {/* Padding Empty Rows */}
                           {pageItems.length < ITEMS_PER_PAGE && Array.from({ length: ITEMS_PER_PAGE - pageItems.length }).map((_, i) => (
                             <tr key={`blank-${i}`} className="h-[28px] align-middle">
                               <td></td>
@@ -500,26 +559,26 @@ export function BillingModule({ sys }) {
                             </tr>
                           ))}
 
-                          {/* Beautifully Integrated Total Row (Final Page Only) */}
+                          {/* Flushed Total Row */}
                           {isLastPage && data.previousOutstanding > 0 ? (
                             <>
                               <tr className="h-[28px] align-middle border-t-2 border-black">
-                                <td colSpan="3" className="py-1 px-4 text-right font-bold text-[13px] tracking-wide">THIS MONTH TOTAL:</td>
-                                <td className="py-1 text-right pr-5 font-bold text-[14px]">${formatMoney(data.totalBilled)}</td>
+                                <td colSpan="3" className="py-1 px-4 text-right font-bold text-[12px] tracking-wide text-slate-800">THIS MONTH TOTAL:</td>
+                                <td className="py-1 text-right font-bold text-[13px] pr-4">${formatMoney(data.totalBilled)}</td>
                               </tr>
                               <tr className="h-[28px] align-middle">
-                                <td colSpan="3" className="py-1 px-4 text-right font-bold text-[13px] text-slate-600 tracking-wide">PREV. OUTSTANDING:</td>
-                                <td className="py-1 text-right pr-5 font-bold text-[14px] text-slate-600">${formatMoney(data.previousOutstanding)}</td>
+                                <td colSpan="3" className="py-1 px-4 text-right font-bold text-[12px] tracking-wide text-slate-600">PREV. OUTSTANDING:</td>
+                                <td className="py-1 text-right font-bold text-[13px] text-slate-600 pr-4">${formatMoney(data.previousOutstanding)}</td>
                               </tr>
-                              <tr className="h-[40px] align-middle border-y-2 border-black">
-                                <td colSpan="3" className="py-2 px-4 text-right font-black text-[16px] text-red-600 tracking-widest uppercase">OVERALL TOTAL DUE:</td>
-                                <td className="py-2 text-right pr-5 font-black text-[18px] text-red-600">${formatMoney(data.overallDue)}</td>
+                              <tr className="h-[36px] align-middle border-y-2 border-black">
+                                <td colSpan="3" className="py-2 px-4 text-right font-black text-[14px] tracking-widest uppercase text-black">OVERALL TOTAL DUE:</td>
+                                <td className="py-2 text-right font-black text-[16px] text-black pr-4">${formatMoney(data.overallDue)}</td>
                               </tr>
                             </>
                           ) : isLastPage ? (
-                            <tr className="h-[40px] align-middle border-y-2 border-black">
-                              <td colSpan="3" className="py-2 px-4 text-right font-black text-[16px] tracking-widest uppercase">TOTAL AMOUNT DUE:</td>
-                              <td className="py-2 text-right pr-5 font-black text-[18px] text-red-600">${formatMoney(data.totalBilled)}</td>
+                            <tr className="h-[36px] align-middle border-y-2 border-black">
+                              <td colSpan="3" className="py-2 px-4 text-right font-black text-[14px] tracking-widest uppercase text-black">TOTAL AMOUNT DUE:</td>
+                              <td className="py-2 text-right font-black text-[16px] text-black pr-4">${formatMoney(data.totalBilled)}</td>
                             </tr>
                           ) : null}
                         </tbody>
@@ -527,30 +586,29 @@ export function BillingModule({ sys }) {
                     </div>
 
                     {/* Footer Section */}
-                    <div className="flex w-full mt-2 pt-3 items-end shrink-0 relative">
-                      <div className="w-[70%] text-[12px] font-bold leading-snug pr-4">
+                    <div className="flex w-full pt-3 items-end shrink-0 border-t-2 border-black relative mt-auto">
+                      <div className="w-[75%] text-[12px] font-bold leading-snug pr-4">
                         <div style={{ fontFamily: CJK_FONT }}>
                           <p className="text-[12px]">请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
-                          <p className="text-[10px] whitespace-nowrap text-slate-800">Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
+                          <p className="text-[10px] text-slate-800">Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
                           
                           <div className="mt-2 flex items-center">
-                            <div className="w-[65px] h-[65px] shrink-0 mr-3 flex items-center justify-center">
-                              <img src={paynowQr} alt="PayNow QR Code" className="w-[65px] h-[65px] object-contain" />
+                            <div className="w-[60px] h-[60px] shrink-0 mr-3 flex items-center justify-center">
+                              <img src={paynowQr} alt="PayNow QR Code" className="w-[60px] h-[60px] object-contain" />
                             </div>
-                            <div className="flex flex-col justify-center text-[11px]">
-                              <p>UEN: 53033969B</p>
-                              <p>A/C Name: Three Leaves (Singapore) Trading Enterprise</p>
-                              <p>A/C Number: 535-846562-001</p>
-                              <p>Bank Name: OCBC</p>
-                              <p className="mt-0.5 font-normal text-[10px] text-slate-800">All payments must be made payable to Three Leaves (Singapore) Trading Enterprise.</p>
+                            <div className="flex flex-col justify-center text-[10px] space-y-0.5">
+                              <p>UEN: <span className="font-black text-[11px]">53033969B</span></p>
+                              <p>A/C Name: <span className="font-black text-[11px]">Three Leaves (Singapore) Trading Enterprise</span></p>
+                              <p>A/C Number: <span className="font-black text-[11px]">535-846562-001</span></p>
+                              <p>Bank Name: <span className="font-black text-[11px]">OCBC</span></p>
                             </div>
                           </div>
                         </div>
                       </div>
 
-                      <div className="w-[30%] shrink-0 flex flex-col justify-end pb-1 pl-2">
-                        <div className="h-12"></div> 
-                        <div className="border-t-2 border-black text-center pt-1.5 text-[12px] font-bold uppercase tracking-widest">Received By</div>
+                      <div className="w-[25%] shrink-0 flex flex-col justify-end pb-1 pl-2">
+                        <div className="h-10"></div> 
+                        <div className="border-t border-black text-center pt-1 text-[11px] font-bold uppercase tracking-widest">Received By</div>
                       </div>
 
                       <div className="absolute right-0 top-3 text-[10px] font-black tracking-widest text-slate-400">
