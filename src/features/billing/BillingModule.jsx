@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { FileText, Printer, Search, Calendar, Download, Loader2, DollarSign, TrendingUp, Users, Crown, Receipt, CheckCircle, AlertCircle, ChevronDown, Filter } from 'lucide-react';
 import { formatMoney, formatMoneyWhole } from '../../utils/format';
 import JSZip from 'jszip';
@@ -31,7 +32,6 @@ export function BillingModule({ sys }) {
   const analytics = useMemo(() => {
     const dataMap = {};
 
-    // 1. Group all invoices by customer
     safeInvoices.forEach(inv => {
       const isCurrentMonth = String(inv.date).startsWith(selectedMonth);
       const isBeforeMonth = String(inv.date).slice(0, 7) < selectedMonth;
@@ -64,12 +64,10 @@ export function BillingModule({ sys }) {
       }
     });
 
-    // Calculate Overall Due
     Object.values(dataMap).forEach(row => {
       row.overallDue = row.totalBilled + row.previousOutstanding;
     });
 
-    // 2. FILTER: Apply the global Terms filter and check for activity
     const relevantCustomers = Object.values(dataMap).filter(row => {
       const isActive = row.invoices.length > 0 || row.previousOutstanding > 0;
       if (!isActive) return false;
@@ -81,7 +79,6 @@ export function BillingModule({ sys }) {
       return true;
     });
 
-    // 3. AGGREGATE: Calculate Dashboard metrics ONLY for the filtered customers
     let totalRevenue = 0;
     let totalInvoicesCount = 0;
 
@@ -96,7 +93,6 @@ export function BillingModule({ sys }) {
     const sortedByRevenue = [...relevantCustomers].sort((a, b) => b.totalBilled - a.totalBilled);
     const topCustomer = sortedByRevenue[0] || null;
 
-    // 4. SORT & TEXT SEARCH
     let displayList = [...relevantCustomers].sort((a, b) => a.customerName.localeCompare(b.customerName));
     if (searchTerm) {
       const lowerSearch = String(searchTerm).toLowerCase();
@@ -104,10 +100,6 @@ export function BillingModule({ sys }) {
     }
 
     displayList.forEach(row => {
-      row.invoices.sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
-    });
-
-    relevantCustomers.forEach(row => {
       row.invoices.sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
     });
 
@@ -129,7 +121,6 @@ export function BillingModule({ sys }) {
       }
       return inv;
     });
-
     sys.setInvoices(updatedInvoices);
   };
 
@@ -148,7 +139,7 @@ export function BillingModule({ sys }) {
     setTimeout(async () => {
       try {
         const zip = new JSZip();
-        const printContainer = document.getElementById('print-ui');
+        const printContainer = document.getElementById('print-pages-container');
         const statementNodes = printContainer.children;
         const d = new Date(`${selectedMonth}-01`);
         const monthShort = d.toLocaleString('en-US', { month: 'short' });
@@ -158,7 +149,6 @@ export function BillingModule({ sys }) {
         for (let i = 0; i < analytics.allCustomerStats.length; i++) {
           const data = analytics.allCustomerStats[i];
           const node = statementNodes[i];
-          
           if (!node) continue;
 
           const canvas = await html2canvas(node, { scale: 2, useCORS: true, logging: false });
@@ -212,81 +202,244 @@ export function BillingModule({ sys }) {
 
   const termLabel = termFilter === 'All' ? 'ALL' : termFilter === 'cod' ? 'COD' : '30-DAY';
 
-  return (
-    <div className="p-8 h-full overflow-y-auto relative bg-slate-50/50">
-      
-      <div className="absolute opacity-0 w-0 h-0 overflow-hidden pointer-events-none">
-        <img src={logo} alt="preload logo" />
-        <img src={paynowQr} alt="preload qr" />
-      </div>
-
+  // =========================================================================
+  // FOOLPROOF PRINT PORTAL (Teleports the UI out of the dashboard layout)
+  // =========================================================================
+  const printContent = printTarget ? (
+    <div id="print-portal-root" className="absolute left-[-9999px] top-0 z-[-100] bg-white text-black" style={{ width: '210mm' }}>
       <style type="text/css">
         {`
           @media print {
             @page { size: A4; margin: 0 !important; }
-            html, body, #root { 
+            html, body { 
               margin: 0 !important; 
               padding: 0 !important; 
               background: white !important; 
               -webkit-print-color-adjust: exact; 
               print-color-adjust: exact; 
-              height: auto !important;
-              min-height: 100% !important;
-              overflow: visible !important;
+              height: auto !important; 
+              min-height: auto !important; 
+              overflow: visible !important; 
             }
             
-            /* Hide the main application UI cleanly */
-            body * { visibility: hidden; }
-            #screen-ui { display: none !important; }
+            /* HIDE THE DASHBOARD COMPLETELY TO PREVENT CLIPPING */
+            #root { display: none !important; }
             
-            /* Untrap ancestor wrappers */
-            html :has(#print-ui) {
-              position: static !important;
-              display: block !important;
-              width: auto !important;
-              height: auto !important;
-              max-height: none !important;
-              overflow: visible !important;
-            }
-
-            /* Completely remove sibling wrappers that push content down */
-            body *:not(:has(#print-ui)):not(#print-ui *) {
-              position: absolute !important;
-              height: 0 !important;
-              width: 0 !important;
-              margin: 0 !important;
-              padding: 0 !important;
-              overflow: hidden !important;
-              border: none !important;
-            }
-
-            #print-ui, #print-ui * { visibility: visible; }
-            #print-ui { 
+            /* UNHIDE THE PORTAL AND RESTORE NATURAL FLOW */
+            #print-portal-root { 
               display: block !important; 
               position: static !important; 
               width: 100% !important; 
+              left: auto !important; 
+              top: auto !important; 
+              z-index: auto !important; 
               opacity: 1 !important; 
+              visibility: visible !important; 
             }
-
+            
+            /* STRICT A4 DIMENSIONS */
             .a4-statement-page { 
               width: 210mm !important; 
               height: 297mm !important; 
               padding: 10mm 15mm !important; 
-              box-sizing: border-box !important;
+              box-sizing: border-box !important; 
               page-break-after: always !important; 
               break-after: always !important; 
-              display: flex !important;
-              flex-direction: column !important;
-              justify-content: space-between !important;
-              background: white !important;
+              display: flex !important; 
+              flex-direction: column !important; 
+              justify-content: space-between !important; 
+              background: white !important; 
             }
-
+            
             table { border-collapse: collapse !important; width: 100% !important; }
             tr, td, th { page-break-inside: avoid; break-inside: avoid; }
           }
         `}
       </style>
 
+      <div id="print-pages-container" className="flex flex-col w-full items-center">
+        {statementsToPrint.map((data, index) => {
+          // CHUNKING: Fixed to 18 items max per page to prevent bottom cutoff
+          const ITEMS_PER_PAGE = 18;
+          const pages = [];
+          for (let i = 0; i < data.invoices.length; i += ITEMS_PER_PAGE) {
+            pages.push(data.invoices.slice(i, i + ITEMS_PER_PAGE));
+          }
+          if (pages.length === 0) pages.push([]);
+
+          return (
+            <div key={data.customer?.id || index} className="customer-print-wrapper w-full">
+              {pages.map((pageItems, pageIndex) => {
+                const isLastPage = pageIndex === pages.length - 1;
+
+                return (
+                  <div key={pageIndex} className="a4-statement-page mx-auto" style={{ fontFamily: CJK_FONT }}>
+                    
+                    {/* --- HEADER --- */}
+                    <div className="flex w-full mb-5 justify-between items-start shrink-0 border-b-2 border-black pb-3">
+                      <div className="w-[100px] shrink-0">
+                        <img src={logo} alt="Three Leaves Logo" className="w-[100px] h-auto object-contain" />
+                      </div>
+
+                      <div className="flex-1 text-center px-2 flex flex-col items-center justify-start pt-1">
+                        <h1 className="font-black text-[15px] tracking-tight mb-1" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
+                        <h2 className="font-bold text-[14px] mb-1" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
+                        <p className="font-bold text-[9px] mb-0.5 tracking-tight">CO.REG NO.53033969B &nbsp;|&nbsp; GST REG NO. M90355440L</p>
+                        <p className="text-[9px] mb-0.5 tracking-tight">280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
+                        <p className="text-[9px] tracking-tight">HP: 97578869 (Mr Ye) &nbsp;|&nbsp; HP: 91113505 (Min) &nbsp;|&nbsp; Email: 3leaves.sg@gmail.com</p>
+                      </div>
+
+                      <div className="w-[100px] shrink-0 flex flex-col items-end pt-1">
+                        <h2 className="text-[20px] font-black tracking-widest leading-none mb-1" style={{ fontFamily: CJK_FONT }}>结账单</h2>
+                        <h3 className="text-[12px] font-black uppercase text-black">STATEMENT</h3>
+                      </div>
+                    </div>
+
+                    {/* --- CUSTOMER INFO --- */}
+                    <div className="w-full shrink-0 flex justify-between items-end mb-4 font-bold text-[13px] leading-tight">
+                      <div className="w-[70%] pr-4">
+                        <div className="flex items-end mb-1.5">
+                          <span className="w-12 shrink-0 text-slate-500 font-bold text-[12px]">TO:</span>
+                          <span className="flex-1 uppercase border-b border-black pb-0.5 font-black text-[14px]" style={{ fontFamily: CJK_FONT }}>
+                            {data.customerName}
+                          </span>
+                        </div>
+                        <div className="flex items-end">
+                          <span className="w-20 shrink-0 text-slate-500 font-bold text-[12px]">ADDRESS:</span>
+                          <span className="flex-1 uppercase border-b border-black pb-0.5 text-[12px] truncate" style={{ fontFamily: CJK_FONT }}>
+                            {data.customer?.address || '-'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="w-[30%] pl-4 flex flex-col items-end justify-end">
+                        <div className="flex items-end mb-1.5 w-full justify-end">
+                          <span className="shrink-0 text-slate-500 font-bold text-[12px] mr-2">STMT MONTH:</span>
+                          <span className="w-24 text-center border-b border-black pb-0.5 font-black text-[13px] uppercase">
+                            {displayMonth}
+                          </span>
+                        </div>
+                        <div className="flex items-end w-full justify-end">
+                          <span className="shrink-0 text-slate-500 font-bold text-[12px] mr-2">TERMS:</span>
+                          <span className="w-24 text-center border-b border-black pb-0.5 font-bold text-[12px] uppercase">
+                            {data.customer?.payment_terms === 'cod' ? 'C.O.D' : '30 DAYS'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* --- TABLE CONTENT --- */}
+                    <div className="w-full flex-1 flex flex-col justify-start overflow-hidden">
+                      <table className="w-full text-[13px] text-center mb-0 border-collapse" style={{ fontFamily: CJK_FONT }}>
+                        <thead>
+                          <tr className="font-bold text-[13px] border-y-2 border-black">
+                            <th className="py-2 px-2 text-center w-12">NO.</th>
+                            <th className="py-2 px-2 text-center w-32">DATE</th>
+                            <th className="py-2 px-2 text-center">INVOICE NO.</th>
+                            <th className="py-2 px-2 text-right w-48 pr-4">AMOUNT</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {/* Invoice Data Rows */}
+                          {pageItems.map((inv, idx) => {
+                            const billed = Number(inv.total) || 0;
+                            const absoluteIndex = pageIndex * ITEMS_PER_PAGE + idx + 1;
+                            return (
+                              <tr key={inv.id} className="h-[28px] align-middle">
+                                <td className="p-1 text-center font-medium">{absoluteIndex}</td>
+                                <td className="p-1 text-center font-medium">{inv.date ? new Date(inv.date).toLocaleDateString('en-GB').replace(/\//g, '-') : '-'}</td>
+                                <td className="p-1 text-center font-bold text-black">#{inv.number || inv.id}</td>
+                                <td className="p-1 text-right font-bold text-black pr-4">${formatMoney(billed)}</td>
+                              </tr>
+                            );
+                          })}
+                          
+                          {/* Empty Padding Rows */}
+                          {pageItems.length < ITEMS_PER_PAGE && Array.from({ length: ITEMS_PER_PAGE - pageItems.length }).map((_, i) => (
+                            <tr key={`blank-${i}`} className="h-[28px] align-middle">
+                              <td></td>
+                              <td></td>
+                              <td></td>
+                              <td></td>
+                            </tr>
+                          ))}
+
+                          {/* Beautifully Integrated Total Row (Flushed Right, Transparent Background) */}
+                          {isLastPage && data.previousOutstanding > 0 ? (
+                            <>
+                              <tr className="h-[28px] align-middle border-t-2 border-black">
+                                <td colSpan="3" className="py-1 px-4 text-right font-bold text-[12px] tracking-wide text-slate-800">THIS MONTH TOTAL:</td>
+                                <td className="py-1 text-right font-bold text-[13px] pr-4">${formatMoney(data.totalBilled)}</td>
+                              </tr>
+                              <tr className="h-[28px] align-middle">
+                                <td colSpan="3" className="py-1 px-4 text-right font-bold text-[12px] tracking-wide text-slate-600">PREV. OUTSTANDING:</td>
+                                <td className="py-1 text-right font-bold text-[13px] text-slate-600 pr-4">${formatMoney(data.previousOutstanding)}</td>
+                              </tr>
+                              <tr className="h-[36px] align-middle border-t border-b-2 border-black">
+                                <td colSpan="3" className="py-2 px-4 text-right font-black text-[14px] tracking-widest uppercase text-black">OVERALL TOTAL DUE:</td>
+                                <td className="py-2 text-right font-black text-[16px] text-black pr-4">${formatMoney(data.overallDue)}</td>
+                              </tr>
+                            </>
+                          ) : isLastPage ? (
+                            <tr className="h-[36px] align-middle border-t-2 border-b-2 border-black">
+                              <td colSpan="3" className="py-2 px-4 text-right font-black text-[14px] tracking-widest uppercase text-black">TOTAL AMOUNT DUE:</td>
+                              <td className="py-2 text-right font-black text-[16px] text-black pr-4">${formatMoney(data.totalBilled)}</td>
+                            </tr>
+                          ) : null}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* --- FOOTER --- */}
+                    <div className="flex w-full pt-3 items-end shrink-0 relative mt-auto">
+                      <div className="w-[75%] text-[12px] font-bold leading-snug pr-4">
+                        <div style={{ fontFamily: CJK_FONT }}>
+                          <p className="text-[12px]">请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
+                          <p className="text-[10px] text-slate-800">Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
+                          
+                          <div className="mt-2 flex items-center">
+                            <div className="w-[60px] h-[60px] shrink-0 mr-3 flex items-center justify-center">
+                              <img src={paynowQr} alt="PayNow QR Code" className="w-[60px] h-[60px] object-contain" />
+                            </div>
+                            <div className="flex flex-col justify-center text-[10px] space-y-0.5">
+                              <p>UEN: <span className="font-black text-[11px]">53033969B</span></p>
+                              <p>A/C Name: <span className="font-black text-[11px]">Three Leaves (Singapore) Trading Enterprise</span></p>
+                              <p>A/C Number: <span className="font-black text-[11px]">535-846562-001</span></p>
+                              <p>Bank Name: <span className="font-black text-[11px]">OCBC</span></p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="w-[25%] shrink-0 flex flex-col justify-end pb-1 pl-2">
+                        <div className="h-10"></div> 
+                        <div className="border-t border-black text-center pt-1 text-[11px] font-bold uppercase tracking-widest">Received By</div>
+                      </div>
+
+                      <div className="absolute right-0 top-3 text-[10px] font-black tracking-widest text-slate-400">
+                        PAGE {pageIndex + 1} OF {pages.length}
+                      </div>
+                    </div>
+
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  ) : null;
+
+  return (
+    <div className="p-8 h-full overflow-y-auto relative bg-slate-50/50">
+      
+      {/* Invisible preloads */}
+      <div className="absolute opacity-0 w-0 h-0 overflow-hidden pointer-events-none">
+        <img src={logo} alt="preload logo" />
+        <img src={paynowQr} alt="preload qr" />
+      </div>
+
+      {/* DASHBOARD SCREEN UI */}
       <div id="screen-ui">
         <div className="flex justify-between items-center mb-8">
           <div>
@@ -449,180 +602,8 @@ export function BillingModule({ sys }) {
         </div>
       </div>
 
-      {/* ========================================================================= */}
-      {/* EXCLUSIVE PRINT UI (RE-FORMATTED FOR PERFECT A4 FIT) */}
-      {/* ========================================================================= */}
-      <div id="print-ui" className={isZipping ? "absolute left-[-9999px] top-0 opacity-100 z-[-100] block" : "hidden"}>
-        {statementsToPrint.map((data, index) => {
-          // STRICT CHUNKING: Safe array size (18) to leave ample room for headers and footers
-          const ITEMS_PER_PAGE = 18;
-          const pages = [];
-          for (let i = 0; i < data.invoices.length; i += ITEMS_PER_PAGE) {
-            pages.push(data.invoices.slice(i, i + ITEMS_PER_PAGE));
-          }
-          if (pages.length === 0) pages.push([]);
-
-          return (
-            <div key={data.customer?.id || index} className="customer-print-wrapper">
-              {pages.map((pageItems, pageIndex) => {
-                const isLastPage = pageIndex === pages.length - 1;
-
-                return (
-                  <div key={pageIndex} className="a4-statement-page" style={{ fontFamily: CJK_FONT }}>
-                    
-                    {/* Header Section */}
-                    <div className="flex w-full mb-5 justify-between items-start shrink-0 border-b-2 border-black pb-3">
-                      
-                      <div className="w-[100px] shrink-0">
-                        <img src={logo} alt="Three Leaves Logo" className="w-[100px] h-auto object-contain" />
-                      </div>
-
-                      <div className="flex-1 text-center px-2 flex flex-col items-center justify-start pt-1">
-                        <h1 className="font-black text-[15px] tracking-tight mb-1" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1>
-                        <h2 className="font-bold text-[14px] mb-1" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
-                        <p className="font-bold text-[9px] mb-0.5 tracking-tight">CO.REG NO.53033969B &nbsp;|&nbsp; GST REG NO. M90355440L</p>
-                        <p className="text-[9px] mb-0.5 tracking-tight">280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
-                        <p className="text-[9px] tracking-tight">HP: 97578869 (Mr Ye) &nbsp;|&nbsp; HP: 91113505 (Min) &nbsp;|&nbsp; Email: 3leaves.sg@gmail.com</p>
-                      </div>
-
-                      <div className="w-[100px] shrink-0 flex flex-col items-end pt-1">
-                        <h2 className="text-[20px] font-black tracking-widest leading-none mb-1" style={{ fontFamily: CJK_FONT }}>结账单</h2>
-                        <h3 className="text-[12px] font-black uppercase text-black">STATEMENT</h3>
-                      </div>
-                    </div>
-
-                    {/* Customer Info Box */}
-                    <div className="w-full shrink-0 flex justify-between items-end mb-4 font-bold text-[13px] leading-tight">
-                      <div className="w-[70%] pr-4">
-                        <div className="flex items-end mb-1.5">
-                          <span className="w-12 shrink-0 text-slate-500 font-bold text-[12px]">TO:</span>
-                          <span className="flex-1 uppercase border-b border-black pb-0.5 font-black text-[14px]" style={{ fontFamily: CJK_FONT }}>
-                            {data.customerName}
-                          </span>
-                        </div>
-                        <div className="flex items-end">
-                          <span className="w-20 shrink-0 text-slate-500 font-bold text-[12px]">ADDRESS:</span>
-                          <span className="flex-1 uppercase border-b border-black pb-0.5 text-[12px] truncate" style={{ fontFamily: CJK_FONT }}>
-                            {data.customer?.address || '-'}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="w-[30%] pl-4 flex flex-col items-end justify-end">
-                        <div className="flex items-end mb-1.5 w-full justify-end">
-                          <span className="shrink-0 text-slate-500 font-bold text-[12px] mr-2">STMT MONTH:</span>
-                          <span className="w-24 text-center border-b border-black pb-0.5 font-black text-[13px] uppercase">
-                            {displayMonth}
-                          </span>
-                        </div>
-                        <div className="flex items-end w-full justify-end">
-                          <span className="shrink-0 text-slate-500 font-bold text-[12px] mr-2">TERMS:</span>
-                          <span className="w-24 text-center border-b border-black pb-0.5 font-bold text-[12px] uppercase">
-                            {data.customer?.payment_terms === 'cod' ? 'C.O.D' : '30 DAYS'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Formatted Table Section */}
-                    <div className="w-full flex-1 flex flex-col justify-start overflow-hidden">
-                      <table className="w-full text-[13px] text-center mb-0 border-collapse" style={{ fontFamily: CJK_FONT }}>
-                        <thead>
-                          <tr className="font-bold text-[13px] border-y-2 border-black">
-                            <th className="py-2 px-2 text-center w-12">NO.</th>
-                            <th className="py-2 px-2 text-center w-32">DATE</th>
-                            <th className="py-2 px-2 text-center">INVOICE NO.</th>
-                            <th className="py-2 px-2 text-right w-48 pr-4">AMOUNT</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {/* Invoice Data Rows */}
-                          {pageItems.map((inv, idx) => {
-                            const billed = Number(inv.total) || 0;
-                            const absoluteIndex = pageIndex * ITEMS_PER_PAGE + idx + 1;
-                            return (
-                              <tr key={inv.id} className="h-[28px] align-middle">
-                                <td className="p-1 text-center font-medium">{absoluteIndex}</td>
-                                <td className="p-1 text-center font-medium">{inv.date ? new Date(inv.date).toLocaleDateString('en-GB').replace(/\//g, '-') : '-'}</td>
-                                <td className="p-1 text-center font-bold text-black">#{inv.number || inv.id}</td>
-                                <td className="p-1 text-right font-bold text-black pr-4">${formatMoney(billed)}</td>
-                              </tr>
-                            );
-                          })}
-                          
-                          {/* Padding Empty Rows */}
-                          {pageItems.length < ITEMS_PER_PAGE && Array.from({ length: ITEMS_PER_PAGE - pageItems.length }).map((_, i) => (
-                            <tr key={`blank-${i}`} className="h-[28px] align-middle">
-                              <td></td>
-                              <td></td>
-                              <td></td>
-                              <td></td>
-                            </tr>
-                          ))}
-
-                          {/* Flushed Total Row */}
-                          {isLastPage && data.previousOutstanding > 0 ? (
-                            <>
-                              <tr className="h-[28px] align-middle border-t-2 border-black">
-                                <td colSpan="3" className="py-1 px-4 text-right font-bold text-[12px] tracking-wide text-slate-800">THIS MONTH TOTAL:</td>
-                                <td className="py-1 text-right font-bold text-[13px] pr-4">${formatMoney(data.totalBilled)}</td>
-                              </tr>
-                              <tr className="h-[28px] align-middle">
-                                <td colSpan="3" className="py-1 px-4 text-right font-bold text-[12px] tracking-wide text-slate-600">PREV. OUTSTANDING:</td>
-                                <td className="py-1 text-right font-bold text-[13px] text-slate-600 pr-4">${formatMoney(data.previousOutstanding)}</td>
-                              </tr>
-                              <tr className="h-[36px] align-middle border-y-2 border-black">
-                                <td colSpan="3" className="py-2 px-4 text-right font-black text-[14px] tracking-widest uppercase text-black">OVERALL TOTAL DUE:</td>
-                                <td className="py-2 text-right font-black text-[16px] text-black pr-4">${formatMoney(data.overallDue)}</td>
-                              </tr>
-                            </>
-                          ) : isLastPage ? (
-                            <tr className="h-[36px] align-middle border-y-2 border-black">
-                              <td colSpan="3" className="py-2 px-4 text-right font-black text-[14px] tracking-widest uppercase text-black">TOTAL AMOUNT DUE:</td>
-                              <td className="py-2 text-right font-black text-[16px] text-black pr-4">${formatMoney(data.totalBilled)}</td>
-                            </tr>
-                          ) : null}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    {/* Footer Section */}
-                    <div className="flex w-full pt-3 items-end shrink-0 border-t-2 border-black relative mt-auto">
-                      <div className="w-[75%] text-[12px] font-bold leading-snug pr-4">
-                        <div style={{ fontFamily: CJK_FONT }}>
-                          <p className="text-[12px]">请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p>
-                          <p className="text-[10px] text-slate-800">Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
-                          
-                          <div className="mt-2 flex items-center">
-                            <div className="w-[60px] h-[60px] shrink-0 mr-3 flex items-center justify-center">
-                              <img src={paynowQr} alt="PayNow QR Code" className="w-[60px] h-[60px] object-contain" />
-                            </div>
-                            <div className="flex flex-col justify-center text-[10px] space-y-0.5">
-                              <p>UEN: <span className="font-black text-[11px]">53033969B</span></p>
-                              <p>A/C Name: <span className="font-black text-[11px]">Three Leaves (Singapore) Trading Enterprise</span></p>
-                              <p>A/C Number: <span className="font-black text-[11px]">535-846562-001</span></p>
-                              <p>Bank Name: <span className="font-black text-[11px]">OCBC</span></p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="w-[25%] shrink-0 flex flex-col justify-end pb-1 pl-2">
-                        <div className="h-10"></div> 
-                        <div className="border-t border-black text-center pt-1 text-[11px] font-bold uppercase tracking-widest">Received By</div>
-                      </div>
-
-                      <div className="absolute right-0 top-3 text-[10px] font-black tracking-widest text-slate-400">
-                        PAGE {pageIndex + 1} OF {pages.length}
-                      </div>
-                    </div>
-
-                  </div>
-                );
-              })}
-            </div>
-          );
-        })}
-      </div>
+      {/* RENDER THE SECURE PRINT PORTAL OUTSIDE THE REACT ROOT */}
+      {printTarget && createPortal(printContent, document.body)}
 
     </div>
   );
