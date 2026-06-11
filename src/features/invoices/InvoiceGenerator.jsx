@@ -150,6 +150,18 @@ export function InvoiceGenerator({ sys, groups, setGroups, existingInvoice = nul
 
   const [paymentTerms, setPaymentTerms] = useState(existingInvoice?.paymentTerms || '30_days');
 
+  // AUTO-SYNC PAYMENT TERMS: When a new customer is selected, update terms to their default
+  useEffect(() => {
+    if (customerId && !existingInvoice) {
+      const selectedCust = safeCustomers.find(c => c?.id === customerId);
+      if (selectedCust && selectedCust.payment_terms) {
+        setPaymentTerms(selectedCust.payment_terms);
+      } else {
+        setPaymentTerms('30_days'); // Fallback if customer has no specific default
+      }
+    }
+  }, [customerId, safeCustomers, existingInvoice]);
+
   const autoInvoiceNumber = useMemo(() => {
     // BUGFIX: If an existing invoice is being edited, ALWAYS keep its original number.
     // Do not run the auto-generator just because the date changed!
