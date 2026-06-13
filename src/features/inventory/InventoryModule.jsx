@@ -116,6 +116,7 @@ function InventoryFormModal({ item, suppliers, onClose, onSave, onDelete }) {
     Unit: item?.Unit || item?.unit || '箱',
     Description: item?.Description || item?.description || '',
     Packing: item?.Packing || item?.packaging || '',
+    cost_price: item?.cost_price ?? item?.costPrice ?? 0,
     Price: item?.Price || item?.unitPrice || item?.['Unit Price (SG)'] || 0,
     stock: item?.stock ?? item?.Stock ?? 0,
   });
@@ -146,7 +147,7 @@ function InventoryFormModal({ item, suppliers, onClose, onSave, onDelete }) {
 
   return (
     <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden">
         
         <div className="bg-slate-900 px-6 py-4 flex justify-between items-center text-white">
           <h2 className="text-base font-semibold flex items-center">
@@ -205,7 +206,7 @@ function InventoryFormModal({ item, suppliers, onClose, onSave, onDelete }) {
             </div>
           </div>
 
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-5 gap-4">
             <div>
               <label className="block text-sm text-slate-500 mb-1">Packing</label>
               <input 
@@ -259,7 +260,19 @@ function InventoryFormModal({ item, suppliers, onClose, onSave, onDelete }) {
             </div>
 
             <div>
-              <label className="block text-sm text-blue-600 mb-1">Price</label>
+              <label className="block text-sm text-orange-600 mb-1">Cost Price</label>
+              <input 
+                type="number" 
+                step="0.01"
+                name="cost_price" 
+                value={formData.cost_price} 
+                onChange={handleChange}
+                className="w-full border border-orange-200 bg-orange-50 rounded-xl p-3 text-base text-right text-orange-700 focus:ring-2 focus:ring-orange-500 outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm text-blue-600 mb-1">Sell Price</label>
               <input 
                 required
                 type="number" 
@@ -270,6 +283,7 @@ function InventoryFormModal({ item, suppliers, onClose, onSave, onDelete }) {
                 className="w-full border border-blue-200 bg-blue-50 rounded-xl p-3 text-base text-right text-blue-700 focus:ring-2 focus:ring-blue-500 outline-none"
               />
             </div>
+
             <div>
               <label className="block text-sm text-emerald-600 mb-1">Stock</label>
               <input 
@@ -379,6 +393,7 @@ export function InventoryModule({ sys }) {
         Unit: formData.Unit,
         Description: formData.Description,
         Packing: formData.Packing,
+        cost_price: Number(formData.cost_price) || 0,
         Price: Number(formData.Price) || 0,
         stock: parseInt(formData.stock, 10) || 0
       };
@@ -540,7 +555,8 @@ export function InventoryModule({ sys }) {
               <th className="p-5 text-center">Unit</th>
               <th className="p-5">Description</th>
               <th className="p-5">Packing</th>
-              <th className="p-5 text-right">Price</th>
+              <th className="p-5 text-right">Cost Price</th>
+              <th className="p-5 text-right">Sell Price</th>
               <th className="p-5 text-center">Stock</th>
               <th className="p-5 pr-8 text-center">Action</th>
             </tr>
@@ -553,6 +569,7 @@ export function InventoryModule({ sys }) {
               const unit = item?.Unit || item?.unit || '-';
               const desc = item?.Description || item?.description || '-';
               const packing = item?.Packing || item?.packaging || '-';
+              const costPrice = item?.cost_price ?? item?.costPrice ?? 0;
               const price = item?.Price || item?.unitPrice || item?.['Unit Price (SG)'] || 0;
               const stock = item?.stock ?? item?.Stock ?? 0; 
 
@@ -568,6 +585,9 @@ export function InventoryModule({ sys }) {
                   </td>
                   <td className="p-5 text-sm text-slate-600 max-w-[200px] truncate">{desc}</td>
                   <td className="p-5 text-sm text-slate-600">{packing}</td>
+                  <td className="p-5 text-right text-base font-bold text-orange-600">
+                    ${formatMoney(costPrice)}
+                  </td>
                   <td className="p-5 text-right text-base font-bold text-blue-700">
                     ${formatMoney(price)}
                   </td>
@@ -596,7 +616,7 @@ export function InventoryModule({ sys }) {
             
             {filteredInventory.length === 0 && (
               <tr>
-                <td colSpan="9" className="p-12 text-center text-base text-slate-500">
+                <td colSpan="10" className="p-12 text-center text-base text-slate-500">
                   No products match your search.
                 </td>
               </tr>
