@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   Users, 
@@ -12,14 +12,13 @@ import {
   FileText,
   User,
   Gift,
-  CheckCircle,
-  Calculator,
   Trash2,
   Briefcase,
   Printer,
-  Settings2,
-  Eye,
-  EyeOff
+  Edit3,
+  X,
+  Save,
+  RotateCcw
 } from 'lucide-react';
 import { formatMoney } from '../../utils/format';
 
@@ -47,7 +46,7 @@ const formatWithCommas = (num) => {
 };
 
 // ==========================================
-// COMPONENT: CONTRACT GENERATOR (SUB-VIEW)
+// COMPONENT: CONTRACT GENERATOR
 // ==========================================
 function EmployeeContractForm({ employees }) {
   // Employee Target
@@ -68,14 +67,6 @@ function EmployeeContractForm({ employees }) {
   const [allowances, setAllowances] = useState([]);
   const [bonuses, setBonuses] = useState([]);
   
-  // Smart Bonus Presets
-  const [bonusPresets, setBonusPresets] = useState([
-    'Completion of 1 full year of service',
-    'Perfect Attendance (0 Days Lateness)',
-    'No Unofficial Leaves (No-shows / AWOL)',
-    'No MCs taken beyond allocated quota',
-  ]);
-  
   // Work Hours & Entitlements
   const [startTime, setStartTime] = useState('11:00 AM');
   const [endTime, setEndTime] = useState('08:00 PM');
@@ -83,23 +74,18 @@ function EmployeeContractForm({ employees }) {
   const [annualLeave, setAnnualLeave] = useState(7);
   const [mcAllowance, setMcAllowance] = useState(14);
   const [hospLeave, setHospLeave] = useState(30);
-  const [noticePeriod, setNoticePeriod] = useState(1);
-  const [nonCompeteYears, setNonCompeteYears] = useState(1);
 
-  // TEXT CUSTOMIZATION & CLAUSE TOGGLES
-  const [includeVehicle, setIncludeVehicle] = useState(true);
-  const [includeNonCompete, setIncludeNonCompete] = useState(true);
-  const [includeConfidentiality, setIncludeConfidentiality] = useState(true);
-  const [probationMcPaid, setProbationMcPaid] = useState(false); // false = Unpaid, true = Paid
-  const [customDuties, setCustomDuties] = useState('');
-  const [specialConditions, setSpecialConditions] = useState('');
+  // Custom Editor State
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [customContractHTML, setCustomContractHTML] = useState(null);
+  const editorRef = useRef(null);
 
   // --- Handlers ---
   const handleEmployeeSelect = (e) => {
     const id = e.target.value;
     setSelectedEmpId(id);
     if (id === 'DRAFT' || id === 'NEW') {
-      setEmployeeName(''); nric(''); setPhone('');
+      setEmployeeName(''); setNric(''); setPhone('');
       setRole('Logistics cum Transport Operator'); setBaseSalary(2000);
     } else if (id) {
       const emp = employees.find(emp => emp.id === id);
@@ -117,209 +103,218 @@ function EmployeeContractForm({ employees }) {
   const removeBonus = (id) => setBonuses(bonuses.filter(b => b.id !== id));
   const updateBonus = (id, field, value) => setBonuses(bonuses.map(b => b.id === id ? { ...b, [field]: value } : b));
   
-  const addUnusedMcBonus = () => {
-    const mcBonusAmount = Number(mcAllowance) * 20;
-    setBonuses([...bonuses, { id: Date.now(), requirement: 'Zero Medical Leaves Taken (Unused MC Cash Conversion)', amount: mcBonusAmount }]);
+  const handlePrint = () => window.print();
+
+  // --- Editor Handlers ---
+  const openEditor = () => {
+    setIsEditorOpen(true);
   };
 
-  const handleBonusBlur = (val) => {
-    const cleanVal = val.trim();
-    if (cleanVal && !bonusPresets.includes(cleanVal)) {
-      setBonusPresets([...bonusPresets, cleanVal]);
+  const saveCustomEdits = () => {
+    if (editorRef.current) {
+      setCustomContractHTML(editorRef.current.innerHTML);
+    }
+    setIsEditorOpen(false);
+  };
+
+  const resetToDefault = () => {
+    if (window.confirm("Are you sure you want to reset all custom text edits? This will rebuild the contract using the default template.")) {
+      setCustomContractHTML(null);
+      setIsEditorOpen(false);
     }
   };
 
-  const handlePrint = () => window.print();
-
   // --- Calculations ---
-  const totalAllowances = allowances.reduce((sum, a) => sum + (Number(a.amount) || 0), 0);
-  const monthlyGross = Number(baseSalary) + totalAllowances;
-  const totalBonuses = bonuses.reduce((sum, b) => sum + (Number(b.amount) || 0), 0);
-  const standardAnnualTotal = (monthlyGross * 12) + totalBonuses;
-
   const probationEndObj = new Date(commencementDate);
   probationEndObj.setMonth(probationEndObj.getMonth() + Number(probationMonths));
   const probationEndDate = isNaN(probationEndObj) ? '-' : probationEndObj.toLocaleDateString('en-GB');
   const formattedCommencement = isNaN(new Date(commencementDate)) ? '-' : new Date(commencementDate).toLocaleDateString('en-GB');
 
-  // --- Print Portal Content ---
-  const printContent = (
-    <div id="print-contract-ui">
-      <style type="text/css">
-        {`
-          #print-contract-ui { display: none; }
-          
-          @media print {
-            @page { size: A4 portrait; margin: 15mm; }
-            html, body { margin: 0 !important; padding: 0 !important; background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            #root { display: none !important; }
-            
-            #print-contract-ui { 
-              display: block !important; 
-              position: static !important; 
-              width: 100% !important; 
-              color: black !important;
-              font-family: "Times New Roman", Times, serif !important;
-              font-size: 11pt !important;
-              line-height: 1.4 !important;
-            }
-
-            .contract-page { page-break-after: always; }
-            .contract-title { font-size: 14pt; font-weight: bold; text-align: center; text-decoration: underline; margin-bottom: 15px; }
-            .contract-section { font-weight: bold; text-transform: uppercase; margin-top: 15px; margin-bottom: 5px; }
-            .contract-p { margin-bottom: 8px; text-align: justify; }
-            .contract-list { margin-top: 0; margin-bottom: 8px; padding-left: 20px; }
-          }
-        `}
-      </style>
-
-      <div className="contract-page">
-        <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-          <h1 style={{ fontSize: '18pt', fontWeight: '900', margin: 0 }}>THREE LEAVES PTE. LTD.</h1>
-          <h2 className="contract-title">EMPLOYMENT CONTRACT AGREEMENT</h2>
-        </div>
-
-        <p className="contract-p">We are pleased to offer you a full-time position with us. The attached terms and conditions of our offer are outlined below:</p>
-        
-        <table style={{ width: '100%', marginBottom: '20px', borderCollapse: 'collapse' }}>
-          <tbody>
-            <tr><td style={{ width: '25%', fontWeight: 'bold' }}>Employer:</td><td>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</td></tr>
-            <tr><td style={{ fontWeight: 'bold' }}>Address:</td><td>280 Woodlands Industrial Park E5 #06-35 Harvest @ Singapore 757322</td></tr>
-            <tr><td style={{ fontWeight: 'bold' }}>Registration No:</td><td>53033969B</td></tr>
-          </tbody>
-        </table>
-
-        <div style={{ border: '1px solid black', padding: '10px', marginBottom: '20px' }}>
-          <strong>Employee Details</strong><br/>
-          <table style={{ width: '100%', marginTop: '5px' }}>
-            <tbody>
-              <tr>
-                <td style={{ width: '50%' }}>Name: {employeeName || '___________________________'}</td>
-                <td>NRIC/FIN: {nric || '___________________'}</td>
-                <td>Phone No: {phone || '___________________'}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <div className="contract-section">1. DESIGNATION & JOB SCOPE</div>
-        <p className="contract-p">1.1 The Employee shall be employed as a <strong>{role || '___________________'}</strong> and shall be primarily responsible for the duties as part of the Employer's operations. The Employee’s core duties include, but are not limited to, the following:</p>
-        <ul className="contract-list">
-          <li><strong>Delivery of Goods:</strong> The Employee will be responsible for the safe and efficient transportation of goods from the Employer's premises to designated locations.</li>
-          <li><strong>Loading and Unloading:</strong> The Employee may be required to assist in the loading and unloading of goods and materials.</li>
-          <li><strong>Warehouse-Related Functions:</strong> The Employee may be asked to perform general warehouse duties, including picking goods and organizing stock.</li>
-          <li><strong>Vehicle Maintenance and Safety:</strong> The Employee is responsible for performing basic maintenance checks on the vehicle used.</li>
-          {customDuties && <li><strong>Additional Specialized Duties:</strong> {customDuties}</li>}
-        </ul>
-        <p className="contract-p">1.2 The Employer may require the Employee to perform tasks and duties not explicitly stated above, but which are reasonably within the scope of the role.</p>
-
-        <div className="contract-section">2. COMMENCEMENT & DURATION OF EMPLOYMENT</div>
-        <p className="contract-p">2.1 This Contract shall commence on <strong>{formattedCommencement}</strong> and shall continue in effect until terminated by either party.</p>
-        <p className="contract-p">2.2 The Employee shall serve a mandatory <strong>{probationMonths} months</strong> probation period. The slated date for the end of probation is on <strong>{probationEndDate}</strong>.</p>
-        <p className="contract-p"><strong>Medical Leave:</strong> Any medical leave taken during the probationary period will be considered <strong>{probationMcPaid ? 'PAID' : 'UNPAID'}</strong>. {probationMcPaid ? 'Medical leave tracking will follow standard company criteria.' : 'Should the employee incur prolonged medical leave or take medical leave in excess of a reasonable amount, the Employer reserves the right to review the employee\'s suitability for the role.'}</p>
-        <p className="contract-p"><strong>Unpaid Leave:</strong> During the probationary period, the Employee shall not be entitled to paid leave, except in cases of compassionate grounds.</p>
-
-        <div className="contract-section">3. SALARY & COMPENSATION</div>
-        <p className="contract-p">3.1 The Employer agrees to pay the Employee a gross monthly salary of <strong>S${formatWithCommas(baseSalary)}</strong> whilst on probation, which includes the base salary for the agreed working hours.</p>
-        {allowances.length > 0 && (
-          <p className="contract-p">Additionally, the Employee is entitled to the following monthly allowances: {allowances.map(a => `${a.type || 'Allowance'} (S$${formatWithCommas(a.amount)})`).join(', ')}.</p>
-        )}
-        <p className="contract-p">3.2 Salary will be paid on the 15th of each month by Bank Transfer/Paylah to the Employee's nominated account.</p>
-        {bonuses.length > 0 && (
-          <p className="contract-p">3.3 <strong>Variable Bonuses:</strong> {bonuses.map(b => `S$${formatWithCommas(b.amount)} subject to: ${b.requirement}`).join('; ')}.</p>
-        )}
-
-        <div className="contract-section">4. WORK HOURS</div>
-        <p className="contract-p">4.1 The Employee’s regular working hours shall be from <strong>{startTime} to {endTime}</strong>, <strong>{workDays} days</strong> per week.</p>
-        <p className="contract-p">4.2 It is a condition of employment that you may need to work outside these regular hours from time to time.</p>
-
-        <div className="contract-section">5. LEAVE ENTITLEMENT</div>
-        <p className="contract-p">5.1 The Employee is entitled to <strong>{annualLeave} days</strong> Annual Leave per year and Public Holidays in accordance with Singapore laws.</p>
-        <p className="contract-p">5.2 The Employee’s leave entitlement will only take effect after they serve the probationary period.</p>
-        <p className="contract-p">5.3 Approval of leave is at the sole discretion of the Employer.</p>
-        <p className="contract-p">5.4 Off-in-Lieu: If required to work on a public holiday, time off in lieu may be granted.</p>
-
-        <div className="contract-section">6. MEDICAL BENEFIT</div>
-        <p className="contract-p">6.1 You are entitled to <strong>{mcAllowance} days</strong> paid sick leave, requiring a medical certificate within Singapore.</p>
-        <p className="contract-p">6.2 You are entitled to <strong>{hospLeave} days</strong> paid hospitalization leave.</p>
-        <p className="contract-p">6.3 Sick and hospitalization leave entitlement will commence after your probation period.</p>
-
-        {includeConfidentiality && (
-          <>
-            <div className="contract-section">7. CONFIDENTIALITY & NON-DISCLOSURE</div>
-            <p className="contract-p">7.1 The Employee agrees not to disclose or use any confidential information or trade secrets of the Employer.</p>
-            <p className="contract-p">7.2 This obligation survives the termination of employment.</p>
-          </>
-        )}
+  // ==========================================
+  // PURE CONTRACT TEMPLATE
+  // ==========================================
+  const BaseContractContent = () => (
+    <div className="text-black font-serif text-[11pt] leading-relaxed pb-12">
+      <div className="text-center mb-6">
+        <h1 className="text-[16pt] font-black m-0">THREE LEAVES PTE. LTD.</h1>
+        <h2 className="text-[14pt] font-bold underline m-0 mt-1">EMPLOYMENT CONTRACT AGREEMENT</h2>
       </div>
 
-      <div className="contract-page">
-        {includeNonCompete && (
-          <>
-            <div className="contract-section">8. NON-COMPETE AND CONFLICT OF INTEREST</div>
-            <p className="contract-p">8.1 The Employee agrees that for a period of <strong>{nonCompeteYears} Year</strong> following termination, they shall not engage in or consult for any business that competes with the Employer in the wholesale/distribution landscape.</p>
-            <p className="contract-p">8.2 The Employee acknowledges these restrictions are reasonable to protect the Employer's business interests.</p>
-          </>
-        )}
+      <p className="mb-4">We are pleased to offer you a full-time position with us. The attached terms and conditions of our offer are outlined below:</p>
+      
+      <table className="w-full mb-6 border-collapse">
+        <tbody>
+          <tr><td className="w-1/4 font-bold">Employer:</td><td>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</td></tr>
+          <tr><td className="font-bold">Address:</td><td>280 Woodlands Industrial Park E5 #06-35 Harvest @ Singapore 757322</td></tr>
+          <tr><td className="font-bold">Registration No:</td><td>53033969B</td></tr>
+        </tbody>
+      </table>
 
-        <div className="contract-section">9. TERMINATION</div>
-        <p className="contract-p">9.1 The Employee may terminate this Contract by providing <strong>{noticePeriod} month</strong> written notice.</p>
-        <p className="contract-p">9.2 The Employer may terminate employment with or without notice for Misconduct, Poor Performance, or Incapacity.</p>
+      <div className="border border-black p-3 mb-6">
+        <strong>Employee Details</strong><br/>
+        <table className="w-full mt-2">
+          <tbody>
+            <tr>
+              <td className="w-1/2">Name: {employeeName || '___________________________'}</td>
+              <td>NRIC/FIN: {nric || '___________________'}</td>
+            </tr>
+            <tr>
+              <td className="w-1/2 mt-2 inline-block">Phone No: {phone || '___________________'}</td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
-        <div className="contract-section">10. EMPLOYEE’S OBLIGATION</div>
-        <p className="contract-p">10.1 Comply with all workplace policies. 10.2 Maintain proper conduct. 10.3 Comply with traffic laws when operating vehicles. 10.6 The Employee may be held responsible for costs due to misconduct.</p>
+      <div className="font-bold uppercase mt-6 mb-2">1. DESIGNATION & JOB SCOPE</div>
+      <p className="mb-2">1.1 The Employee shall be employed as a <strong>{role || '___________________'}</strong> and shall be primarily responsible for the duties as part of the Employer's operations. The Employee’s core duties include, but are not limited to, the following:</p>
+      <ul className="list-disc pl-6 mb-2 space-y-1">
+        <li><strong>Delivery of Goods:</strong> The Employee will be responsible for the safe and efficient transportation of goods from the Employer's premises to designated locations.</li>
+        <li><strong>Loading and Unloading:</strong> The Employee may be required to assist in the loading and unloading of goods and materials.</li>
+        <li><strong>Warehouse-Related Functions:</strong> The Employee may be asked to perform general warehouse duties, including picking goods and organizing stock.</li>
+        <li><strong>Vehicle Maintenance and Safety:</strong> The Employee is responsible for performing basic maintenance checks on the vehicle used.</li>
+      </ul>
+      <p className="mb-2">1.2 The Employer may require the Employee to perform tasks and duties not explicitly stated above, but which are reasonably within the scope of the role.</p>
 
-        {includeVehicle && (
-          <>
-            <div className="contract-section">11. COMPANY VEHICLE USAGE</div>
-            <p className="contract-p">11.1 The vehicle is solely for commuting. Unauthorized private use is strictly prohibited. The Employee is liable for private use incidents and insurance excesses if misuse is proven.</p>
-          </>
-        )}
+      <div className="font-bold uppercase mt-6 mb-2">2. COMMENCEMENT & DURATION OF EMPLOYMENT</div>
+      <p className="mb-2">2.1 This Contract shall commence on <strong>{formattedCommencement}</strong> and shall continue in effect until terminated by either party.</p>
+      <p className="mb-2">2.2 The Employee shall serve a mandatory <strong>{probationMonths} months</strong> probation period. The slated date for the end of probation is on <strong>{probationEndDate}</strong>.</p>
+      <p className="mb-2"><strong>Medical Leave:</strong> Any medical leave taken during the probationary period will be considered unpaid. Should the employee incur prolonged medical leave, the Employer reserves the right to review the employee's suitability for the role.</p>
+      <p className="mb-2"><strong>Unpaid Leave:</strong> During the probationary period, the Employee shall not be entitled to paid leave, except in cases of compassionate grounds.</p>
 
-        <div className="contract-section">12. AMENDMENTS OF TERMS</div>
-        <p className="contract-p">12.1 The Employer reserves the right to amend the terms provided they comply with Singapore’s Employment Act.</p>
+      <div className="font-bold uppercase mt-6 mb-2">3. SALARY & COMPENSATION</div>
+      <p className="mb-2">3.1 The Employer agrees to pay the Employee a gross monthly salary of <strong>S${formatWithCommas(baseSalary)}</strong> whilst on probation, which includes the base salary for the agreed working hours.</p>
+      {allowances.length > 0 && (
+        <p className="mb-2">Additionally, the Employee is entitled to the following monthly allowances: {allowances.map(a => `${a.type || 'Allowance'} (S$${formatWithCommas(a.amount)})`).join(', ')}.</p>
+      )}
+      <p className="mb-2">3.2 Salary will be paid on the 15th of each month by Bank Transfer/Paylah to the Employee's nominated account.</p>
+      {bonuses.length > 0 && (
+        <p className="mb-2">3.3 <strong>Variable Bonuses:</strong> {bonuses.map(b => `S$${formatWithCommas(b.amount)} subject to: ${b.requirement}`).join('; ')}.</p>
+      )}
 
-        <div className="contract-section">13. GOVERNING LAW</div>
-        <p className="contract-p">13.1 This Contract shall be governed by the laws of the Republic of Singapore.</p>
+      <div className="font-bold uppercase mt-6 mb-2">4. WORK HOURS</div>
+      <p className="mb-2">4.1 The Employee’s regular working hours shall be from <strong>{startTime} to {endTime}</strong>, <strong>{workDays} days</strong> per week.</p>
+      <p className="mb-2">4.2 It is a condition of employment that you may need to work outside these regular hours from time to time.</p>
 
-        <div className="contract-section">14. ACKNOWLEDGEMENT AND ACCEPTANCE</div>
-        <p className="contract-p">By signing this Employment Contract, the Employee acknowledges that they have read, understood, and agree to the terms.</p>
+      <div className="font-bold uppercase mt-6 mb-2">5. LEAVE ENTITLEMENT</div>
+      <p className="mb-2">5.1 The Employee is entitled to <strong>{annualLeave} days</strong> Annual Leave per year and Public Holidays in accordance with Singapore laws.</p>
+      <p className="mb-2">5.2 The Employee’s leave entitlement will only take effect after they serve the probationary period.</p>
+      <p className="mb-2">5.3 Approval of leave is at the sole discretion of the Employer.</p>
+      <p className="mb-2">5.4 Off-in-Lieu: If required to work on a public holiday, time off in lieu may be granted.</p>
 
-        {specialConditions && (
-          <>
-            <div className="contract-section">15. SPECIAL ADDENDUM CONDITIONS</div>
-            <p className="contract-p" style={{ whitespace: 'pre-wrap' }}>{specialConditions}</p>
-          </>
-        )}
+      <div className="font-bold uppercase mt-6 mb-2">6. MEDICAL BENEFIT</div>
+      <p className="mb-2">6.1 You are entitled to <strong>{mcAllowance} days</strong> paid sick leave, requiring a medical certificate within Singapore.</p>
+      <p className="mb-2">6.2 You are entitled to <strong>{hospLeave} days</strong> paid hospitalization leave.</p>
+      <p className="mb-2">6.3 Sick and hospitalization leave entitlement will commence after your probation period.</p>
 
-        <div style={{ marginTop: '50px' }}>
-          <p>I, <strong>{employeeName || '___________________________'}</strong>, I/C No. <strong>{nric || '___________________'}</strong> confirm that I have read, understood and accept the terms and conditions of employment set out in this Contract.</p>
-          <table style={{ width: '100%', marginTop: '40px' }}>
-            <tbody>
-              <tr>
-                <td style={{ width: '50%' }}>Signature: _______________________________</td>
-                <td>Date: __________________________________</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+      <div className="font-bold uppercase mt-6 mb-2">7. CONFIDENTIALITY & NON-DISCLOSURE</div>
+      <p className="mb-2">7.1 The Employee agrees not to disclose or use any confidential information or trade secrets of the Employer.</p>
+      <p className="mb-2">7.2 This obligation survives the termination of employment.</p>
+
+      <div className="font-bold uppercase mt-6 mb-2">8. NON-COMPETE AND CONFLICT OF INTEREST</div>
+      <p className="mb-2">8.1 The Employee agrees that for a period of 1 Year following termination, they shall not engage in or consult for any business that competes with the Employer.</p>
+      <p className="mb-2">8.2 The Employee acknowledges these restrictions are reasonable to protect the Employer's business interests.</p>
+
+      <div className="font-bold uppercase mt-6 mb-2">9. TERMINATION</div>
+      <p className="mb-2">9.1 The Employee may terminate this Contract by providing 1 month written notice.</p>
+      <p className="mb-2">9.2 The Employer may terminate employment with or without notice for Misconduct, Poor Performance, or Incapacity.</p>
+
+      <div className="font-bold uppercase mt-6 mb-2">10. EMPLOYEE’S OBLIGATION</div>
+      <p className="mb-2">10.1 Comply with all workplace policies. 10.2 Maintain proper conduct. 10.3 Comply with traffic laws when operating vehicles. 10.6 The Employee may be held responsible for costs due to misconduct.</p>
+
+      <div className="font-bold uppercase mt-6 mb-2">11. COMPANY VEHICLE USAGE</div>
+      <p className="mb-2">11.1 The vehicle is solely for commuting. Unauthorized private use is strictly prohibited. The Employee is liable for private use incidents.</p>
+
+      <div className="font-bold uppercase mt-6 mb-2">12. AMENDMENTS OF TERMS</div>
+      <p className="mb-2">12.1 The Employer reserves the right to amend the terms provided they comply with Singapore’s Employment Act.</p>
+
+      <div className="font-bold uppercase mt-6 mb-2">13. GOVERNING LAW</div>
+      <p className="mb-2">13.1 This Contract shall be governed by the laws of the Republic of Singapore.</p>
+
+      <div className="font-bold uppercase mt-6 mb-2">14. ACKNOWLEDGEMENT AND ACCEPTANCE</div>
+      <p className="mb-2">By signing this Employment Contract, the Employee acknowledges that they have read, understood, and agree to the terms.</p>
+
+      <div className="mt-12 pt-8">
+        <p className="mb-8">I, <strong>{employeeName || '___________________________'}</strong>, I/C No. <strong>{nric || '___________________'}</strong> confirm that I have read, understood and accept the terms and conditions of employment set out in this Contract.</p>
+        <table className="w-full mt-8">
+          <tbody>
+            <tr>
+              <td className="w-1/2">Signature: _______________________________</td>
+              <td>Date: __________________________________</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   );
 
   return (
     <>
-      <datalist id="bonus-presets">
-        {bonusPresets.map((preset, index) => <option key={index} value={preset} />)}
-      </datalist>
+      {/* HIDDEN BASE TEMPLATE (Used to grab initial HTML for the editor) */}
+      <div id="hidden-base-template" className="hidden">
+        <BaseContractContent />
+      </div>
 
+      {/* ========================================== */}
+      {/* EDITOR MODAL (POPUP) */}
+      {/* ========================================== */}
+      {isEditorOpen && createPortal(
+        <div className="fixed inset-0 z-[7000] flex items-center justify-center bg-slate-900/90 backdrop-blur-sm p-6 animate-in fade-in">
+          <div className="bg-slate-100 rounded-3xl shadow-2xl w-full max-w-5xl h-[90vh] flex flex-col overflow-hidden">
+            
+            <div className="bg-white px-6 py-4 border-b border-slate-200 flex justify-between items-center shrink-0">
+              <div>
+                <h2 className="text-lg font-black text-slate-800 flex items-center">
+                  <Edit3 size={20} className="mr-2 text-blue-600" />
+                  Live Document Editor
+                </h2>
+                <p className="text-xs text-slate-500 mt-1">Click anywhere inside the document below to type, delete, or rewrite the content freely.</p>
+              </div>
+              <button onClick={() => setIsEditorOpen(false)} className="p-2 bg-slate-100 hover:bg-slate-200 rounded-full text-slate-500 transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* WYSIWYG Editor Container */}
+            <div className="flex-1 overflow-y-auto p-8 bg-slate-200 flex justify-center">
+              <div 
+                ref={editorRef}
+                contentEditable={true}
+                suppressContentEditableWarning={true}
+                className="bg-white p-[15mm] shadow-lg w-full max-w-[210mm] min-h-[297mm] outline-none border border-slate-300 focus:ring-4 focus:ring-blue-500/20 transition-shadow"
+                dangerouslySetInnerHTML={{ 
+                  __html: customContractHTML || document.getElementById('hidden-base-template').innerHTML 
+                }}
+              />
+            </div>
+
+            <div className="bg-white px-6 py-4 border-t border-slate-200 flex justify-between items-center shrink-0">
+              <button onClick={resetToDefault} className="flex items-center text-sm font-bold text-red-500 hover:text-red-700 px-4 py-2 hover:bg-red-50 rounded-xl transition-colors">
+                <RotateCcw size={16} className="mr-2" /> Reset to Default
+              </button>
+              <div className="flex gap-3">
+                <button onClick={() => setIsEditorOpen(false)} className="px-6 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">
+                  Cancel
+                </button>
+                <button onClick={saveCustomEdits} className="flex items-center px-6 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md transition-all">
+                  <Save size={16} className="mr-2" /> Save Modifications
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ========================================== */}
       {/* SCREEN UI */}
-      <div className="flex flex-col lg:flex-row gap-8 pb-12 animate-in fade-in duration-300">
+      {/* ========================================== */}
+      <div id="screen-ui" className="flex flex-col lg:flex-row gap-8 pb-12 animate-in fade-in duration-300">
         
         {/* LEFT COLUMN: EMPLOYER CONTROL PANEL */}
-        <div className="w-full lg:w-1/2 space-y-6">
+        <div className="w-full lg:w-[45%] space-y-6">
           
-          {/* Target Profile */}
           <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
             <h2 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-4 flex items-center"><User size={16} className="mr-2" /> Target Employee</h2>
             <div className="grid grid-cols-2 gap-4">
@@ -331,124 +326,49 @@ function EmployeeContractForm({ employees }) {
                 </select>
               </div>
               <div className="col-span-2">
-                <label className="block text-xs font-bold text-slate-600 mb-1">Full Name (Optional for Drafts)</label>
+                <label className="block text-xs font-bold text-slate-600 mb-1">Full Name</label>
                 <input type="text" value={employeeName} onChange={e => setEmployeeName(e.target.value)} placeholder="Leave blank for signature line..." className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1">NRIC / FIN</label>
-                <input type="text" value={nric} onChange={e => setNric(e.target.value)} placeholder="S1234567A" className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500 uppercase" />
+                <input type="text" value={nric} onChange={e => setNric(e.target.value)} placeholder="S1234567A" className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none uppercase" />
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1">Phone No.</label>
-                <input type="text" value={phone} onChange={e => setPhone(e.target.value)} placeholder="8123 4567" className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" />
+                <input type="text" value={phone} onChange={e => setPhone(e.target.value)} placeholder="8123 4567" className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none" />
               </div>
             </div>
           </div>
 
-          {/* CLAUSE TEXT SETTINGS & CUSTOMIZATION */}
-          <div className="bg-slate-900 text-slate-200 p-6 rounded-3xl shadow-lg space-y-4">
-            <h2 className="text-sm font-black uppercase tracking-widest text-blue-400 flex items-center">
-              <Settings2 size={16} className="mr-2" /> Clause & Text Settings
-            </h2>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
-              <button 
-                type="button"
-                onClick={() => setIncludeVehicle(!includeVehicle)}
-                className={`flex items-center justify-between p-3 rounded-xl border text-xs font-bold transition-all ${
-                  includeVehicle ? 'bg-blue-950/40 border-blue-500 text-blue-300' : 'bg-slate-800/40 border-slate-700 text-slate-500'
-                }`}
-              >
-                <span>Section 11: Vehicle Usage</span>
-                {includeVehicle ? <Eye size={14}/> : <EyeOff size={14}/>}
-              </button>
-
-              <button 
-                type="button"
-                onClick={() => setIncludeNonCompete(!includeNonCompete)}
-                className={`flex items-center justify-between p-3 rounded-xl border text-xs font-bold transition-all ${
-                  includeNonCompete ? 'bg-blue-950/40 border-blue-500 text-blue-300' : 'bg-slate-800/40 border-slate-700 text-slate-500'
-                }`}
-              >
-                <span>Section 8: Non-Compete</span>
-                {includeNonCompete ? <Eye size={14}/> : <EyeOff size={14}/>}
-              </button>
-
-              <button 
-                type="button"
-                onClick={() => setIncludeConfidentiality(!includeConfidentiality)}
-                className={`flex items-center justify-between p-3 rounded-xl border text-xs font-bold transition-all ${
-                  includeConfidentiality ? 'bg-blue-950/40 border-blue-500 text-blue-300' : 'bg-slate-800/40 border-slate-700 text-slate-500'
-                }`}
-              >
-                <span>Section 7: Confidentiality</span>
-                {includeConfidentiality ? <Eye size={14}/> : <EyeOff size={14}/>}
-              </button>
-
-              <button 
-                type="button"
-                onClick={() => setProbationMcPaid(!probationMcPaid)}
-                className={`flex items-center justify-between p-3 rounded-xl border text-xs font-bold transition-all ${
-                  probationMcPaid ? 'bg-emerald-950/40 border-emerald-500 text-emerald-300' : 'bg-orange-950/40 border-orange-700 text-orange-400'
-                }`}
-              >
-                <span>Probation MC Leave:</span>
-                <span>{probationMcPaid ? 'PAID' : 'UNPAID'}</span>
-              </button>
-            </div>
-
-            <div className="space-y-2 pt-2">
-              <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase">Append Custom Job Scope Duties (Section 1.1)</label>
-                <textarea value={customDuties} onChange={e => setCustomDuties(e.target.value)} rows={2} placeholder="e.g. Must assist in freezer warehouse maintenance once a week..." className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none focus:border-blue-500 mt-1" />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase">Add Special Addendum / Custom Section (Section 15)</label>
-                <textarea value={specialConditions} onChange={e => setSpecialConditions(e.target.value)} rows={2} placeholder="e.g. 15.1 Company uniform must be worn at all times during operating schedules..." className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none focus:border-blue-500 mt-1" />
-              </div>
-            </div>
-          </div>
-
-          {/* Core Compensation */}
           <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
             <h2 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-4 flex items-center"><Briefcase size={16} className="mr-2" /> Role, Dates & Base Pay</h2>
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2">
                 <label className="block text-xs font-bold text-slate-600 mb-1">Job Role</label>
-                <input type="text" value={role} onChange={e => setRole(e.target.value)} placeholder="e.g. Sales Executive" className="w-full border border-slate-200 rounded-xl p-2.5 text-sm font-bold text-slate-800 bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" />
+                <input type="text" value={role} onChange={e => setRole(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm font-bold text-slate-800 bg-slate-50 outline-none" />
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1">Commencement Date</label>
-                <input type="date" value={commencementDate} onChange={e => setCommencementDate(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" />
+                <input type="date" value={commencementDate} onChange={e => setCommencementDate(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none" />
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1">Probation (Months)</label>
-                <input type="number" value={probationMonths} onChange={e => setProbationMonths(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" />
+                <input type="number" value={probationMonths} onChange={e => setProbationMonths(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none" />
               </div>
               <div className="col-span-2">
                 <label className="block text-xs font-bold text-slate-600 mb-1">Base Salary ($)</label>
-                <input type="number" value={baseSalary} onChange={e => setBaseSalary(e.target.value)} className="w-full border border-slate-200 rounded-xl p-3 text-lg font-black text-blue-700 bg-blue-50/50 outline-none focus:ring-2 focus:ring-blue-500" />
+                <input type="number" value={baseSalary} onChange={e => setBaseSalary(e.target.value)} className="w-full border border-slate-200 rounded-xl p-3 text-lg font-black text-blue-700 bg-blue-50/50 outline-none" />
               </div>
             </div>
           </div>
 
-          {/* Allowances */}
           <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-sm font-black uppercase tracking-widest text-slate-400 flex items-center"><DollarSign size={16} className="mr-2" /> Allowances</h2>
-              <span className="text-xs font-bold text-slate-500">Total: ${formatWithCommas(totalAllowances)}</span>
-            </div>
+            <h2 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-4 flex items-center"><DollarSign size={16} className="mr-2" /> Allowances</h2>
             <div className="space-y-3 mb-4">
               {allowances.map((al) => (
                 <div key={al.id} className="flex items-center gap-3 bg-slate-50 p-2 rounded-xl border border-slate-100">
-                  <div className="flex-1">
-                    <input type="text" value={al.type} onChange={e => updateAllowance(al.id, 'type', e.target.value)} placeholder="e.g. Transport" className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm outline-none focus:border-emerald-500" />
-                  </div>
-                  <div className="w-32 relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
-                    <input type="number" value={al.amount} onChange={e => updateAllowance(al.id, 'amount', e.target.value)} placeholder="0" className="w-full bg-white border border-slate-200 rounded-lg py-2 pl-7 pr-2 text-sm font-bold text-emerald-700 outline-none focus:border-emerald-500" />
-                  </div>
+                  <div className="flex-1"><input type="text" value={al.type} onChange={e => updateAllowance(al.id, 'type', e.target.value)} placeholder="Type" className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm outline-none" /></div>
+                  <div className="w-28 relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span><input type="number" value={al.amount} onChange={e => updateAllowance(al.id, 'amount', e.target.value)} placeholder="0" className="w-full bg-white border border-slate-200 rounded-lg py-2 pl-7 pr-2 text-sm font-bold text-emerald-700 outline-none" /></div>
                   <button onClick={() => removeAllowance(al.id)} className="p-2 text-slate-400 hover:text-red-500 transition-colors"><Trash2 size={16}/></button>
                 </div>
               ))}
@@ -456,52 +376,22 @@ function EmployeeContractForm({ employees }) {
             <button onClick={addAllowance} className="text-xs font-bold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 px-4 py-2 rounded-lg transition-colors w-full">+ Add Allowance</button>
           </div>
 
-          {/* Bonuses */}
-          <div className="bg-gradient-to-br from-indigo-50 to-purple-50 p-6 rounded-3xl shadow-sm border border-indigo-100">
-            <h2 className="text-sm font-black uppercase tracking-widest text-indigo-800 mb-4 flex items-center"><Gift size={16} className="mr-2" /> Bonuses & Conditions</h2>
-            <div className="space-y-3 mb-4">
-              {bonuses.map((b) => (
-                <div key={b.id} className="flex flex-col gap-2 bg-white p-3 rounded-xl border border-indigo-100 shadow-sm">
-                  <div className="flex items-start gap-3">
-                    <div className="flex-1">
-                      <input type="text" list="bonus-presets" value={b.requirement} onChange={e => updateBonus(b.id, 'requirement', e.target.value)} onBlur={e => handleBonusBlur(e.target.value)} placeholder="Select or type custom condition..." className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-sm outline-none focus:border-indigo-500" />
-                    </div>
-                    <div className="w-32 relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
-                      <input type="number" value={b.amount} onChange={e => updateBonus(b.id, 'amount', e.target.value)} placeholder="0" className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 pl-7 pr-2 text-sm font-bold text-indigo-700 outline-none focus:border-indigo-500" />
-                    </div>
-                    <button onClick={() => removeBonus(b.id)} className="p-2 text-slate-400 hover:text-red-500 transition-colors"><Trash2 size={16}/></button>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <button onClick={addBonus} className="flex-1 text-xs font-bold text-white bg-indigo-500 hover:bg-indigo-600 px-4 py-2 rounded-lg transition-colors shadow-sm">+ Add Bonus</button>
-              <button onClick={addUnusedMcBonus} className="flex-1 text-xs font-bold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 px-4 py-2 rounded-lg transition-colors shadow-sm">+ Add Unused MC Bonus ($20/day)</button>
-            </div>
-          </div>
-
-          {/* Entitlements */}
           <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-            <h2 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-4 flex items-center"><CalendarDays size={16} className="mr-2" /> Entitlements & Work Hours</h2>
+            <h2 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-4 flex items-center"><CalendarDays size={16} className="mr-2" /> Schedule & Leaves</h2>
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2 flex gap-4">
                  <div className="flex-1 flex gap-2">
                    <div className="w-1/2">
-                     <label className="block text-xs font-bold text-slate-600 mb-1">Start Time</label>
-                     <select value={startTime} onChange={e => setStartTime(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none cursor-pointer">
-                        {TIME_OPTIONS.map(t => <option key={`start-${t}`} value={t}>{t}</option>)}
-                     </select>
+                     <label className="block text-[10px] font-bold text-slate-600 mb-1 uppercase">Start Time</label>
+                     <select value={startTime} onChange={e => setStartTime(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none cursor-pointer">{TIME_OPTIONS.map(t => <option key={`start-${t}`} value={t}>{t}</option>)}</select>
                    </div>
                    <div className="w-1/2">
-                     <label className="block text-xs font-bold text-slate-600 mb-1">End Time</label>
-                     <select value={endTime} onChange={e => setEndTime(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none cursor-pointer">
-                        {TIME_OPTIONS.map(t => <option key={`end-${t}`} value={t}>{t}</option>)}
-                     </select>
+                     <label className="block text-[10px] font-bold text-slate-600 mb-1 uppercase">End Time</label>
+                     <select value={endTime} onChange={e => setEndTime(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none cursor-pointer">{TIME_OPTIONS.map(t => <option key={`end-${t}`} value={t}>{t}</option>)}</select>
                    </div>
                  </div>
-                 <div className="w-32">
-                   <label className="block text-xs font-bold text-slate-600 mb-1">Days/Week</label>
+                 <div className="w-24">
+                   <label className="block text-[10px] font-bold text-slate-600 mb-1 uppercase">Days/Wk</label>
                    <input type="number" value={workDays} onChange={e => setWorkDays(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none" />
                  </div>
               </div>
@@ -513,103 +403,81 @@ function EmployeeContractForm({ employees }) {
                 <label className="block text-xs font-bold text-slate-600 mb-1">MC (Sick Leave)</label>
                 <input type="number" value={mcAllowance} onChange={e => setMcAllowance(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none" />
               </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">Hospitalization Leave</label>
-                <input type="number" value={hospLeave} onChange={e => setHospLeave(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">Notice Period (Mths)</label>
-                <input type="number" value={noticePeriod} onChange={e => setNoticePeriod(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none" />
-              </div>
             </div>
           </div>
 
         </div>
 
-        {/* RIGHT COLUMN: LIVE EMPLOYEE PREVIEW */}
-        <div className="w-full lg:w-1/2">
-          <div className="sticky top-0 bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden flex flex-col h-[85vh]">
-            
-            <div className="bg-slate-900 p-6 text-white text-center shrink-0">
-              <h2 className="text-xl font-black uppercase tracking-widest">Compensation Summary</h2>
-            </div>
-
-            <div className="p-8 overflow-y-auto flex-1 text-slate-800 space-y-6">
-              <div className="border-b border-slate-200 pb-6">
-                {selectedEmpId === 'DRAFT' && (
-                  <span className="inline-block mb-3 px-3 py-1 bg-amber-100 text-amber-700 text-[10px] font-black uppercase tracking-widest rounded-full">
-                    Interview Draft Mode
-                  </span>
-                )}
-                <p className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-1">Prepared For</p>
-                <p className="text-2xl font-black">{employeeName || '[Candidate Name]'}</p>
-                <p className="text-lg text-slate-600 font-medium mt-1">{role}</p>
-                <p className="text-sm text-slate-400 mt-1">Commencing: {formattedCommencement}</p>
-              </div>
-
-              <div>
-                <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center"><DollarSign size={16} className="mr-1"/> Monthly Package</h3>
-                <div className="space-y-2 text-sm font-medium bg-slate-50 p-4 rounded-xl border border-slate-100">
-                  <div className="flex justify-between items-center"><span className="text-slate-600 font-bold">Gross Base Salary</span><span className="font-mono text-base">${formatWithCommas(baseSalary)}</span></div>
-                  {allowances.map(al => (
-                    <div key={al.id} className="flex justify-between items-center pl-4 border-l-2 border-emerald-200">
-                      <span className="text-slate-500">Allowance: {al.type || 'Unnamed'}</span>
-                      <span className="font-mono text-slate-600">+ ${formatWithCommas(al.amount)}</span>
-                    </div>
-                  ))}
-                  <div className="flex justify-between pt-3 mt-2 border-t border-slate-200 text-lg font-black">
-                    <span className="text-slate-900">Total Monthly Gross</span>
-                    <span className="text-emerald-600 font-mono">${formatWithCommas(monthlyGross)}</span>
-                  </div>
-                </div>
-              </div>
-
-              {bonuses.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-black uppercase tracking-widest text-indigo-400 mb-3 flex items-center"><Gift size={16} className="mr-1"/> Variable Bonuses</h3>
-                  <div className="space-y-3">
-                    {bonuses.map((b, idx) => (
-                      <div key={b.id} className="p-4 bg-indigo-50 border border-indigo-100 rounded-xl flex justify-between items-start gap-4">
-                        <div className="flex-1">
-                          <span className="text-[10px] font-black uppercase tracking-widest text-indigo-400 block mb-1">Bonus Condition</span>
-                          <p className="text-sm text-indigo-900 font-medium leading-snug">{b.requirement || '[No Condition Stated]'}</p>
-                        </div>
-                        <span className="text-lg font-black text-indigo-600 shrink-0 font-mono">${formatWithCommas(b.amount)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+        {/* RIGHT COLUMN: DOCUMENT PREVIEW */}
+        <div className="w-full lg:w-[55%] flex flex-col h-[85vh]">
+          
+          {/* Preview Controls */}
+          <div className="bg-slate-900 rounded-t-3xl p-5 flex justify-between items-center shrink-0 shadow-lg z-10">
+            <div>
+              <h2 className="text-base font-black text-white uppercase tracking-widest flex items-center">
+                <FileText size={18} className="mr-2 text-blue-400" /> Print Preview
+              </h2>
+              {customContractHTML && (
+                <span className="inline-block mt-1 bg-amber-500/20 text-amber-300 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-widest border border-amber-500/50">
+                  Custom Edits Applied
+                </span>
               )}
-
-              {/* Live Contract Structural Verification Info */}
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-1.5 text-xs text-slate-500">
-                <p className="font-bold uppercase text-[10px] text-slate-400 tracking-wider">Active Legal Layout Clauses</p>
-                <div className="flex justify-between"><span>Section 7 (Confidentiality):</span><span className={includeConfidentiality ? "text-emerald-600 font-bold" : "text-slate-400"}>{includeConfidentiality ? "Active" : "Omitted"}</span></div>
-                <div className="flex justify-between"><span>Section 8 (Non-Compete):</span><span className={includeNonCompete ? "text-emerald-600 font-bold" : "text-slate-400"}>{includeNonCompete ? "Active" : "Omitted"}</span></div>
-                <div className="flex justify-between"><span>Section 11 (Company Vehicle):</span><span className={includeVehicle ? "text-emerald-600 font-bold" : "text-slate-400"}>{includeVehicle ? "Active" : "Omitted"}</span></div>
-                <div className="flex justify-between"><span>Probation Medical Leaves:</span><span className="font-bold text-slate-700">{probationMcPaid ? "Paid Leave" : "Unpaid Leave"}</span></div>
-              </div>
-
-              <div className="p-5 bg-slate-900 rounded-2xl text-white">
-                <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1 flex items-center"><Calculator size={14} className="mr-1"/> Total Estimated Annual Value</h3>
-                <div className="flex justify-between items-end">
-                  <span className="text-xs text-slate-300 max-w-[60%]">Assuming 12 months of service and all bonus targets are met.</span>
-                  <span className="text-3xl font-black tracking-tighter text-emerald-400 font-mono">${formatWithCommas(standardAnnualTotal)}</span>
-                </div>
-              </div>
             </div>
+            
+            <button onClick={openEditor} className="flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold rounded-xl transition-colors shadow-md">
+              <Edit3 size={16} className="mr-2" /> Edit Layout & Content
+            </button>
+          </div>
 
-            <div className="p-6 bg-slate-50 border-t border-slate-200 shrink-0 flex gap-3">
-              <button onClick={handlePrint} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-xl shadow-lg transition-all flex items-center justify-center">
-                <Printer className="mr-2" size={20} /> Print Employment Contract
-              </button>
+          {/* Visual Document Frame */}
+          <div className="flex-1 overflow-y-auto bg-slate-200 p-8 border-x border-slate-300 shadow-inner flex justify-center">
+            <div className="bg-white w-full max-w-[210mm] min-h-[297mm] p-[15mm] shadow-xl pointer-events-none">
+              {customContractHTML ? (
+                <div dangerouslySetInnerHTML={{ __html: customContractHTML }} />
+              ) : (
+                <BaseContractContent />
+              )}
             </div>
           </div>
+
+          {/* Action Footer */}
+          <div className="bg-white p-5 rounded-b-3xl border border-slate-300 shrink-0 shadow-lg z-10 flex gap-3">
+            <button onClick={handlePrint} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-4 rounded-xl shadow-lg transition-all flex items-center justify-center text-lg">
+              <Printer className="mr-3" size={24} /> Print Final Contract
+            </button>
+          </div>
+
         </div>
       </div>
 
-      {/* TELEPORT PRINT TEMPLATE OUTSIDE OF REACT ROOT TO AVOID HIDING RULES */}
-      {createPortal(printContent, document.body)}
+      {/* ========================================== */}
+      {/* EXCLUSIVE PRINT UI TELEPORTATION */}
+      {/* ========================================== */}
+      {createPortal(
+        <div id="print-contract-ui" className="hidden">
+          <style type="text/css">
+            {`
+              @media print {
+                @page { size: A4 portrait; margin: 15mm; }
+                html, body { margin: 0 !important; padding: 0 !important; background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                #root { display: none !important; }
+                #print-contract-ui { 
+                  display: block !important; 
+                  position: static !important; 
+                  width: 100% !important; 
+                  color: black !important;
+                }
+              }
+            `}
+          </style>
+          {customContractHTML ? (
+            <div dangerouslySetInnerHTML={{ __html: customContractHTML }} />
+          ) : (
+            <BaseContractContent />
+          )}
+        </div>, 
+        document.body
+      )}
     </>
   );
 }
