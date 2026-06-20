@@ -16,7 +16,10 @@ import {
   Calculator,
   Trash2,
   Briefcase,
-  Printer
+  Printer,
+  Settings2,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { formatMoney } from '../../utils/format';
 
@@ -47,7 +50,7 @@ const formatWithCommas = (num) => {
 // COMPONENT: CONTRACT GENERATOR (SUB-VIEW)
 // ==========================================
 function EmployeeContractForm({ employees }) {
-  // Employee Target (Defaulting to Draft Mode)
+  // Employee Target
   const [selectedEmpId, setSelectedEmpId] = useState('DRAFT');
   const [employeeName, setEmployeeName] = useState('');
   const [nric, setNric] = useState('');
@@ -65,7 +68,7 @@ function EmployeeContractForm({ employees }) {
   const [allowances, setAllowances] = useState([]);
   const [bonuses, setBonuses] = useState([]);
   
-  // Smart Bonus Presets (Learns as you type)
+  // Smart Bonus Presets
   const [bonusPresets, setBonusPresets] = useState([
     'Completion of 1 full year of service',
     'Perfect Attendance (0 Days Lateness)',
@@ -83,23 +86,25 @@ function EmployeeContractForm({ employees }) {
   const [noticePeriod, setNoticePeriod] = useState(1);
   const [nonCompeteYears, setNonCompeteYears] = useState(1);
 
+  // TEXT CUSTOMIZATION & CLAUSE TOGGLES
+  const [includeVehicle, setIncludeVehicle] = useState(true);
+  const [includeNonCompete, setIncludeNonCompete] = useState(true);
+  const [includeConfidentiality, setIncludeConfidentiality] = useState(true);
+  const [probationMcPaid, setProbationMcPaid] = useState(false); // false = Unpaid, true = Paid
+  const [customDuties, setCustomDuties] = useState('');
+  const [specialConditions, setSpecialConditions] = useState('');
+
   // --- Handlers ---
   const handleEmployeeSelect = (e) => {
     const id = e.target.value;
     setSelectedEmpId(id);
     if (id === 'DRAFT' || id === 'NEW') {
-      setEmployeeName(''); 
-      setNric('');
-      setPhone('');
-      setRole('Logistics cum Transport Operator'); 
-      setBaseSalary(2000);
+      setEmployeeName(''); nric(''); setPhone('');
+      setRole('Logistics cum Transport Operator'); setBaseSalary(2000);
     } else if (id) {
       const emp = employees.find(emp => emp.id === id);
       if (emp) {
-        setEmployeeName(emp.name); 
-        setRole(emp.role); 
-        setBaseSalary(emp.basicSalary); 
-        setAnnualLeave(emp.leaveEntitlement);
+        setEmployeeName(emp.name); setRole(emp.role); setBaseSalary(emp.basicSalary); setAnnualLeave(emp.leaveEntitlement);
       }
     }
   };
@@ -114,11 +119,7 @@ function EmployeeContractForm({ employees }) {
   
   const addUnusedMcBonus = () => {
     const mcBonusAmount = Number(mcAllowance) * 20;
-    setBonuses([...bonuses, { 
-      id: Date.now(), 
-      requirement: 'Zero Medical Leaves Taken (Unused MC Cash Conversion)', 
-      amount: mcBonusAmount 
-    }]);
+    setBonuses([...bonuses, { id: Date.now(), requirement: 'Zero Medical Leaves Taken (Unused MC Cash Conversion)', amount: mcBonusAmount }]);
   };
 
   const handleBonusBlur = (val) => {
@@ -136,7 +137,6 @@ function EmployeeContractForm({ employees }) {
   const totalBonuses = bonuses.reduce((sum, b) => sum + (Number(b.amount) || 0), 0);
   const standardAnnualTotal = (monthlyGross * 12) + totalBonuses;
 
-  // Calculate probation end date based on commencement + probation months
   const probationEndObj = new Date(commencementDate);
   probationEndObj.setMonth(probationEndObj.getMonth() + Number(probationMonths));
   const probationEndDate = isNaN(probationEndObj) ? '-' : probationEndObj.toLocaleDateString('en-GB');
@@ -152,11 +152,8 @@ function EmployeeContractForm({ employees }) {
           @media print {
             @page { size: A4 portrait; margin: 15mm; }
             html, body { margin: 0 !important; padding: 0 !important; background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            
-            /* Hide the root React element to prevent clipping */
             #root { display: none !important; }
             
-            /* Show our portal element */
             #print-contract-ui { 
               display: block !important; 
               position: static !important; 
@@ -212,13 +209,14 @@ function EmployeeContractForm({ employees }) {
           <li><strong>Loading and Unloading:</strong> The Employee may be required to assist in the loading and unloading of goods and materials.</li>
           <li><strong>Warehouse-Related Functions:</strong> The Employee may be asked to perform general warehouse duties, including picking goods and organizing stock.</li>
           <li><strong>Vehicle Maintenance and Safety:</strong> The Employee is responsible for performing basic maintenance checks on the vehicle used.</li>
+          {customDuties && <li><strong>Additional Specialized Duties:</strong> {customDuties}</li>}
         </ul>
         <p className="contract-p">1.2 The Employer may require the Employee to perform tasks and duties not explicitly stated above, but which are reasonably within the scope of the role.</p>
 
         <div className="contract-section">2. COMMENCEMENT & DURATION OF EMPLOYMENT</div>
         <p className="contract-p">2.1 This Contract shall commence on <strong>{formattedCommencement}</strong> and shall continue in effect until terminated by either party.</p>
         <p className="contract-p">2.2 The Employee shall serve a mandatory <strong>{probationMonths} months</strong> probation period. The slated date for the end of probation is on <strong>{probationEndDate}</strong>.</p>
-        <p className="contract-p"><strong>Medical Leave:</strong> Any medical leave taken during the probationary period will be considered unpaid.</p>
+        <p className="contract-p"><strong>Medical Leave:</strong> Any medical leave taken during the probationary period will be considered <strong>{probationMcPaid ? 'PAID' : 'UNPAID'}</strong>. {probationMcPaid ? 'Medical leave tracking will follow standard company criteria.' : 'Should the employee incur prolonged medical leave or take medical leave in excess of a reasonable amount, the Employer reserves the right to review the employee\'s suitability for the role.'}</p>
         <p className="contract-p"><strong>Unpaid Leave:</strong> During the probationary period, the Employee shall not be entitled to paid leave, except in cases of compassionate grounds.</p>
 
         <div className="contract-section">3. SALARY & COMPENSATION</div>
@@ -246,14 +244,23 @@ function EmployeeContractForm({ employees }) {
         <p className="contract-p">6.2 You are entitled to <strong>{hospLeave} days</strong> paid hospitalization leave.</p>
         <p className="contract-p">6.3 Sick and hospitalization leave entitlement will commence after your probation period.</p>
 
-        <div className="contract-section">7. CONFIDENTIALITY & NON-DISCLOSURE</div>
-        <p className="contract-p">7.1 The Employee agrees not to disclose or use any confidential information or trade secrets of the Employer. 7.2 This obligation survives the termination of employment.</p>
+        {includeConfidentiality && (
+          <>
+            <div className="contract-section">7. CONFIDENTIALITY & NON-DISCLOSURE</div>
+            <p className="contract-p">7.1 The Employee agrees not to disclose or use any confidential information or trade secrets of the Employer.</p>
+            <p className="contract-p">7.2 This obligation survives the termination of employment.</p>
+          </>
+        )}
       </div>
 
       <div className="contract-page">
-        <div className="contract-section">8. NON-COMPETE AND CONFLICT OF INTEREST</div>
-        <p className="contract-p">8.1 The Employee agrees that for a period of <strong>{nonCompeteYears} Year</strong> following termination, they shall not engage in or consult for any business that competes with the Employer.</p>
-        <p className="contract-p">8.2 The Employee acknowledges these restrictions are reasonable to protect the Employer's business interests.</p>
+        {includeNonCompete && (
+          <>
+            <div className="contract-section">8. NON-COMPETE AND CONFLICT OF INTEREST</div>
+            <p className="contract-p">8.1 The Employee agrees that for a period of <strong>{nonCompeteYears} Year</strong> following termination, they shall not engage in or consult for any business that competes with the Employer in the wholesale/distribution landscape.</p>
+            <p className="contract-p">8.2 The Employee acknowledges these restrictions are reasonable to protect the Employer's business interests.</p>
+          </>
+        )}
 
         <div className="contract-section">9. TERMINATION</div>
         <p className="contract-p">9.1 The Employee may terminate this Contract by providing <strong>{noticePeriod} month</strong> written notice.</p>
@@ -262,8 +269,12 @@ function EmployeeContractForm({ employees }) {
         <div className="contract-section">10. EMPLOYEE’S OBLIGATION</div>
         <p className="contract-p">10.1 Comply with all workplace policies. 10.2 Maintain proper conduct. 10.3 Comply with traffic laws when operating vehicles. 10.6 The Employee may be held responsible for costs due to misconduct.</p>
 
-        <div className="contract-section">11. COMPANY VEHICLE USAGE</div>
-        <p className="contract-p">11.1 The vehicle is solely for commuting. Unauthorized private use is strictly prohibited. The Employee is liable for private use incidents.</p>
+        {includeVehicle && (
+          <>
+            <div className="contract-section">11. COMPANY VEHICLE USAGE</div>
+            <p className="contract-p">11.1 The vehicle is solely for commuting. Unauthorized private use is strictly prohibited. The Employee is liable for private use incidents and insurance excesses if misuse is proven.</p>
+          </>
+        )}
 
         <div className="contract-section">12. AMENDMENTS OF TERMS</div>
         <p className="contract-p">12.1 The Employer reserves the right to amend the terms provided they comply with Singapore’s Employment Act.</p>
@@ -273,6 +284,13 @@ function EmployeeContractForm({ employees }) {
 
         <div className="contract-section">14. ACKNOWLEDGEMENT AND ACCEPTANCE</div>
         <p className="contract-p">By signing this Employment Contract, the Employee acknowledges that they have read, understood, and agree to the terms.</p>
+
+        {specialConditions && (
+          <>
+            <div className="contract-section">15. SPECIAL ADDENDUM CONDITIONS</div>
+            <p className="contract-p" style={{ whitespace: 'pre-wrap' }}>{specialConditions}</p>
+          </>
+        )}
 
         <div style={{ marginTop: '50px' }}>
           <p>I, <strong>{employeeName || '___________________________'}</strong>, I/C No. <strong>{nric || '___________________'}</strong> confirm that I have read, understood and accept the terms and conditions of employment set out in this Contract.</p>
@@ -292,9 +310,7 @@ function EmployeeContractForm({ employees }) {
   return (
     <>
       <datalist id="bonus-presets">
-        {bonusPresets.map((preset, index) => (
-          <option key={index} value={preset} />
-        ))}
+        {bonusPresets.map((preset, index) => <option key={index} value={preset} />)}
       </datalist>
 
       {/* SCREEN UI */}
@@ -303,10 +319,9 @@ function EmployeeContractForm({ employees }) {
         {/* LEFT COLUMN: EMPLOYER CONTROL PANEL */}
         <div className="w-full lg:w-1/2 space-y-6">
           
+          {/* Target Profile */}
           <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-sm font-black uppercase tracking-widest text-slate-400 flex items-center"><User size={16} className="mr-2" /> Target Employee</h2>
-            </div>
+            <h2 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-4 flex items-center"><User size={16} className="mr-2" /> Target Employee</h2>
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2">
                 <select value={selectedEmpId} onChange={handleEmployeeSelect} className="w-full border border-slate-200 rounded-xl p-3 text-sm font-bold bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer appearance-none">
@@ -330,6 +345,72 @@ function EmployeeContractForm({ employees }) {
             </div>
           </div>
 
+          {/* CLAUSE TEXT SETTINGS & CUSTOMIZATION */}
+          <div className="bg-slate-900 text-slate-200 p-6 rounded-3xl shadow-lg space-y-4">
+            <h2 className="text-sm font-black uppercase tracking-widest text-blue-400 flex items-center">
+              <Settings2 size={16} className="mr-2" /> Clause & Text Settings
+            </h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+              <button 
+                type="button"
+                onClick={() => setIncludeVehicle(!includeVehicle)}
+                className={`flex items-center justify-between p-3 rounded-xl border text-xs font-bold transition-all ${
+                  includeVehicle ? 'bg-blue-950/40 border-blue-500 text-blue-300' : 'bg-slate-800/40 border-slate-700 text-slate-500'
+                }`}
+              >
+                <span>Section 11: Vehicle Usage</span>
+                {includeVehicle ? <Eye size={14}/> : <EyeOff size={14}/>}
+              </button>
+
+              <button 
+                type="button"
+                onClick={() => setIncludeNonCompete(!includeNonCompete)}
+                className={`flex items-center justify-between p-3 rounded-xl border text-xs font-bold transition-all ${
+                  includeNonCompete ? 'bg-blue-950/40 border-blue-500 text-blue-300' : 'bg-slate-800/40 border-slate-700 text-slate-500'
+                }`}
+              >
+                <span>Section 8: Non-Compete</span>
+                {includeNonCompete ? <Eye size={14}/> : <EyeOff size={14}/>}
+              </button>
+
+              <button 
+                type="button"
+                onClick={() => setIncludeConfidentiality(!includeConfidentiality)}
+                className={`flex items-center justify-between p-3 rounded-xl border text-xs font-bold transition-all ${
+                  includeConfidentiality ? 'bg-blue-950/40 border-blue-500 text-blue-300' : 'bg-slate-800/40 border-slate-700 text-slate-500'
+                }`}
+              >
+                <span>Section 7: Confidentiality</span>
+                {includeConfidentiality ? <Eye size={14}/> : <EyeOff size={14}/>}
+              </button>
+
+              <button 
+                type="button"
+                onClick={() => setProbationMcPaid(!probationMcPaid)}
+                className={`flex items-center justify-between p-3 rounded-xl border text-xs font-bold transition-all ${
+                  probationMcPaid ? 'bg-emerald-950/40 border-emerald-500 text-emerald-300' : 'bg-orange-950/40 border-orange-700 text-orange-400'
+                }`}
+              >
+                <span>Probation MC Leave:</span>
+                <span>{probationMcPaid ? 'PAID' : 'UNPAID'}</span>
+              </button>
+            </div>
+
+            <div className="space-y-2 pt-2">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase">Append Custom Job Scope Duties (Section 1.1)</label>
+                <textarea value={customDuties} onChange={e => setCustomDuties(e.target.value)} rows={2} placeholder="e.g. Must assist in freezer warehouse maintenance once a week..." className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none focus:border-blue-500 mt-1" />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase">Add Special Addendum / Custom Section (Section 15)</label>
+                <textarea value={specialConditions} onChange={e => setSpecialConditions(e.target.value)} rows={2} placeholder="e.g. 15.1 Company uniform must be worn at all times during operating schedules..." className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none focus:border-blue-500 mt-1" />
+              </div>
+            </div>
+          </div>
+
+          {/* Core Compensation */}
           <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
             <h2 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-4 flex items-center"><Briefcase size={16} className="mr-2" /> Role, Dates & Base Pay</h2>
             <div className="grid grid-cols-2 gap-4">
@@ -352,6 +433,7 @@ function EmployeeContractForm({ employees }) {
             </div>
           </div>
 
+          {/* Allowances */}
           <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-sm font-black uppercase tracking-widest text-slate-400 flex items-center"><DollarSign size={16} className="mr-2" /> Allowances</h2>
@@ -374,6 +456,7 @@ function EmployeeContractForm({ employees }) {
             <button onClick={addAllowance} className="text-xs font-bold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 px-4 py-2 rounded-lg transition-colors w-full">+ Add Allowance</button>
           </div>
 
+          {/* Bonuses */}
           <div className="bg-gradient-to-br from-indigo-50 to-purple-50 p-6 rounded-3xl shadow-sm border border-indigo-100">
             <h2 className="text-sm font-black uppercase tracking-widest text-indigo-800 mb-4 flex items-center"><Gift size={16} className="mr-2" /> Bonuses & Conditions</h2>
             <div className="space-y-3 mb-4">
@@ -381,15 +464,7 @@ function EmployeeContractForm({ employees }) {
                 <div key={b.id} className="flex flex-col gap-2 bg-white p-3 rounded-xl border border-indigo-100 shadow-sm">
                   <div className="flex items-start gap-3">
                     <div className="flex-1">
-                      <input 
-                        type="text" 
-                        list="bonus-presets"
-                        value={b.requirement} 
-                        onChange={e => updateBonus(b.id, 'requirement', e.target.value)} 
-                        onBlur={e => handleBonusBlur(e.target.value)}
-                        placeholder="Select or type custom condition..." 
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-sm outline-none focus:border-indigo-500" 
-                      />
+                      <input type="text" list="bonus-presets" value={b.requirement} onChange={e => updateBonus(b.id, 'requirement', e.target.value)} onBlur={e => handleBonusBlur(e.target.value)} placeholder="Select or type custom condition..." className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-sm outline-none focus:border-indigo-500" />
                     </div>
                     <div className="w-32 relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
@@ -406,10 +481,10 @@ function EmployeeContractForm({ employees }) {
             </div>
           </div>
 
+          {/* Entitlements */}
           <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
             <h2 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-4 flex items-center"><CalendarDays size={16} className="mr-2" /> Entitlements & Work Hours</h2>
             <div className="grid grid-cols-2 gap-4">
-              
               <div className="col-span-2 flex gap-4">
                  <div className="flex-1 flex gap-2">
                    <div className="w-1/2">
@@ -430,7 +505,6 @@ function EmployeeContractForm({ employees }) {
                    <input type="number" value={workDays} onChange={e => setWorkDays(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none" />
                  </div>
               </div>
-
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1">Annual Leave</label>
                 <input type="number" value={annualLeave} onChange={e => setAnnualLeave(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none" />
@@ -444,7 +518,7 @@ function EmployeeContractForm({ employees }) {
                 <input type="number" value={hospLeave} onChange={e => setHospLeave(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none" />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">Notice Period (Months)</label>
+                <label className="block text-xs font-bold text-slate-600 mb-1">Notice Period (Mths)</label>
                 <input type="number" value={noticePeriod} onChange={e => setNoticePeriod(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none" />
               </div>
             </div>
@@ -460,8 +534,8 @@ function EmployeeContractForm({ employees }) {
               <h2 className="text-xl font-black uppercase tracking-widest">Compensation Summary</h2>
             </div>
 
-            <div className="p-8 overflow-y-auto flex-1 text-slate-800">
-              <div className="mb-6 border-b border-slate-200 pb-6">
+            <div className="p-8 overflow-y-auto flex-1 text-slate-800 space-y-6">
+              <div className="border-b border-slate-200 pb-6">
                 {selectedEmpId === 'DRAFT' && (
                   <span className="inline-block mb-3 px-3 py-1 bg-amber-100 text-amber-700 text-[10px] font-black uppercase tracking-widest rounded-full">
                     Interview Draft Mode
@@ -473,7 +547,7 @@ function EmployeeContractForm({ employees }) {
                 <p className="text-sm text-slate-400 mt-1">Commencing: {formattedCommencement}</p>
               </div>
 
-              <div className="mb-8">
+              <div>
                 <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center"><DollarSign size={16} className="mr-1"/> Monthly Package</h3>
                 <div className="space-y-2 text-sm font-medium bg-slate-50 p-4 rounded-xl border border-slate-100">
                   <div className="flex justify-between items-center"><span className="text-slate-600 font-bold">Gross Base Salary</span><span className="font-mono text-base">${formatWithCommas(baseSalary)}</span></div>
@@ -491,14 +565,14 @@ function EmployeeContractForm({ employees }) {
               </div>
 
               {bonuses.length > 0 && (
-                <div className="mb-8">
+                <div>
                   <h3 className="text-sm font-black uppercase tracking-widest text-indigo-400 mb-3 flex items-center"><Gift size={16} className="mr-1"/> Variable Bonuses</h3>
                   <div className="space-y-3">
                     {bonuses.map((b, idx) => (
                       <div key={b.id} className="p-4 bg-indigo-50 border border-indigo-100 rounded-xl flex justify-between items-start gap-4">
-                        <div>
+                        <div className="flex-1">
                           <span className="text-[10px] font-black uppercase tracking-widest text-indigo-400 block mb-1">Bonus Condition</span>
-                          <p className="text-sm text-indigo-900 font-medium leading-snug">{b.requirement}</p>
+                          <p className="text-sm text-indigo-900 font-medium leading-snug">{b.requirement || '[No Condition Stated]'}</p>
                         </div>
                         <span className="text-lg font-black text-indigo-600 shrink-0 font-mono">${formatWithCommas(b.amount)}</span>
                       </div>
@@ -507,7 +581,16 @@ function EmployeeContractForm({ employees }) {
                 </div>
               )}
 
-              <div className="mt-8 p-5 bg-slate-900 rounded-2xl text-white">
+              {/* Live Contract Structural Verification Info */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-1.5 text-xs text-slate-500">
+                <p className="font-bold uppercase text-[10px] text-slate-400 tracking-wider">Active Legal Layout Clauses</p>
+                <div className="flex justify-between"><span>Section 7 (Confidentiality):</span><span className={includeConfidentiality ? "text-emerald-600 font-bold" : "text-slate-400"}>{includeConfidentiality ? "Active" : "Omitted"}</span></div>
+                <div className="flex justify-between"><span>Section 8 (Non-Compete):</span><span className={includeNonCompete ? "text-emerald-600 font-bold" : "text-slate-400"}>{includeNonCompete ? "Active" : "Omitted"}</span></div>
+                <div className="flex justify-between"><span>Section 11 (Company Vehicle):</span><span className={includeVehicle ? "text-emerald-600 font-bold" : "text-slate-400"}>{includeVehicle ? "Active" : "Omitted"}</span></div>
+                <div className="flex justify-between"><span>Probation Medical Leaves:</span><span className="font-bold text-slate-700">{probationMcPaid ? "Paid Leave" : "Unpaid Leave"}</span></div>
+              </div>
+
+              <div className="p-5 bg-slate-900 rounded-2xl text-white">
                 <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1 flex items-center"><Calculator size={14} className="mr-1"/> Total Estimated Annual Value</h3>
                 <div className="flex justify-between items-end">
                   <span className="text-xs text-slate-300 max-w-[60%]">Assuming 12 months of service and all bonus targets are met.</span>
