@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { 
   Users, 
   Clock, 
@@ -27,6 +27,15 @@ const MOCK_EMPLOYEES = [
   { id: 'EMP-002', name: 'Kyaw Zin', role: 'Delivery Driver', status: 'Active', type: 'WP', basicSalary: 1800, levy: 450, cpfEligible: false, leaveEntitlement: 7, leavesTaken: 0, sickLeavesTaken: 0, workPassExpiry: '2026-11-15' }
 ];
 
+const TIME_OPTIONS = [
+  "06:00 AM", "06:30 AM", "07:00 AM", "07:30 AM", "08:00 AM", "08:30 AM",
+  "09:00 AM", "09:30 AM", "10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM",
+  "12:00 PM", "12:30 PM", "01:00 PM", "01:30 PM", "02:00 PM", "02:30 PM",
+  "03:00 PM", "03:30 PM", "04:00 PM", "04:30 PM", "05:00 PM", "05:30 PM",
+  "06:00 PM", "06:30 PM", "07:00 PM", "07:30 PM", "08:00 PM", "08:30 PM",
+  "09:00 PM", "09:30 PM", "10:00 PM", "10:30 PM", "11:00 PM", "11:30 PM",
+];
+
 // Helper to add commas to numbers (e.g., 2500 -> 2,500)
 const formatWithCommas = (num) => {
   if (!num) return '0';
@@ -37,8 +46,8 @@ const formatWithCommas = (num) => {
 // COMPONENT: CONTRACT GENERATOR (SUB-VIEW)
 // ==========================================
 function EmployeeContractForm({ employees }) {
-  // Employee Target
-  const [selectedEmpId, setSelectedEmpId] = useState('');
+  // Employee Target (Defaulting to Draft Mode)
+  const [selectedEmpId, setSelectedEmpId] = useState('DRAFT');
   const [employeeName, setEmployeeName] = useState('');
   const [nric, setNric] = useState('');
   const [phone, setPhone] = useState('');
@@ -56,7 +65,8 @@ function EmployeeContractForm({ employees }) {
   const [bonuses, setBonuses] = useState([]);
   
   // Work Hours & Entitlements
-  const [workTime, setWorkTime] = useState('1100 hrs to 2000 hrs');
+  const [startTime, setStartTime] = useState('11:00 AM');
+  const [endTime, setEndTime] = useState('08:00 PM');
   const [workDays, setWorkDays] = useState(6);
   const [annualLeave, setAnnualLeave] = useState(7);
   const [mcAllowance, setMcAllowance] = useState(14);
@@ -68,12 +78,20 @@ function EmployeeContractForm({ employees }) {
   const handleEmployeeSelect = (e) => {
     const id = e.target.value;
     setSelectedEmpId(id);
-    if (id === 'NEW') {
-      setEmployeeName(''); setRole('Logistics cum Transport Operator'); setBaseSalary(2000);
+    if (id === 'DRAFT' || id === 'NEW') {
+      setEmployeeName(''); 
+      setNric('');
+      setPhone('');
+      setRole('Logistics cum Transport Operator'); 
+      setBaseSalary(2000);
     } else if (id) {
       const emp = employees.find(emp => emp.id === id);
       if (emp) {
-        setEmployeeName(emp.name); setRole(emp.role); setBaseSalary(emp.basicSalary); setAnnualLeave(emp.leaveEntitlement);
+        setEmployeeName(emp.name); 
+        setRole(emp.role); 
+        setBaseSalary(emp.basicSalary); 
+        setAnnualLeave(emp.leaveEntitlement);
+        // NRIC and Phone would ideally be pulled from DB here too if available
       }
     }
   };
@@ -141,19 +159,19 @@ function EmployeeContractForm({ employees }) {
           
           <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-sm font-black uppercase tracking-widest text-slate-400 flex items-center"><User size={16} className="mr-2" /> Employee Details</h2>
+              <h2 className="text-sm font-black uppercase tracking-widest text-slate-400 flex items-center"><User size={16} className="mr-2" /> Target Employee</h2>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2">
                 <select value={selectedEmpId} onChange={handleEmployeeSelect} className="w-full border border-slate-200 rounded-xl p-3 text-sm font-bold bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer appearance-none">
-                  <option value="">-- Select Employee in System --</option>
-                  <option value="NEW">+ Create for New/External Employee</option>
-                  {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name} ({emp.role})</option>)}
+                  <option value="DRAFT">📝 Template / Interview Draft Mode</option>
+                  <option disabled>──────────────────────────</option>
+                  {employees.map(emp => <option key={emp.id} value={emp.id}>Assign to: {emp.name} ({emp.role})</option>)}
                 </select>
               </div>
               <div className="col-span-2">
-                <label className="block text-xs font-bold text-slate-600 mb-1">Full Name</label>
-                <input type="text" value={employeeName} onChange={e => setEmployeeName(e.target.value)} placeholder="e.g. John Doe" className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" />
+                <label className="block text-xs font-bold text-slate-600 mb-1">Full Name (Optional for Drafts)</label>
+                <input type="text" value={employeeName} onChange={e => setEmployeeName(e.target.value)} placeholder="Leave blank for signature line..." className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1">NRIC / FIN</label>
@@ -171,7 +189,7 @@ function EmployeeContractForm({ employees }) {
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2">
                 <label className="block text-xs font-bold text-slate-600 mb-1">Job Role</label>
-                <input type="text" value={role} onChange={e => setRole(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm font-bold text-slate-800 bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" />
+                <input type="text" value={role} onChange={e => setRole(e.target.value)} placeholder="e.g. Sales Executive" className="w-full border border-slate-200 rounded-xl p-2.5 text-sm font-bold text-slate-800 bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1">Commencement Date</label>
@@ -234,16 +252,28 @@ function EmployeeContractForm({ employees }) {
           <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
             <h2 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-4 flex items-center"><CalendarDays size={16} className="mr-2" /> Entitlements & Work Hours</h2>
             <div className="grid grid-cols-2 gap-4">
+              
               <div className="col-span-2 flex gap-4">
-                 <div className="flex-1">
-                   <label className="block text-xs font-bold text-slate-600 mb-1">Work Hours</label>
-                   <input type="text" value={workTime} onChange={e => setWorkTime(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none" />
+                 <div className="flex-1 flex gap-2">
+                   <div className="w-1/2">
+                     <label className="block text-xs font-bold text-slate-600 mb-1">Start Time</label>
+                     <select value={startTime} onChange={e => setStartTime(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none cursor-pointer">
+                        {TIME_OPTIONS.map(t => <option key={`start-${t}`} value={t}>{t}</option>)}
+                     </select>
+                   </div>
+                   <div className="w-1/2">
+                     <label className="block text-xs font-bold text-slate-600 mb-1">End Time</label>
+                     <select value={endTime} onChange={e => setEndTime(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none cursor-pointer">
+                        {TIME_OPTIONS.map(t => <option key={`end-${t}`} value={t}>{t}</option>)}
+                     </select>
+                   </div>
                  </div>
                  <div className="w-32">
                    <label className="block text-xs font-bold text-slate-600 mb-1">Days/Week</label>
                    <input type="number" value={workDays} onChange={e => setWorkDays(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none" />
                  </div>
               </div>
+
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1">Annual Leave</label>
                 <input type="number" value={annualLeave} onChange={e => setAnnualLeave(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none" />
@@ -275,8 +305,13 @@ function EmployeeContractForm({ employees }) {
 
             <div className="p-8 overflow-y-auto flex-1 text-slate-800">
               <div className="mb-6 border-b border-slate-200 pb-6">
+                {selectedEmpId === 'DRAFT' && (
+                  <span className="inline-block mb-3 px-3 py-1 bg-amber-100 text-amber-700 text-[10px] font-black uppercase tracking-widest rounded-full">
+                    Interview Draft Mode
+                  </span>
+                )}
                 <p className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-1">Prepared For</p>
-                <p className="text-2xl font-black">{employeeName || '[Employee Name]'}</p>
+                <p className="text-2xl font-black">{employeeName || '[Candidate Name]'}</p>
                 <p className="text-lg text-slate-600 font-medium mt-1">{role}</p>
                 <p className="text-sm text-slate-400 mt-1">Commencing: {formattedCommencement}</p>
               </div>
@@ -347,9 +382,9 @@ function EmployeeContractForm({ employees }) {
           
           <table style={{ width: '100%', marginBottom: '20px', borderCollapse: 'collapse' }}>
             <tbody>
-              <tr><td style={{ width: '25%', fontWeight: 'bold' }}>Employer:</td><td>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE[cite: 3]</td></tr>
-              <tr><td style={{ fontWeight: 'bold' }}>Address:</td><td>280 Woodlands Industrial Park E5 #06-35 Harvest @ Singapore 757322[cite: 3]</td></tr>
-              <tr><td style={{ fontWeight: 'bold' }}>Registration No:</td><td>53033969B[cite: 3]</td></tr>
+              <tr><td style={{ width: '25%', fontWeight: 'bold' }}>Employer:</td><td>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</td></tr>
+              <tr><td style={{ fontWeight: 'bold' }}>Address:</td><td>280 Woodlands Industrial Park E5 #06-35 Harvest @ Singapore 757322</td></tr>
+              <tr><td style={{ fontWeight: 'bold' }}>Registration No:</td><td>53033969B</td></tr>
             </tbody>
           </table>
 
@@ -358,90 +393,90 @@ function EmployeeContractForm({ employees }) {
             <table style={{ width: '100%', marginTop: '5px' }}>
               <tbody>
                 <tr>
-                  <td style={{ width: '50%' }}>Name: {employeeName}</td>
-                  <td>NRIC/FIN: {nric}</td>
-                  <td>Phone No: {phone}</td>
+                  <td style={{ width: '50%' }}>Name: {employeeName || '___________________________'}</td>
+                  <td>NRIC/FIN: {nric || '___________________'}</td>
+                  <td>Phone No: {phone || '___________________'}</td>
                 </tr>
               </tbody>
             </table>
           </div>
 
           <div className="contract-section">1. DESIGNATION & JOB SCOPE</div>
-          <p className="contract-p">1.1 The Employee shall be employed as a <strong>{role}</strong> and shall be primarily responsible for the duties as part of the Employer's operations. The Employee’s core duties include, but are not limited to, the following:</p>
+          <p className="contract-p">1.1 The Employee shall be employed as a <strong>{role || '___________________'}</strong> and shall be primarily responsible for the duties as part of the Employer's operations. The Employee’s core duties include, but are not limited to, the following:</p>
           <ul className="contract-list">
-            <li><strong>Delivery of Goods:</strong> The Employee will be responsible for the safe and efficient transportation of goods from the Employer's premises to designated locations.[cite: 3]</li>
-            <li><strong>Loading and Unloading:</strong> The Employee may be required to assist in the loading and unloading of goods and materials.[cite: 3]</li>
-            <li><strong>Warehouse-Related Functions:</strong> The Employee may be asked to perform general warehouse duties, including picking goods and organizing stock.[cite: 3]</li>
-            <li><strong>Vehicle Maintenance and Safety:</strong> The Employee is responsible for performing basic maintenance checks on the vehicle used.[cite: 3]</li>
+            <li><strong>Delivery of Goods:</strong> The Employee will be responsible for the safe and efficient transportation of goods from the Employer's premises to designated locations.</li>
+            <li><strong>Loading and Unloading:</strong> The Employee may be required to assist in the loading and unloading of goods and materials.</li>
+            <li><strong>Warehouse-Related Functions:</strong> The Employee may be asked to perform general warehouse duties, including picking goods and organizing stock.</li>
+            <li><strong>Vehicle Maintenance and Safety:</strong> The Employee is responsible for performing basic maintenance checks on the vehicle used.</li>
           </ul>
-          <p className="contract-p">1.2 The Employer may require the Employee to perform tasks and duties not explicitly stated above, but which are reasonably within the scope of the role.[cite: 3]</p>
+          <p className="contract-p">1.2 The Employer may require the Employee to perform tasks and duties not explicitly stated above, but which are reasonably within the scope of the role.</p>
 
           <div className="contract-section">2. COMMENCEMENT & DURATION OF EMPLOYMENT</div>
-          <p className="contract-p">2.1 This Contract shall commence on <strong>{formattedCommencement}</strong> and shall continue in effect until terminated by either party.[cite: 3]</p>
-          <p className="contract-p">2.2 The Employee shall serve a mandatory <strong>{probationMonths} months</strong> probation period. The slated date for the end of probation is on <strong>{probationEndDate}</strong>.[cite: 3]</p>
-          <p className="contract-p"><strong>Medical Leave:</strong> Any medical leave taken during the probationary period will be considered unpaid.[cite: 3]</p>
-          <p className="contract-p"><strong>Unpaid Leave:</strong> During the probationary period, the Employee shall not be entitled to paid leave, except in cases of compassionate grounds.[cite: 3]</p>
+          <p className="contract-p">2.1 This Contract shall commence on <strong>{formattedCommencement}</strong> and shall continue in effect until terminated by either party.</p>
+          <p className="contract-p">2.2 The Employee shall serve a mandatory <strong>{probationMonths} months</strong> probation period. The slated date for the end of probation is on <strong>{probationEndDate}</strong>.</p>
+          <p className="contract-p"><strong>Medical Leave:</strong> Any medical leave taken during the probationary period will be considered unpaid.</p>
+          <p className="contract-p"><strong>Unpaid Leave:</strong> During the probationary period, the Employee shall not be entitled to paid leave, except in cases of compassionate grounds.</p>
 
           <div className="contract-section">3. SALARY & COMPENSATION</div>
-          <p className="contract-p">3.1 The Employer agrees to pay the Employee a gross monthly salary of <strong>S${formatWithCommas(baseSalary)}</strong> whilst on probation, which includes the base salary for the agreed working hours.[cite: 3]</p>
+          <p className="contract-p">3.1 The Employer agrees to pay the Employee a gross monthly salary of <strong>S${formatWithCommas(baseSalary)}</strong> whilst on probation, which includes the base salary for the agreed working hours.</p>
           {allowances.length > 0 && (
-            <p className="contract-p">Additionally, the Employee is entitled to the following monthly allowances: {allowances.map(a => `${a.type} (S$${formatWithCommas(a.amount)})`).join(', ')}.</p>
+            <p className="contract-p">Additionally, the Employee is entitled to the following monthly allowances: {allowances.map(a => `${a.type || 'Allowance'} (S$${formatWithCommas(a.amount)})`).join(', ')}.</p>
           )}
-          <p className="contract-p">3.2 Salary will be paid on the 15th of each month by Bank Transfer/Paylah to the Employee's nominated account.[cite: 3]</p>
+          <p className="contract-p">3.2 Salary will be paid on the 15th of each month by Bank Transfer/Paylah to the Employee's nominated account.</p>
           {bonuses.length > 0 && (
             <p className="contract-p">3.3 <strong>Variable Bonuses:</strong> {bonuses.map(b => `S$${formatWithCommas(b.amount)} subject to: ${b.requirement}`).join('; ')}.</p>
           )}
 
           <div className="contract-section">4. WORK HOURS</div>
-          <p className="contract-p">4.1 The Employee’s regular working hours shall be from <strong>{workTime}</strong>, <strong>{workDays} days</strong> per week.[cite: 3]</p>
-          <p className="contract-p">4.2 It is a condition of employment that you may need to work outside these regular hours from time to time.[cite: 3]</p>
+          <p className="contract-p">4.1 The Employee’s regular working hours shall be from <strong>{startTime} to {endTime}</strong>, <strong>{workDays} days</strong> per week.</p>
+          <p className="contract-p">4.2 It is a condition of employment that you may need to work outside these regular hours from time to time.</p>
 
           <div className="contract-section">5. LEAVE ENTITLEMENT</div>
-          <p className="contract-p">5.1 The Employee is entitled to <strong>{annualLeave} days</strong> Annual Leave per year and Public Holidays in accordance with Singapore laws.[cite: 3]</p>
-          <p className="contract-p">5.2 The Employee’s leave entitlement will only take effect after they serve the probationary period.[cite: 3]</p>
-          <p className="contract-p">5.3 Approval of leave is at the sole discretion of the Employer.[cite: 3]</p>
-          <p className="contract-p">5.4 Off-in-Lieu: If required to work on a public holiday, time off in lieu may be granted.[cite: 3]</p>
+          <p className="contract-p">5.1 The Employee is entitled to <strong>{annualLeave} days</strong> Annual Leave per year and Public Holidays in accordance with Singapore laws.</p>
+          <p className="contract-p">5.2 The Employee’s leave entitlement will only take effect after they serve the probationary period.</p>
+          <p className="contract-p">5.3 Approval of leave is at the sole discretion of the Employer.</p>
+          <p className="contract-p">5.4 Off-in-Lieu: If required to work on a public holiday, time off in lieu may be granted.</p>
 
           <div className="contract-section">6. MEDICAL BENEFIT</div>
-          <p className="contract-p">6.1 You are entitled to <strong>{mcAllowance} days</strong> paid sick leave, requiring a medical certificate within Singapore.[cite: 3]</p>
-          <p className="contract-p">6.2 You are entitled to <strong>{hospLeave} days</strong> paid hospitalization leave.[cite: 3]</p>
-          <p className="contract-p">6.3 Sick and hospitalization leave entitlement will commence after your probation period.[cite: 3]</p>
+          <p className="contract-p">6.1 You are entitled to <strong>{mcAllowance} days</strong> paid sick leave, requiring a medical certificate within Singapore.</p>
+          <p className="contract-p">6.2 You are entitled to <strong>{hospLeave} days</strong> paid hospitalization leave.</p>
+          <p className="contract-p">6.3 Sick and hospitalization leave entitlement will commence after your probation period.</p>
 
           <div className="contract-section">7. CONFIDENTIALITY & NON-DISCLOSURE</div>
-          <p className="contract-p">7.1 The Employee agrees not to disclose or use any confidential information or trade secrets of the Employer.[cite: 3] 7.2 This obligation survives the termination of employment.[cite: 3]</p>
+          <p className="contract-p">7.1 The Employee agrees not to disclose or use any confidential information or trade secrets of the Employer. 7.2 This obligation survives the termination of employment.</p>
         </div>
 
         <div className="contract-page">
           <div className="contract-section">8. NON-COMPETE AND CONFLICT OF INTEREST</div>
-          <p className="contract-p">8.1 The Employee agrees that for a period of <strong>{nonCompeteYears} Year</strong> following termination, they shall not engage in or consult for any business that competes with the Employer.[cite: 3]</p>
-          <p className="contract-p">8.2 The Employee acknowledges these restrictions are reasonable to protect the Employer's business interests.[cite: 3]</p>
+          <p className="contract-p">8.1 The Employee agrees that for a period of <strong>{nonCompeteYears} Year</strong> following termination, they shall not engage in or consult for any business that competes with the Employer.</p>
+          <p className="contract-p">8.2 The Employee acknowledges these restrictions are reasonable to protect the Employer's business interests.</p>
 
           <div className="contract-section">9. TERMINATION</div>
-          <p className="contract-p">9.1 The Employee may terminate this Contract by providing <strong>{noticePeriod} month</strong> written notice.[cite: 3]</p>
-          <p className="contract-p">9.2 The Employer may terminate employment with or without notice for Misconduct, Poor Performance, or Incapacity.[cite: 3]</p>
+          <p className="contract-p">9.1 The Employee may terminate this Contract by providing <strong>{noticePeriod} month</strong> written notice.</p>
+          <p className="contract-p">9.2 The Employer may terminate employment with or without notice for Misconduct, Poor Performance, or Incapacity.</p>
 
           <div className="contract-section">10. EMPLOYEE’S OBLIGATION</div>
-          <p className="contract-p">10.1 Comply with all workplace policies.[cite: 3] 10.2 Maintain proper conduct.[cite: 3] 10.3 Comply with traffic laws when operating vehicles.[cite: 3] 10.6 The Employee may be held responsible for costs due to misconduct.[cite: 3]</p>
+          <p className="contract-p">10.1 Comply with all workplace policies. 10.2 Maintain proper conduct. 10.3 Comply with traffic laws when operating vehicles. 10.6 The Employee may be held responsible for costs due to misconduct.</p>
 
           <div className="contract-section">11. COMPANY VEHICLE USAGE</div>
-          <p className="contract-p">11.1 The vehicle is solely for commuting. Unauthorized private use is strictly prohibited. The Employee is liable for private use incidents.[cite: 3]</p>
+          <p className="contract-p">11.1 The vehicle is solely for commuting. Unauthorized private use is strictly prohibited. The Employee is liable for private use incidents.</p>
 
           <div className="contract-section">12. AMENDMENTS OF TERMS</div>
-          <p className="contract-p">12.1 The Employer reserves the right to amend the terms provided they comply with Singapore’s Employment Act.[cite: 3]</p>
+          <p className="contract-p">12.1 The Employer reserves the right to amend the terms provided they comply with Singapore’s Employment Act.</p>
 
           <div className="contract-section">13. GOVERNING LAW</div>
-          <p className="contract-p">13.1 This Contract shall be governed by the laws of the Republic of Singapore.[cite: 3]</p>
+          <p className="contract-p">13.1 This Contract shall be governed by the laws of the Republic of Singapore.</p>
 
           <div className="contract-section">14. ACKNOWLEDGEMENT AND ACCEPTANCE</div>
-          <p className="contract-p">By signing this Employment Contract, the Employee acknowledges that they have read, understood, and agree to the terms.[cite: 3]</p>
+          <p className="contract-p">By signing this Employment Contract, the Employee acknowledges that they have read, understood, and agree to the terms.</p>
 
           <div style={{ marginTop: '50px' }}>
-            <p>I, <strong>{employeeName || '___________________________'}</strong>, I/C No. <strong>{nric || '___________________'}</strong> confirm that I have read, understood and accept the terms and conditions of employment set out in this Contract.[cite: 3]</p>
+            <p>I, <strong>{employeeName || '___________________________'}</strong>, I/C No. <strong>{nric || '___________________'}</strong> confirm that I have read, understood and accept the terms and conditions of employment set out in this Contract.</p>
             <table style={{ width: '100%', marginTop: '40px' }}>
               <tbody>
                 <tr>
-                  <td style={{ width: '50%' }}>Signature: _______________________________[cite: 3]</td>
-                  <td>Date: __________________________________[cite: 3]</td>
+                  <td style={{ width: '50%' }}>Signature: _______________________________</td>
+                  <td>Date: __________________________________</td>
                 </tr>
               </tbody>
             </table>
@@ -456,7 +491,7 @@ function EmployeeContractForm({ employees }) {
 // MAIN COMPONENT
 // ==========================================
 export function EmployeeModule() {
-  const [activeTab, setActiveTab] = useState('Contracts'); // Defaulting to Contracts to see the new feature
+  const [activeTab, setActiveTab] = useState('Contracts'); 
   const [searchTerm, setSearchTerm] = useState('');
 
   const filteredEmployees = MOCK_EMPLOYEES.filter(emp => 
