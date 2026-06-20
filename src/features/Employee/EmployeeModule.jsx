@@ -14,7 +14,9 @@ import {
   AlertTriangle,
   Calendar,
   CheckCircle,
-  Calculator
+  Calculator,
+  Trash2,
+  Briefcase
 } from 'lucide-react';
 import { formatMoney } from '../../utils/format';
 
@@ -55,127 +57,194 @@ const MOCK_EMPLOYEES = [
 // ==========================================
 // COMPONENT: CONTRACT GENERATOR (SUB-VIEW)
 // ==========================================
-function EmployeeContractForm() {
-  const [employee, setEmployee] = useState({ name: '', role: '', effectiveDate: '2026-01-01' });
+function EmployeeContractForm({ employees }) {
+  // Employee Target
+  const [selectedEmpId, setSelectedEmpId] = useState('');
+  const [employeeName, setEmployeeName] = useState('');
+  const [role, setRole] = useState('');
+  const [effectiveDate, setEffectiveDate] = useState(new Date().toISOString().split('T')[0]);
   
   // Financials
   const [baseSalary, setBaseSalary] = useState(2500);
-  const [allowance, setAllowance] = useState(300);
   
-  // Bonus & Tiers
-  const [bonusTarget, setBonusTarget] = useState(2500); 
-  const [earlyWithdrawalPenalty, setEarlyWithdrawalPenalty] = useState(50); 
+  // Dynamic Arrays
+  const [allowances, setAllowances] = useState([{ id: Date.now(), type: 'Transport', amount: 300 }]);
+  const [bonuses, setBonuses] = useState([{ id: Date.now() + 1, requirement: 'Completion of 1 full year of service', amount: 2500 }]);
   
   // Leave & Entitlements
   const [annualLeave, setAnnualLeave] = useState(14);
-  const [medicalLeave, setMedicalLeave] = useState(14);
-  const [leaveNoticeDays, setLeaveNoticeDays] = useState(14); 
-  
-  // Penalty Triggers
-  const [lateNoticePenalty, setLateNoticePenalty] = useState(100);
+  const [mcAllowance, setMcAllowance] = useState(14);
 
-  // Live Calculations
-  const monthlyGross = Number(baseSalary) + Number(allowance);
-  const standardAnnualTotal = (monthlyGross * 12) + Number(bonusTarget);
-  const earlyDepartureBonus = Number(bonusTarget) * (1 - (Number(earlyWithdrawalPenalty) / 100));
+  // --- Handlers ---
+  const handleEmployeeSelect = (e) => {
+    const id = e.target.value;
+    setSelectedEmpId(id);
+    if (id === 'NEW') {
+      setEmployeeName('');
+      setRole('');
+      setBaseSalary(0);
+    } else if (id) {
+      const emp = employees.find(emp => emp.id === id);
+      if (emp) {
+        setEmployeeName(emp.name);
+        setRole(emp.role);
+        setBaseSalary(emp.basicSalary);
+        setAnnualLeave(emp.leaveEntitlement);
+      }
+    }
+  };
+
+  const addAllowance = () => setAllowances([...allowances, { id: Date.now(), type: '', amount: 0 }]);
+  const removeAllowance = (id) => setAllowances(allowances.filter(a => a.id !== id));
+  const updateAllowance = (id, field, value) => setAllowances(allowances.map(a => a.id === id ? { ...a, [field]: value } : a));
+
+  const addBonus = () => setBonuses([...bonuses, { id: Date.now(), requirement: '', amount: 0 }]);
+  const removeBonus = (id) => setBonuses(bonuses.filter(b => b.id !== id));
+  const updateBonus = (id, field, value) => setBonuses(bonuses.map(b => b.id === id ? { ...b, [field]: value } : b));
+
+  // --- Calculations ---
+  const totalAllowances = allowances.reduce((sum, a) => sum + (Number(a.amount) || 0), 0);
+  const monthlyGross = Number(baseSalary) + totalAllowances;
+  const totalBonuses = bonuses.reduce((sum, b) => sum + (Number(b.amount) || 0), 0);
+  const standardAnnualTotal = (monthlyGross * 12) + totalBonuses;
 
   return (
     <div className="flex flex-col lg:flex-row gap-8 pb-12 animate-in fade-in duration-300">
       
+      {/* ========================================== */}
       {/* LEFT COLUMN: EMPLOYER CONTROL PANEL */}
+      {/* ========================================== */}
       <div className="w-full lg:w-1/2 space-y-6">
         
-        {/* Section 1: Basic Info */}
+        {/* Section 1: Employee Link */}
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-sm font-black uppercase tracking-widest text-slate-400 flex items-center">
+              <User size={16} className="mr-2" /> Assign Contract To
+            </h2>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="col-span-2">
+              <select value={selectedEmpId} onChange={handleEmployeeSelect} className="w-full border border-slate-200 rounded-xl p-3 text-sm font-bold bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer appearance-none">
+                <option value="">-- Select Employee in System --</option>
+                <option value="NEW">+ Create for New/External Employee</option>
+                {employees.map(emp => (
+                  <option key={emp.id} value={emp.id}>{emp.name} ({emp.role})</option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="col-span-2 md:col-span-1">
+              <label className="block text-xs font-bold text-slate-600 mb-1">Full Name</label>
+              <input type="text" value={employeeName} onChange={e => setEmployeeName(e.target.value)} placeholder="e.g. John Doe" className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div className="col-span-2 md:col-span-1">
+              <label className="block text-xs font-bold text-slate-600 mb-1">Effective Date</label>
+              <input type="date" value={effectiveDate} onChange={e => setEffectiveDate(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+          </div>
+        </div>
+
+        {/* Section 2: Role & Base Salary */}
         <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
           <h2 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-4 flex items-center">
-            <User size={16} className="mr-2" /> Employee Details
+            <Briefcase size={16} className="mr-2" /> Job Role & Base Pay
           </h2>
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
-              <label className="block text-xs font-bold text-slate-600 mb-1">Full Name</label>
-              <input type="text" value={employee.name} onChange={e => setEmployee({...employee, name: e.target.value})} placeholder="e.g. John Doe" className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" />
+              <label className="block text-xs font-bold text-slate-600 mb-1">Job Role (Free Text)</label>
+              <input type="text" value={role} onChange={e => setRole(e.target.value)} placeholder="e.g. Senior Logistics Coordinator" className="w-full border border-slate-200 rounded-xl p-2.5 text-sm font-bold text-slate-800 bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-600 mb-1">Job Role</label>
-              <input type="text" value={employee.role} onChange={e => setEmployee({...employee, role: e.target.value})} placeholder="e.g. Warehouse Manager" className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-600 mb-1">Effective Date</label>
-              <input type="date" value={employee.effectiveDate} onChange={e => setEmployee({...employee, effectiveDate: e.target.value})} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" />
+            <div className="col-span-2">
+              <label className="block text-xs font-bold text-slate-600 mb-1">Base Salary ($)</label>
+              <input type="number" value={baseSalary} onChange={e => setBaseSalary(e.target.value)} className="w-full border border-slate-200 rounded-xl p-3 text-lg font-black text-blue-700 bg-blue-50/50 outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
           </div>
         </div>
 
-        {/* Section 2: Core Compensation */}
+        {/* Section 3: Dynamic Allowances */}
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-sm font-black uppercase tracking-widest text-slate-400 flex items-center">
+              <DollarSign size={16} className="mr-2" /> Monthly Allowances
+            </h2>
+            <span className="text-xs font-bold text-slate-500">Total: ${formatMoney(totalAllowances)}</span>
+          </div>
+          
+          <div className="space-y-3 mb-4">
+            {allowances.map((al, index) => (
+              <div key={al.id} className="flex items-center gap-3 bg-slate-50 p-2 rounded-xl border border-slate-100">
+                <div className="flex-1">
+                  <input type="text" value={al.type} onChange={e => updateAllowance(al.id, 'type', e.target.value)} placeholder="Type (e.g. Transport)" className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm outline-none focus:border-emerald-500" />
+                </div>
+                <div className="w-32 relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
+                  <input type="number" value={al.amount} onChange={e => updateAllowance(al.id, 'amount', e.target.value)} placeholder="0" className="w-full bg-white border border-slate-200 rounded-lg py-2 pl-7 pr-2 text-sm font-bold text-emerald-700 outline-none focus:border-emerald-500" />
+                </div>
+                <button onClick={() => removeAllowance(al.id)} className="p-2 text-slate-400 hover:text-red-500 transition-colors"><Trash2 size={16}/></button>
+              </div>
+            ))}
+            {allowances.length === 0 && <p className="text-xs text-slate-400 italic text-center py-2">No allowances added.</p>}
+          </div>
+          <button onClick={addAllowance} className="text-xs font-bold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 px-4 py-2 rounded-lg transition-colors w-full">+ Add Allowance</button>
+        </div>
+
+        {/* Section 4: Dynamic Bonuses */}
+        <div className="bg-gradient-to-br from-indigo-50 to-purple-50 p-6 rounded-3xl shadow-sm border border-indigo-100">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-sm font-black uppercase tracking-widest text-indigo-800 flex items-center">
+              <Gift size={16} className="mr-2" /> Bonuses & Requirements
+            </h2>
+          </div>
+          
+          <div className="space-y-3 mb-4">
+            {bonuses.map((b, index) => (
+              <div key={b.id} className="flex flex-col gap-2 bg-white p-3 rounded-xl border border-indigo-100 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="flex-1">
+                    <label className="text-[10px] font-bold text-indigo-400 uppercase">Requirement / Condition</label>
+                    <input type="text" value={b.requirement} onChange={e => updateBonus(b.id, 'requirement', e.target.value)} placeholder="e.g. No MCs taken in 6 months" className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-sm outline-none focus:border-indigo-500 mt-1" />
+                  </div>
+                  <div className="w-36">
+                    <label className="text-[10px] font-bold text-indigo-400 uppercase">Amount ($)</label>
+                    <div className="relative mt-1">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
+                      <input type="number" value={b.amount} onChange={e => updateBonus(b.id, 'amount', e.target.value)} placeholder="0" className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 pl-7 pr-2 text-sm font-bold text-indigo-700 outline-none focus:border-indigo-500" />
+                    </div>
+                  </div>
+                  <button onClick={() => removeBonus(b.id)} className="mt-5 p-2 text-slate-400 hover:text-red-500 transition-colors"><Trash2 size={16}/></button>
+                </div>
+              </div>
+            ))}
+            {bonuses.length === 0 && <p className="text-xs text-indigo-400 italic text-center py-2">No bonuses added.</p>}
+          </div>
+          <button onClick={addBonus} className="text-xs font-bold text-white bg-indigo-500 hover:bg-indigo-600 px-4 py-2 rounded-lg transition-colors w-full shadow-md">+ Add Bonus Tier</button>
+        </div>
+
+        {/* Section 5: Leave Entitlements */}
         <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
           <h2 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-4 flex items-center">
-            <DollarSign size={16} className="mr-2" /> Monthly Package
+            <CalendarDays size={16} className="mr-2" /> Leave & MC Allowances
           </h2>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-slate-600 mb-1">Base Salary ($)</label>
-              <input type="number" value={baseSalary} onChange={e => setBaseSalary(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm font-bold text-slate-800 bg-slate-50 outline-none focus:ring-2 focus:ring-emerald-500" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-600 mb-1">Allowances ($)</label>
-              <input type="number" value={allowance} onChange={e => setAllowance(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm font-bold text-slate-800 bg-slate-50 outline-none focus:ring-2 focus:ring-emerald-500" />
-            </div>
-          </div>
-        </div>
-
-        {/* Section 3: Bonus & Early Withdrawal Logic */}
-        <div className="bg-gradient-to-br from-indigo-50 to-purple-50 p-6 rounded-3xl shadow-sm border border-indigo-100">
-          <h2 className="text-sm font-black uppercase tracking-widest text-indigo-800 mb-4 flex items-center">
-            <Gift size={16} className="mr-2" /> Tiered Bonus & Withdrawal Rules
-          </h2>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold text-indigo-900 mb-1">Tier 1: Full 1-Year Bonus Target ($)</label>
-              <input type="number" value={bonusTarget} onChange={e => setBonusTarget(e.target.value)} className="w-full border border-indigo-200 rounded-xl p-2.5 text-sm font-bold text-indigo-900 bg-white outline-none focus:ring-2 focus:ring-indigo-500" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-indigo-900 mb-1">Early Withdrawal Penalty (%)</label>
-              <div className="flex items-center space-x-3">
-                <input type="range" min="0" max="100" value={earlyWithdrawalPenalty} onChange={e => setEarlyWithdrawalPenalty(e.target.value)} className="w-full accent-indigo-600" />
-                <span className="text-sm font-black text-indigo-900 w-12">{earlyWithdrawalPenalty}%</span>
-              </div>
-              <p className="text-[10px] text-indigo-600 mt-1 font-medium">If drawn before 1 year, bonus drops from ${bonusTarget} to ${earlyDepartureBonus}.</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Section 4: Leave & Operational Penalties */}
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-          <h2 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-4 flex items-center">
-            <Calendar size={16} className="mr-2" /> Entitlements & Penalties
-          </h2>
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div>
               <label className="block text-xs font-bold text-slate-600 mb-1">Annual Leave (Days)</label>
-              <input type="number" value={annualLeave} onChange={e => setAnnualLeave(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none" />
+              <input type="number" value={annualLeave} onChange={e => setAnnualLeave(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm font-bold bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-600 mb-1">Medical Leave (Days)</label>
-              <input type="number" value={medicalLeave} onChange={e => setMedicalLeave(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none" />
-            </div>
-          </div>
-          <div className="p-4 bg-orange-50 border border-orange-200 rounded-xl space-y-3">
-            <div>
-              <label className="block text-xs font-bold text-orange-800 mb-1">Min. Leave Notice Period (Days)</label>
-              <input type="number" value={leaveNoticeDays} onChange={e => setLeaveNoticeDays(e.target.value)} className="w-full border border-orange-200 rounded-xl p-2 text-sm bg-white outline-none focus:ring-2 focus:ring-orange-500" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-orange-800 mb-1">Last-Minute Notice Penalty ($)</label>
-              <input type="number" value={lateNoticePenalty} onChange={e => setLateNoticePenalty(e.target.value)} className="w-full border border-orange-200 rounded-xl p-2 text-sm bg-white outline-none focus:ring-2 focus:ring-orange-500" />
+              <label className="block text-xs font-bold text-slate-600 mb-1">MC Allowance (Days)</label>
+              <input type="number" value={mcAllowance} onChange={e => setMcAllowance(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm font-bold bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
           </div>
         </div>
 
       </div>
 
+      {/* ========================================== */}
       {/* RIGHT COLUMN: LIVE EMPLOYEE PREVIEW */}
+      {/* ========================================== */}
       <div className="w-full lg:w-1/2">
-        <div className="sticky top-0 bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden flex flex-col h-auto max-h-[80vh]">
+        <div className="sticky top-0 bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden flex flex-col h-auto max-h-[85vh]">
           
           {/* Document Header */}
           <div className="bg-slate-900 p-6 text-white text-center shrink-0">
@@ -184,62 +253,83 @@ function EmployeeContractForm() {
           </div>
 
           <div className="p-8 overflow-y-auto flex-1 text-slate-800">
+            
+            {/* Employee Profile Header */}
             <div className="mb-6 border-b border-slate-200 pb-6">
               <p className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-1">Prepared For</p>
-              <p className="text-2xl font-black">{employee.name || '[Employee Name]'}</p>
-              <p className="text-lg text-slate-600">{employee.role || '[Job Position]'} • Effective: {employee.effectiveDate}</p>
+              <p className="text-2xl font-black">{employeeName || '[Employee Name]'}</p>
+              <p className="text-lg text-slate-600 font-medium mt-1">{role || '[Job Position]'}</p>
+              <p className="text-sm text-slate-400 mt-1">Effective Date: {effectiveDate}</p>
             </div>
 
             {/* Monthly Breakdown */}
             <div className="mb-8">
               <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center"><DollarSign size={16} className="mr-1"/> Monthly Package</h3>
-              <div className="space-y-2 text-sm font-medium">
-                <div className="flex justify-between"><span className="text-slate-500">Base Salary</span><span>${formatMoney(baseSalary)}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">Guaranteed Allowances</span><span>${formatMoney(allowance)}</span></div>
-                <div className="flex justify-between pt-2 border-t border-slate-100 text-lg font-black"><span className="text-slate-900">Total Monthly Gross</span><span className="text-emerald-600">${formatMoney(monthlyGross)}</span></div>
+              <div className="space-y-2 text-sm font-medium bg-slate-50 p-4 rounded-xl border border-slate-100">
+                <div className="flex justify-between items-center"><span className="text-slate-600 font-bold">Base Salary</span><span className="font-mono text-base">${formatMoney(baseSalary)}</span></div>
+                
+                {allowances.map(al => (
+                  <div key={al.id} className="flex justify-between items-center pl-4 border-l-2 border-emerald-200">
+                    <span className="text-slate-500">Allowance: {al.type || 'Unnamed'}</span>
+                    <span className="font-mono text-slate-600">+ ${formatMoney(al.amount)}</span>
+                  </div>
+                ))}
+                
+                <div className="flex justify-between pt-3 mt-2 border-t border-slate-200 text-lg font-black">
+                  <span className="text-slate-900">Total Monthly Gross</span>
+                  <span className="text-emerald-600 font-mono">${formatMoney(monthlyGross)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Bonuses */}
+            {bonuses.length > 0 && (
+              <div className="mb-8">
+                <h3 className="text-sm font-black uppercase tracking-widest text-indigo-400 mb-3 flex items-center"><Gift size={16} className="mr-1"/> Variable Bonuses</h3>
+                <div className="space-y-3">
+                  {bonuses.map((b, idx) => (
+                    <div key={b.id} className="p-4 bg-indigo-50 border border-indigo-100 rounded-xl flex justify-between items-start gap-4">
+                      <div>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-indigo-400 block mb-1">Bonus Tier {idx + 1}</span>
+                        <p className="text-sm text-indigo-900 font-medium leading-snug">{b.requirement || '[Requirement not specified]'}</p>
+                      </div>
+                      <span className="text-lg font-black text-indigo-600 shrink-0 font-mono">${formatMoney(b.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Leave & Operational Clause */}
+            <div className="space-y-6">
+              <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl">
+                <h4 className="text-xs font-black uppercase tracking-widest text-amber-800 mb-2 flex items-center"><CalendarDays size={14} className="mr-1"/> Leaves & Entitlements</h4>
+                <ul className="text-sm text-amber-900 space-y-2 list-disc pl-4 marker:text-amber-400">
+                  <li>You are entitled to <strong>{annualLeave} days</strong> of paid Annual Leave per calendar year.</li>
+                  <li>You are provided a Medical (MC) Allowance of up to <strong>{mcAllowance} days</strong> per calendar year. Appropriate medical certificates must be produced.</li>
+                </ul>
               </div>
             </div>
 
             {/* Annual Package View */}
-            <div className="mb-8 p-5 bg-slate-50 rounded-2xl border border-slate-200">
-              <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center"><Calculator size={16} className="mr-1"/> Estimated Annual Value</h3>
+            <div className="mt-8 p-5 bg-slate-900 rounded-2xl text-white">
+              <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1 flex items-center"><Calculator size={14} className="mr-1"/> Total Estimated Annual Value</h3>
               <div className="flex justify-between items-end">
-                <span className="text-xs font-bold text-slate-500">Inclusive of Base, Allowances & Tier 1 Bonus</span>
-                <span className="text-3xl font-black tracking-tighter text-slate-900">${formatMoney(standardAnnualTotal)}</span>
+                <span className="text-xs text-slate-300 max-w-[60%]">Assuming 12 months of service and all bonus targets are met.</span>
+                <span className="text-3xl font-black tracking-tighter text-emerald-400 font-mono">${formatMoney(standardAnnualTotal)}</span>
               </div>
             </div>
 
-            {/* Strict Terms */}
-            <div className="space-y-6">
-              
-              {/* Bonus Clause */}
-              <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-xl">
-                <h4 className="text-xs font-black uppercase tracking-widest text-indigo-800 mb-2 flex items-center"><Gift size={14} className="mr-1"/> Bonus & Early Withdrawal Terms</h4>
-                <ul className="text-sm text-indigo-900 space-y-2 list-disc pl-4 marker:text-indigo-300">
-                  <li>A Tier 1 performance bonus of <strong>${formatMoney(bonusTarget)}</strong> will be awarded upon completion of 1 full year of service.</li>
-                  <li><strong>Early Withdrawal Flexibility:</strong> Employees may request to draw their bonus early or resign before the 1-year mark. In such events, the bonus is subject to a <strong>{earlyWithdrawalPenalty}% penalty</strong>, reducing the payout to <strong>${formatMoney(earlyDepartureBonus)}</strong>.</li>
-                </ul>
-              </div>
-
-              {/* Operations Clause */}
-              <div className="p-4 bg-orange-50 border border-orange-100 rounded-xl">
-                <h4 className="text-xs font-black uppercase tracking-widest text-orange-800 mb-2 flex items-center"><AlertTriangle size={14} className="mr-1"/> Operational & Leave Protocol</h4>
-                <ul className="text-sm text-orange-900 space-y-2 list-disc pl-4 marker:text-orange-300">
-                  <li>Entitled to <strong>{annualLeave} Days</strong> Annual Leave and <strong>{medicalLeave} Days</strong> Medical Leave per annum.</li>
-                  <li>All non-medical leave must be declared exactly <strong>{leaveNoticeDays} days</strong> in advance.</li>
-                  <li>Failure to provide the required notice will result in a <strong>${formatMoney(lateNoticePenalty)} penalty deduction</strong> per infraction, which may affect subsequent bonus appraisals.</li>
-                </ul>
-              </div>
-
-            </div>
           </div>
 
           {/* Signature Area */}
-          <div className="p-6 bg-slate-50 border-t border-slate-200 shrink-0">
-            <button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-4 rounded-xl shadow-lg transition-all flex items-center justify-center">
-              <CheckCircle className="mr-2" size={20} /> I Read & Accept These Terms
+          <div className="p-6 bg-slate-50 border-t border-slate-200 shrink-0 flex gap-3">
+            <button className="flex-1 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold py-3 rounded-xl transition-all">
+              Save as Draft
             </button>
-            <p className="text-[10px] text-center text-slate-400 mt-3 font-bold uppercase tracking-widest">Digital Signature Required for Acknowledgment</p>
+            <button className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-black py-3 rounded-xl shadow-lg transition-all flex items-center justify-center">
+              <CheckCircle className="mr-2" size={18} /> Finalize Contract
+            </button>
           </div>
 
         </div>
@@ -382,7 +472,7 @@ export function EmployeeModule() {
       )}
 
       {/* TAB CONTENT: CONTRACTS */}
-      {activeTab === 'Contracts' && <EmployeeContractForm />}
+      {activeTab === 'Contracts' && <EmployeeContractForm employees={MOCK_EMPLOYEES} />}
 
       {/* PLACEHOLDER FOR OTHER TABS */}
       {activeTab !== 'Directory' && activeTab !== 'Contracts' && (
