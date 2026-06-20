@@ -65,6 +65,14 @@ function EmployeeContractForm({ employees }) {
   const [allowances, setAllowances] = useState([]);
   const [bonuses, setBonuses] = useState([]);
   
+  // Smart Bonus Presets (Learns as you type)
+  const [bonusPresets, setBonusPresets] = useState([
+    'Completion of 1 full year of service',
+    'Perfect Attendance (0 Days Lateness)',
+    'No Unofficial Leaves (No-shows / AWOL)',
+    'No MCs taken beyond allocated quota',
+  ]);
+  
   // Work Hours & Entitlements
   const [startTime, setStartTime] = useState('11:00 AM');
   const [endTime, setEndTime] = useState('08:00 PM');
@@ -103,6 +111,22 @@ function EmployeeContractForm({ employees }) {
   const addBonus = () => setBonuses([...bonuses, { id: Date.now(), requirement: '', amount: 0 }]);
   const removeBonus = (id) => setBonuses(bonuses.filter(b => b.id !== id));
   const updateBonus = (id, field, value) => setBonuses(bonuses.map(b => b.id === id ? { ...b, [field]: value } : b));
+  
+  const addUnusedMcBonus = () => {
+    const mcBonusAmount = Number(mcAllowance) * 20;
+    setBonuses([...bonuses, { 
+      id: Date.now(), 
+      requirement: 'Zero Medical Leaves Taken (Unused MC Cash Conversion)', 
+      amount: mcBonusAmount 
+    }]);
+  };
+
+  const handleBonusBlur = (val) => {
+    const cleanVal = val.trim();
+    if (cleanVal && !bonusPresets.includes(cleanVal)) {
+      setBonusPresets([...bonusPresets, cleanVal]);
+    }
+  };
 
   const handlePrint = () => window.print();
 
@@ -267,6 +291,12 @@ function EmployeeContractForm({ employees }) {
 
   return (
     <>
+      <datalist id="bonus-presets">
+        {bonusPresets.map((preset, index) => (
+          <option key={index} value={preset} />
+        ))}
+      </datalist>
+
       {/* SCREEN UI */}
       <div className="flex flex-col lg:flex-row gap-8 pb-12 animate-in fade-in duration-300">
         
@@ -349,11 +379,19 @@ function EmployeeContractForm({ employees }) {
             <div className="space-y-3 mb-4">
               {bonuses.map((b) => (
                 <div key={b.id} className="flex flex-col gap-2 bg-white p-3 rounded-xl border border-indigo-100 shadow-sm">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-start gap-3">
                     <div className="flex-1">
-                      <input type="text" value={b.requirement} onChange={e => updateBonus(b.id, 'requirement', e.target.value)} placeholder="Requirement..." className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-sm outline-none focus:border-indigo-500" />
+                      <input 
+                        type="text" 
+                        list="bonus-presets"
+                        value={b.requirement} 
+                        onChange={e => updateBonus(b.id, 'requirement', e.target.value)} 
+                        onBlur={e => handleBonusBlur(e.target.value)}
+                        placeholder="Select or type custom condition..." 
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-sm outline-none focus:border-indigo-500" 
+                      />
                     </div>
-                    <div className="w-36 relative">
+                    <div className="w-32 relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
                       <input type="number" value={b.amount} onChange={e => updateBonus(b.id, 'amount', e.target.value)} placeholder="0" className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 pl-7 pr-2 text-sm font-bold text-indigo-700 outline-none focus:border-indigo-500" />
                     </div>
@@ -362,7 +400,10 @@ function EmployeeContractForm({ employees }) {
                 </div>
               ))}
             </div>
-            <button onClick={addBonus} className="text-xs font-bold text-white bg-indigo-500 hover:bg-indigo-600 px-4 py-2 rounded-lg transition-colors w-full">+ Add Bonus</button>
+            <div className="flex gap-2">
+              <button onClick={addBonus} className="flex-1 text-xs font-bold text-white bg-indigo-500 hover:bg-indigo-600 px-4 py-2 rounded-lg transition-colors shadow-sm">+ Add Bonus</button>
+              <button onClick={addUnusedMcBonus} className="flex-1 text-xs font-bold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 px-4 py-2 rounded-lg transition-colors shadow-sm">+ Add Unused MC Bonus ($20/day)</button>
+            </div>
           </div>
 
           <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
@@ -504,98 +545,100 @@ export function EmployeeModule() {
 
   return (
     <div className="p-8 h-full overflow-y-auto bg-slate-50">
-      {/* HEADER */}
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900 flex items-center">
-            <Users className="mr-3 text-blue-600" size={28} />
-            Employee Management
-          </h1>
-          <p className="text-base text-slate-500 mt-1">
-            Track attendance, payroll, MOM levies, and leave entitlements.
-          </p>
-        </div>
-        <button className="flex items-center rounded-xl bg-blue-600 px-6 py-2.5 font-medium text-white shadow-lg transition-all hover:bg-blue-700 active:scale-95">
-          <Plus className="mr-2" size={18} /> Add Employee
-        </button>
-      </div>
-
-      {/* NAVIGATION TABS */}
-      <div className="flex space-x-2 mb-6 border-b border-slate-200 pb-2 overflow-x-auto">
-        {[
-          { id: 'Directory', icon: Users },
-          { id: 'Contracts', icon: FileText },
-          { id: 'Attendance & OT', icon: Clock },
-          { id: 'Leave Entitlement', icon: CalendarDays },
-          { id: 'Payroll & Payslips', icon: DollarSign }
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center px-5 py-2.5 rounded-xl font-bold text-sm transition-all whitespace-nowrap ${
-              activeTab === tab.id 
-                ? 'bg-white text-blue-600 shadow-sm border border-slate-200' 
-                : 'text-slate-500 hover:bg-slate-200/50 hover:text-slate-800'
-            }`}
-          >
-            <tab.icon size={16} className="mr-2" />
-            {tab.id}
+      <div id="screen-ui">
+        {/* HEADER */}
+        <div className="flex justify-between items-center mb-8">
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-900 flex items-center">
+              <Users className="mr-3 text-blue-600" size={28} />
+              Employee Management
+            </h1>
+            <p className="text-base text-slate-500 mt-1">
+              Track attendance, payroll, MOM levies, and leave entitlements.
+            </p>
+          </div>
+          <button className="flex items-center rounded-xl bg-blue-600 px-6 py-2.5 font-medium text-white shadow-lg transition-all hover:bg-blue-700 active:scale-95">
+            <Plus className="mr-2" size={18} /> Add Employee
           </button>
-        ))}
-      </div>
+        </div>
 
-      {/* TAB CONTENT: DIRECTORY */}
-      {activeTab === 'Directory' && (
-        <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden animate-in fade-in duration-300">
-          <div className="p-5 border-b border-slate-100 flex items-center bg-slate-50">
-            <div className="flex items-center bg-white border border-slate-200 rounded-xl px-4 py-2 shadow-sm w-full max-w-md">
-              <Search className="text-slate-400 mr-2" size={18} />
-              <input type="text" placeholder="Search staff by name or role..." className="w-full bg-transparent border-none focus:ring-0 text-sm placeholder:text-slate-400 outline-none" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+        {/* NAVIGATION TABS */}
+        <div className="flex space-x-2 mb-6 border-b border-slate-200 pb-2 overflow-x-auto">
+          {[
+            { id: 'Directory', icon: Users },
+            { id: 'Contracts', icon: FileText },
+            { id: 'Attendance & OT', icon: Clock },
+            { id: 'Leave Entitlement', icon: CalendarDays },
+            { id: 'Payroll & Payslips', icon: DollarSign }
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center px-5 py-2.5 rounded-xl font-bold text-sm transition-all whitespace-nowrap ${
+                activeTab === tab.id 
+                  ? 'bg-white text-blue-600 shadow-sm border border-slate-200' 
+                  : 'text-slate-500 hover:bg-slate-200/50 hover:text-slate-800'
+              }`}
+            >
+              <tab.icon size={16} className="mr-2" />
+              {tab.id}
+            </button>
+          ))}
+        </div>
+
+        {/* TAB CONTENT: DIRECTORY */}
+        {activeTab === 'Directory' && (
+          <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden animate-in fade-in duration-300">
+            <div className="p-5 border-b border-slate-100 flex items-center bg-slate-50">
+              <div className="flex items-center bg-white border border-slate-200 rounded-xl px-4 py-2 shadow-sm w-full max-w-md">
+                <Search className="text-slate-400 mr-2" size={18} />
+                <input type="text" placeholder="Search staff by name or role..." className="w-full bg-transparent border-none focus:ring-0 text-sm placeholder:text-slate-400 outline-none" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+              </div>
+            </div>
+            <div className="w-full overflow-x-auto">
+              <table className="w-full text-left border-collapse whitespace-nowrap">
+                <thead>
+                  <tr className="bg-white border-b border-slate-200 text-xs uppercase tracking-widest text-slate-500 font-semibold">
+                    <th className="p-5 pl-8">Employee</th>
+                    <th className="p-5">Employment Type</th>
+                    <th className="p-5">Basic Salary</th>
+                    <th className="p-5">Levy / CPF</th>
+                    <th className="p-5 text-right pr-8">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-sm">
+                  {filteredEmployees.map((emp) => (
+                    <tr key={emp.id} className="hover:bg-blue-50 transition-colors group">
+                      <td className="p-5 pl-8"><div className="font-bold text-slate-800">{emp.name}</div><div className="text-xs text-slate-500 mt-0.5">{emp.role} • {emp.id}</div></td>
+                      <td className="p-5">
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold ${emp.type === 'Citizen' || emp.type === 'PR' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{emp.type}</span>
+                        {emp.workPassExpiry && <div className="flex items-center text-[10px] font-bold text-red-500 mt-1 uppercase tracking-wider"><AlertCircle size={10} className="mr-1" /> Expiry: {emp.workPassExpiry}</div>}
+                      </td>
+                      <td className="p-5 font-medium text-slate-800">${formatWithCommas(emp.basicSalary)} <span className="text-xs text-slate-400">/mth</span></td>
+                      <td className="p-5">
+                        {emp.cpfEligible ? <span className="text-emerald-600 font-bold text-xs uppercase tracking-wider">CPF Eligible</span> : <div><span className="text-amber-600 font-bold text-xs uppercase tracking-wider">MOM Levy</span><div className="font-medium text-slate-800">${formatWithCommas(emp.levy)}</div></div>}
+                      </td>
+                      <td className="p-5 pr-8 text-right"><button className="text-slate-400 hover:text-blue-600 p-2 rounded-lg hover:bg-blue-100 transition-colors"><MoreVertical size={18} /></button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
-          <div className="w-full overflow-x-auto">
-            <table className="w-full text-left border-collapse whitespace-nowrap">
-              <thead>
-                <tr className="bg-white border-b border-slate-200 text-xs uppercase tracking-widest text-slate-500 font-semibold">
-                  <th className="p-5 pl-8">Employee</th>
-                  <th className="p-5">Employment Type</th>
-                  <th className="p-5">Basic Salary</th>
-                  <th className="p-5">Levy / CPF</th>
-                  <th className="p-5 text-right pr-8">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-sm">
-                {filteredEmployees.map((emp) => (
-                  <tr key={emp.id} className="hover:bg-blue-50 transition-colors group">
-                    <td className="p-5 pl-8"><div className="font-bold text-slate-800">{emp.name}</div><div className="text-xs text-slate-500 mt-0.5">{emp.role} • {emp.id}</div></td>
-                    <td className="p-5">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold ${emp.type === 'Citizen' || emp.type === 'PR' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{emp.type}</span>
-                      {emp.workPassExpiry && <div className="flex items-center text-[10px] font-bold text-red-500 mt-1 uppercase tracking-wider"><AlertCircle size={10} className="mr-1" /> Expiry: {emp.workPassExpiry}</div>}
-                    </td>
-                    <td className="p-5 font-medium text-slate-800">${formatWithCommas(emp.basicSalary)} <span className="text-xs text-slate-400">/mth</span></td>
-                    <td className="p-5">
-                      {emp.cpfEligible ? <span className="text-emerald-600 font-bold text-xs uppercase tracking-wider">CPF Eligible</span> : <div><span className="text-amber-600 font-bold text-xs uppercase tracking-wider">MOM Levy</span><div className="font-medium text-slate-800">${formatWithCommas(emp.levy)}</div></div>}
-                    </td>
-                    <td className="p-5 pr-8 text-right"><button className="text-slate-400 hover:text-blue-600 p-2 rounded-lg hover:bg-blue-100 transition-colors"><MoreVertical size={18} /></button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        )}
+
+        {/* TAB CONTENT: CONTRACTS */}
+        {activeTab === 'Contracts' && <EmployeeContractForm employees={MOCK_EMPLOYEES} />}
+
+        {/* PLACEHOLDER FOR OTHER TABS */}
+        {activeTab !== 'Directory' && activeTab !== 'Contracts' && (
+          <div className="flex flex-col items-center justify-center h-64 bg-white rounded-3xl border border-slate-200 border-dashed animate-in fade-in duration-300">
+            <FileText size={48} className="text-slate-300 mb-4" />
+            <h3 className="text-lg font-bold text-slate-700">Under Construction</h3>
+            <p className="text-sm text-slate-500 mt-1">The {activeTab} module is currently being built.</p>
           </div>
-        </div>
-      )}
-
-      {/* TAB CONTENT: CONTRACTS */}
-      {activeTab === 'Contracts' && <EmployeeContractForm employees={MOCK_EMPLOYEES} />}
-
-      {/* PLACEHOLDER FOR OTHER TABS */}
-      {activeTab !== 'Directory' && activeTab !== 'Contracts' && (
-        <div className="flex flex-col items-center justify-center h-64 bg-white rounded-3xl border border-slate-200 border-dashed animate-in fade-in duration-300">
-          <FileText size={48} className="text-slate-300 mb-4" />
-          <h3 className="text-lg font-bold text-slate-700">Under Construction</h3>
-          <p className="text-sm text-slate-500 mt-1">The {activeTab} module is currently being built.</p>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
