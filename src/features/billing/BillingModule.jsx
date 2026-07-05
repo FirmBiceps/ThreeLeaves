@@ -34,9 +34,8 @@ export function BillingModule({ sys }) {
 
     safeInvoices.forEach(inv => {
       const isCurrentMonth = String(inv.date).startsWith(selectedMonth);
-      const isBeforeMonth = String(inv.date).slice(0, 7) < selectedMonth;
       
-      if (!isCurrentMonth && !isBeforeMonth) return;
+      if (!isCurrentMonth) return;
 
       if (!dataMap[inv.customerId]) {
         const customerObj = safeCustomers.find(c => c.id === inv.customerId);
@@ -45,7 +44,6 @@ export function BillingModule({ sys }) {
           customerName: String(customerObj?.name || inv.customer || 'Unknown Customer'),
           invoices: [],
           totalBilled: 0,
-          previousOutstanding: 0,
           monthStatus: 'Paid'
         };
       }
@@ -53,23 +51,13 @@ export function BillingModule({ sys }) {
       const invTotal = Number(inv.total) || 0;
       const invStatus = String(inv.status || 'Paid'); 
 
-      if (isCurrentMonth) {
-        dataMap[inv.customerId].invoices.push(inv);
-        dataMap[inv.customerId].totalBilled += invTotal;
-        if (invStatus === 'Unpaid') dataMap[inv.customerId].monthStatus = 'Unpaid';
-      }
-
-      if (isBeforeMonth && invStatus === 'Unpaid') {
-        dataMap[inv.customerId].previousOutstanding += invTotal;
-      }
-    });
-
-    Object.values(dataMap).forEach(row => {
-      row.overallDue = row.totalBilled + row.previousOutstanding;
+      dataMap[inv.customerId].invoices.push(inv);
+      dataMap[inv.customerId].totalBilled += invTotal;
+      if (invStatus === 'Unpaid') dataMap[inv.customerId].monthStatus = 'Unpaid';
     });
 
     const relevantCustomers = Object.values(dataMap).filter(row => {
-      const isActive = row.invoices.length > 0 || row.previousOutstanding > 0;
+      const isActive = row.invoices.length > 0;
       if (!isActive) return false;
 
       if (termFilter !== 'All') {
@@ -139,7 +127,6 @@ export function BillingModule({ sys }) {
     setTimeout(async () => {
       try {
         const zip = new JSZip();
-        // Wait an extra moment to ensure the DOM is fully rendered before capturing
         await new Promise(resolve => setTimeout(resolve, 500));
 
         const customerWrappers = document.querySelectorAll('.customer-print-wrapper');
@@ -154,7 +141,6 @@ export function BillingModule({ sys }) {
           
           if (!wrapper) continue;
 
-          // Intelligently locate all separate A4 pages for this specific customer
           const pages = wrapper.querySelectorAll('.a4-statement-page');
           const pdf = new jsPDF('p', 'mm', 'a4');
 
@@ -167,12 +153,11 @@ export function BillingModule({ sys }) {
             });
             const imgData = canvas.toDataURL('image/jpeg', 1.0);
             
-            const pdfWidth = 210; // A4 Width in mm
-            const pdfHeight = 297; // A4 Height in mm
+            const pdfWidth = 210; 
+            const pdfHeight = 297; 
             
             pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
             
-            // If there is another page for this customer, add a new page to the PDF
             if (p < pages.length - 1) {
               pdf.addPage();
             }
@@ -221,13 +206,12 @@ export function BillingModule({ sys }) {
   const termLabel = termFilter === 'All' ? 'ALL' : termFilter === 'cod' ? 'COD' : '30-DAY';
 
   // =========================================================================
-  // FOOLPROOF PRINT PORTAL (Teleports the UI out of the dashboard layout)
+  // FOOLPROOF PRINT PORTAL
   // =========================================================================
   const printContent = printTarget ? (
     <div id="print-portal-root" className="absolute left-[-9999px] top-0 z-[-100] bg-white text-black" style={{ width: '210mm' }}>
       <style type="text/css">
         {`
-          /* BASE A4 DIMENSIONS - Applies both on screen (for ZIP capture) and in print */
           .a4-statement-page { 
             width: 210mm; 
             height: 297mm; 
@@ -255,10 +239,8 @@ export function BillingModule({ sys }) {
               overflow: visible !important; 
             }
             
-            /* HIDE THE DASHBOARD COMPLETELY TO PREVENT CLIPPING */
             #root { display: none !important; }
             
-            /* UNHIDE THE PORTAL AND RESTORE NATURAL FLOW */
             #print-portal-root { 
               display: block !important; 
               position: static !important; 
@@ -270,7 +252,6 @@ export function BillingModule({ sys }) {
               visibility: visible !important; 
             }
             
-            /* FORCE HARD PAGE BREAKS DURING NATIVE PRINT */
             .a4-statement-page { 
               margin-bottom: 0 !important;
               page-break-after: always !important; 
@@ -284,7 +265,6 @@ export function BillingModule({ sys }) {
 
       <div id="print-pages-container" className="flex flex-col w-full items-center">
         {statementsToPrint.map((data, index) => {
-          // CHUNKING: Fixed to 18 items max per page to prevent bottom cutoff
           const ITEMS_PER_PAGE = 18;
           const pages = [];
           for (let i = 0; i < data.invoices.length; i += ITEMS_PER_PAGE) {
@@ -322,8 +302,6 @@ export function BillingModule({ sys }) {
 
                     {/* --- CUSTOMER INFO --- */}
                     <div className="w-full shrink-0 flex justify-between items-end mb-4 font-bold text-[13px] leading-tight">
-                      
-                      {/* Left Block: Bounded tightly to prevent overlap */}
                       <div className="w-[65%] pr-4 flex flex-col min-w-0 overflow-hidden shrink-0">
                         <div className="flex items-end mb-1.5 w-full min-w-0">
                           <span className="w-12 shrink-0 text-slate-500 font-bold text-[12px]">TO:</span>
@@ -339,7 +317,6 @@ export function BillingModule({ sys }) {
                         </div>
                       </div>
 
-                      {/* Right Block: Safe from horizontal push */}
                       <div className="w-[35%] pl-4 flex flex-col items-end justify-end shrink-0">
                         <div className="flex items-end mb-1.5 w-full justify-end">
                           <span className="shrink-0 text-slate-500 font-bold text-[12px] mr-2">STMT MONTH:</span>
@@ -368,7 +345,6 @@ export function BillingModule({ sys }) {
                           </tr>
                         </thead>
                         <tbody>
-                          {/* Invoice Data Rows */}
                           {pageItems.map((inv, idx) => {
                             const billed = Number(inv.total) || 0;
                             const absoluteIndex = pageIndex * ITEMS_PER_PAGE + idx + 1;
@@ -382,7 +358,6 @@ export function BillingModule({ sys }) {
                             );
                           })}
                           
-                          {/* Empty Padding Rows */}
                           {pageItems.length < ITEMS_PER_PAGE && Array.from({ length: ITEMS_PER_PAGE - pageItems.length }).map((_, i) => (
                             <tr key={`blank-${i}`} className="h-[28px] align-middle">
                               <td></td>
@@ -392,23 +367,7 @@ export function BillingModule({ sys }) {
                             </tr>
                           ))}
 
-                          {/* Beautifully Integrated Total Row (Flushed Right, Transparent Background) */}
-                          {isLastPage && data.previousOutstanding > 0 ? (
-                            <>
-                              <tr className="h-[28px] align-middle border-t-2 border-black">
-                                <td colSpan="3" className="py-1 px-4 text-right font-bold text-[12px] tracking-wide text-slate-800">THIS MONTH TOTAL:</td>
-                                <td className="py-1 text-right font-bold text-[13px] pr-4">${formatMoney(data.totalBilled)}</td>
-                              </tr>
-                              <tr className="h-[28px] align-middle">
-                                <td colSpan="3" className="py-1 px-4 text-right font-bold text-[12px] tracking-wide text-slate-600">PREV. OUTSTANDING:</td>
-                                <td className="py-1 text-right font-bold text-[13px] text-slate-600 pr-4">${formatMoney(data.previousOutstanding)}</td>
-                              </tr>
-                              <tr className="h-[36px] align-middle border-t border-b-2 border-black">
-                                <td colSpan="3" className="py-2 px-4 text-right font-black text-[14px] tracking-widest uppercase text-black">OVERALL TOTAL DUE:</td>
-                                <td className="py-2 text-right font-black text-[16px] text-black pr-4">${formatMoney(data.overallDue)}</td>
-                              </tr>
-                            </>
-                          ) : isLastPage ? (
+                          {isLastPage ? (
                             <tr className="h-[36px] align-middle border-t-2 border-b-2 border-black">
                               <td colSpan="3" className="py-2 px-4 text-right font-black text-[14px] tracking-widest uppercase text-black">TOTAL AMOUNT DUE:</td>
                               <td className="py-2 text-right font-black text-[16px] text-black pr-4">${formatMoney(data.totalBilled)}</td>
@@ -565,9 +524,9 @@ export function BillingModule({ sys }) {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-white border-b border-slate-200 text-xs uppercase tracking-widest text-slate-500 font-semibold">
-                <th className="p-5 pl-8">Customer Entity</th>
-                <th className="p-5 text-center">Invoices</th>
-                <th className="p-5 text-right text-red-600">Total Amount</th>
+                <th className="p-5 pl-8 w-1/3">Customer Entity</th>
+                <th className="p-5 text-right">Total Billed</th>
+                <th className="p-5 text-center">Status</th>
                 <th className="p-5 pr-8 text-right">Action</th>
               </tr>
             </thead>
@@ -583,9 +542,7 @@ export function BillingModule({ sys }) {
                     </div>
                     <div className="text-[10px] text-slate-400 uppercase tracking-widest mt-0.5">{row.invoices.length} Invoices</div>
                   </td>
-                  <td className="p-5 text-right text-slate-600">${formatMoney(row.totalBilled)}</td>
-                  <td className="p-5 text-right font-bold text-red-500">{row.previousOutstanding > 0 ? `$${formatMoney(row.previousOutstanding)}` : '-'}</td>
-                  <td className="p-5 text-right font-black text-slate-900 text-base">${formatMoney(row.overallDue)}</td>
+                  <td className="p-5 text-right font-black text-slate-900 text-base">${formatMoney(row.totalBilled)}</td>
                   <td className="p-5 text-center">
                     {row.invoices.length > 0 ? (
                       <div className="relative inline-flex items-center">
@@ -621,7 +578,7 @@ export function BillingModule({ sys }) {
               ))}
               {analytics.displayList.length === 0 && (
                 <tr>
-                  <td className="p-12 text-center text-sm font-bold text-slate-400" colSpan="6">
+                  <td className="p-12 text-center text-sm font-bold text-slate-400" colSpan="4">
                     No transactions or outstanding balances found.
                   </td>
                 </tr>
