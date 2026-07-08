@@ -6,7 +6,6 @@ import JSZip from 'jszip';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 
-// Re-use the logo and QR code from your invoices folder
 import logo from '../invoices/three_leaves_logo.png'; 
 import paynowQr from '../invoices/paynow_qr.jpg';
 
@@ -18,7 +17,7 @@ export function BillingModule({ sys }) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   });
   const [searchTerm, setSearchTerm] = useState('');
-  const [termFilter, setTermFilter] = useState('All'); // 'All', 'cod', '30_days'
+  const [termFilter, setTermFilter] = useState('All'); 
   
   const [printTarget, setPrintTarget] = useState(null);
   const [isZipping, setIsZipping] = useState(false);
@@ -34,7 +33,6 @@ export function BillingModule({ sys }) {
 
     safeInvoices.forEach(inv => {
       const isCurrentMonth = String(inv.date).startsWith(selectedMonth);
-      
       if (!isCurrentMonth) return;
 
       if (!dataMap[inv.customerId]) {
@@ -49,10 +47,11 @@ export function BillingModule({ sys }) {
       }
 
       const invTotal = Number(inv.total) || 0;
+      const roundedInvTotal = Math.round(invTotal * 100) / 100;
       const invStatus = String(inv.status || 'Paid'); 
 
       dataMap[inv.customerId].invoices.push(inv);
-      dataMap[inv.customerId].totalBilled += invTotal;
+      dataMap[inv.customerId].totalBilled += roundedInvTotal;
       if (invStatus === 'Unpaid') dataMap[inv.customerId].monthStatus = 'Unpaid';
     });
 
@@ -82,13 +81,28 @@ export function BillingModule({ sys }) {
     const topCustomer = sortedByRevenue[0] || null;
 
     let displayList = [...relevantCustomers].sort((a, b) => a.customerName.localeCompare(b.customerName));
+    
     if (searchTerm) {
       const lowerSearch = String(searchTerm).toLowerCase();
       displayList = displayList.filter(row => row.customerName.toLowerCase().includes(lowerSearch));
     }
 
+    // UPDATE: Multi-tier sorting (Date -> Invoice Number)
     displayList.forEach(row => {
-      row.invoices.sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
+      row.invoices.sort((a, b) => {
+        const dateA = new Date(a.date || 0);
+        const dateB = new Date(b.date || 0);
+        
+        // If dates are different, sort by date
+        if (dateA.getTime() !== dateB.getTime()) {
+          return dateA - dateB;
+        }
+        
+        // If dates are the same, sort alphanumerically by invoice number
+        const numA = String(a.number || a.id);
+        const numB = String(b.number || b.id);
+        return numA.localeCompare(numB, undefined, { numeric: true, sensitivity: 'base' });
+      });
     });
 
     return {
@@ -127,7 +141,8 @@ export function BillingModule({ sys }) {
     setTimeout(async () => {
       try {
         const zip = new JSZip();
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Give the DOM a full second to render the heavy off-screen portal
+        await new Promise(resolve => setTimeout(resolve, 1000));
 
         const customerWrappers = document.querySelectorAll('.customer-print-wrapper');
         const d = new Date(`${selectedMonth}-01`);
@@ -146,13 +161,21 @@ export function BillingModule({ sys }) {
 
           for (let p = 0; p < pages.length; p++) {
             const pageNode = pages[p];
+            
+            // UPDATE: Bulletproofing html2canvas configuration for off-screen elements
             const canvas = await html2canvas(pageNode, { 
               scale: 2, 
               useCORS: true, 
-              logging: false 
+              logging: false,
+              backgroundColor: '#ffffff',
+              onclone: (clonedDoc, clonedElement) => {
+                // Forces the cloned element into standard flow so text alignment computes correctly
+                clonedElement.style.position = 'relative';
+                clonedElement.style.left = '0';
+              }
             });
-            const imgData = canvas.toDataURL('image/jpeg', 1.0);
             
+            const imgData = canvas.toDataURL('image/jpeg', 1.0);
             const pdfWidth = 210; 
             const pdfHeight = 297; 
             
@@ -187,7 +210,7 @@ export function BillingModule({ sys }) {
         setIsZipping(false);
         setPrintTarget(null);
       }
-    }, 1000); 
+    }, 500); 
   };
 
   const statementsToPrint = useMemo(() => {
@@ -224,7 +247,7 @@ export function BillingModule({ sys }) {
             margin-bottom: 10px;
           }
           
-          table { border-collapse: collapse; width: 100%; }
+          table { border-collapse: collapse; width: 100%; table-layout: fixed; }
           
           @media print {
             @page { size: A4; margin: 0 !important; }
@@ -334,14 +357,15 @@ export function BillingModule({ sys }) {
                     </div>
 
                     {/* --- TABLE CONTENT --- */}
+                    {/* UPDATE: Strict percentage widths mapping applied to enforce html2canvas alignment */}
                     <div className="w-full flex-1 flex flex-col justify-start overflow-hidden">
                       <table className="w-full text-[13px] text-center mb-0 border-collapse" style={{ fontFamily: CJK_FONT }}>
                         <thead>
                           <tr className="font-bold text-[13px] border-y-2 border-black">
-                            <th className="py-2 px-2 text-center w-12">NO.</th>
-                            <th className="py-2 px-2 text-center w-32">DATE</th>
-                            <th className="py-2 px-2 text-center">INVOICE NO.</th>
-                            <th className="py-2 px-2 text-right w-48 pr-4">AMOUNT</th>
+                            <th style={{ width: '12%' }} className="py-2 px-2 text-center">NO.</th>
+                            <th style={{ width: '28%' }} className="py-2 px-2 text-center">DATE</th>
+                            <th style={{ width: '35%' }} className="py-2 px-2 text-center">INVOICE NO.</th>
+                            <th style={{ width: '25%' }} className="py-2 px-2 text-right pr-4">AMOUNT</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -350,20 +374,20 @@ export function BillingModule({ sys }) {
                             const absoluteIndex = pageIndex * ITEMS_PER_PAGE + idx + 1;
                             return (
                               <tr key={inv.id} className="h-[28px] align-middle">
-                                <td className="p-1 text-center font-medium">{absoluteIndex}</td>
-                                <td className="p-1 text-center font-medium">{inv.date ? new Date(inv.date).toLocaleDateString('en-GB').replace(/\//g, '-') : '-'}</td>
-                                <td className="p-1 text-center font-bold text-black">#{inv.number || inv.id}</td>
-                                <td className="p-1 text-right font-bold text-black pr-4">${formatMoney(billed)}</td>
+                                <td style={{ width: '12%' }} className="p-1 text-center font-medium">{absoluteIndex}</td>
+                                <td style={{ width: '28%' }} className="p-1 text-center font-medium">{inv.date ? new Date(inv.date).toLocaleDateString('en-GB').replace(/\//g, '-') : '-'}</td>
+                                <td style={{ width: '35%' }} className="p-1 text-center font-bold text-black">#{inv.number || inv.id}</td>
+                                <td style={{ width: '25%' }} className="p-1 text-right font-bold text-black pr-4">${formatMoney(billed)}</td>
                               </tr>
                             );
                           })}
                           
                           {pageItems.length < ITEMS_PER_PAGE && Array.from({ length: ITEMS_PER_PAGE - pageItems.length }).map((_, i) => (
                             <tr key={`blank-${i}`} className="h-[28px] align-middle">
-                              <td></td>
-                              <td></td>
-                              <td></td>
-                              <td></td>
+                              <td style={{ width: '12%' }}></td>
+                              <td style={{ width: '28%' }}></td>
+                              <td style={{ width: '35%' }}></td>
+                              <td style={{ width: '25%' }}></td>
                             </tr>
                           ))}
 
@@ -447,7 +471,7 @@ export function BillingModule({ sys }) {
               disabled={analytics.allCustomerStats.length === 0 || isZipping}
               type="button"
             >
-              {isZipping ? <><Loader2 className="mr-2 animate-spin" size={18} /> Zipping Files...</> : <><Download className="mr-2" size={18} /> {termLabel} ZIP</>}
+              {isZipping ? <><Loader2 className="mr-2 animate-spin" size={18} /> Zipping...</> : <><Download className="mr-2" size={18} /> {termLabel} ZIP</>}
             </button>
 
             <button
