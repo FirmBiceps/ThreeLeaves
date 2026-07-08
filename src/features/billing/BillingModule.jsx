@@ -87,18 +87,13 @@ export function BillingModule({ sys }) {
       displayList = displayList.filter(row => row.customerName.toLowerCase().includes(lowerSearch));
     }
 
-    // UPDATE: Multi-tier sorting (Date -> Invoice Number)
     displayList.forEach(row => {
       row.invoices.sort((a, b) => {
         const dateA = new Date(a.date || 0);
         const dateB = new Date(b.date || 0);
-        
-        // If dates are different, sort by date
         if (dateA.getTime() !== dateB.getTime()) {
           return dateA - dateB;
         }
-        
-        // If dates are the same, sort alphanumerically by invoice number
         const numA = String(a.number || a.id);
         const numB = String(b.number || b.id);
         return numA.localeCompare(numB, undefined, { numeric: true, sensitivity: 'base' });
@@ -141,8 +136,11 @@ export function BillingModule({ sys }) {
     setTimeout(async () => {
       try {
         const zip = new JSZip();
-        // Give the DOM a full second to render the heavy off-screen portal
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // UPDATE: Force the browser to wait until all fonts are completely loaded
+        await document.fonts.ready;
+        // Give the DOM time to render the off-screen portal
+        await new Promise(resolve => setTimeout(resolve, 800));
 
         const customerWrappers = document.querySelectorAll('.customer-print-wrapper');
         const d = new Date(`${selectedMonth}-01`);
@@ -162,16 +160,18 @@ export function BillingModule({ sys }) {
           for (let p = 0; p < pages.length; p++) {
             const pageNode = pages[p];
             
-            // UPDATE: Bulletproofing html2canvas configuration for off-screen elements
             const canvas = await html2canvas(pageNode, { 
               scale: 2, 
               useCORS: true, 
               logging: false,
               backgroundColor: '#ffffff',
               onclone: (clonedDoc, clonedElement) => {
-                // Forces the cloned element into standard flow so text alignment computes correctly
-                clonedElement.style.position = 'relative';
-                clonedElement.style.left = '0';
+                // UPDATE: Force the cloned element into a strict layout box 
+                // so flex children do not collapse to 0 width.
+                clonedElement.style.position = 'absolute';
+                clonedElement.style.left = '0px';
+                clonedElement.style.top = '0px';
+                clonedElement.style.width = '210mm';
               }
             });
             
@@ -232,7 +232,7 @@ export function BillingModule({ sys }) {
   // FOOLPROOF PRINT PORTAL
   // =========================================================================
   const printContent = printTarget ? (
-    <div id="print-portal-root" className="absolute left-[-9999px] top-0 z-[-100] bg-white text-black" style={{ width: '210mm' }}>
+    <div id="print-portal-root" className="fixed left-[-9999px] top-0 z-[-100] bg-white text-black" style={{ width: '210mm' }}>
       <style type="text/css">
         {`
           .a4-statement-page { 
@@ -325,23 +325,29 @@ export function BillingModule({ sys }) {
 
                     {/* --- CUSTOMER INFO --- */}
                     <div className="w-full shrink-0 flex justify-between items-end mb-4 font-bold text-[13px] leading-tight">
-                      <div className="w-[65%] pr-4 flex flex-col min-w-0 overflow-hidden shrink-0">
-                        <div className="flex items-end mb-1.5 w-full min-w-0">
+                      
+                      {/* UPDATE: Removed truncation classes. Substituted with robust width management. */}
+                      <div className="w-[65%] pr-4 flex flex-col shrink-0">
+                        <div className="flex items-end mb-2 w-full">
                           <span className="w-12 shrink-0 text-slate-500 font-bold text-[12px]">TO:</span>
-                          <span className="flex-1 uppercase border-b border-black pb-0.5 font-black text-[14px] whitespace-nowrap overflow-hidden text-ellipsis block" style={{ fontFamily: CJK_FONT }}>
-                            {data.customerName}
-                          </span>
+                          <div className="w-full border-b border-black pb-0.5">
+                            <span className="uppercase font-black text-[14px] block break-words" style={{ fontFamily: CJK_FONT }}>
+                              {data.customerName}
+                            </span>
+                          </div>
                         </div>
-                        <div className="flex items-end w-full min-w-0">
+                        <div className="flex items-end w-full">
                           <span className="w-20 shrink-0 text-slate-500 font-bold text-[12px]">ADDRESS:</span>
-                          <span className="flex-1 uppercase border-b border-black pb-0.5 text-[12px] whitespace-nowrap overflow-hidden text-ellipsis block" style={{ fontFamily: CJK_FONT }}>
-                            {data.customer?.address || '-'}
-                          </span>
+                          <div className="w-full border-b border-black pb-0.5">
+                            <span className="uppercase text-[12px] block break-words" style={{ fontFamily: CJK_FONT }}>
+                              {data.customer?.address || '-'}
+                            </span>
+                          </div>
                         </div>
                       </div>
 
                       <div className="w-[35%] pl-4 flex flex-col items-end justify-end shrink-0">
-                        <div className="flex items-end mb-1.5 w-full justify-end">
+                        <div className="flex items-end mb-2 w-full justify-end">
                           <span className="shrink-0 text-slate-500 font-bold text-[12px] mr-2">STMT MONTH:</span>
                           <span className="w-24 text-center border-b border-black pb-0.5 font-black text-[13px] uppercase inline-block">
                             {displayMonth}
@@ -357,7 +363,6 @@ export function BillingModule({ sys }) {
                     </div>
 
                     {/* --- TABLE CONTENT --- */}
-                    {/* UPDATE: Strict percentage widths mapping applied to enforce html2canvas alignment */}
                     <div className="w-full flex-1 flex flex-col justify-start overflow-hidden">
                       <table className="w-full text-[13px] text-center mb-0 border-collapse" style={{ fontFamily: CJK_FONT }}>
                         <thead>
