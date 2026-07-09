@@ -87,6 +87,7 @@ export function BillingModule({ sys }) {
       displayList = displayList.filter(row => row.customerName.toLowerCase().includes(lowerSearch));
     }
 
+    // Maintained the logical invoice sorting (Date -> Number) you requested earlier
     displayList.forEach(row => {
       row.invoices.sort((a, b) => {
         const dateA = new Date(a.date || 0);
@@ -137,7 +138,7 @@ export function BillingModule({ sys }) {
       try {
         const zip = new JSZip();
         
-        await document.fonts.ready;
+        // Wait for DOM to render the pure print layouts
         await new Promise(resolve => setTimeout(resolve, 800));
 
         const customerWrappers = document.querySelectorAll('.customer-print-wrapper');
@@ -146,6 +147,7 @@ export function BillingModule({ sys }) {
         const yearShort = String(d.getFullYear()).slice(-2);
         const typeStr = termFilter === 'All' ? 'All' : termFilter === 'cod' ? 'COD' : '30Days';
 
+        // Pure zip loop logic. No CSS hacking.
         for (let i = 0; i < analytics.allCustomerStats.length; i++) {
           const data = analytics.allCustomerStats[i];
           const wrapper = customerWrappers[i];
@@ -162,13 +164,7 @@ export function BillingModule({ sys }) {
               scale: 2, 
               useCORS: true, 
               logging: false,
-              backgroundColor: '#ffffff',
-              onclone: (clonedDoc, clonedElement) => {
-                clonedElement.style.position = 'absolute';
-                clonedElement.style.left = '0px';
-                clonedElement.style.top = '0px';
-                clonedElement.style.width = '210mm';
-              }
+              backgroundColor: '#ffffff'
             });
             
             const imgData = canvas.toDataURL('image/jpeg', 1.0);
@@ -225,10 +221,10 @@ export function BillingModule({ sys }) {
   const termLabel = termFilter === 'All' ? 'ALL' : termFilter === 'cod' ? 'COD' : '30-DAY';
 
   // =========================================================================
-  // FOOLPROOF PRINT PORTAL
+  // FOOLPROOF PRINT PORTAL - Reverted to your approved optimal CSS
   // =========================================================================
   const printContent = printTarget ? (
-    <div id="print-portal-root" className="fixed left-[-9999px] top-0 z-[-100] bg-white text-black" style={{ width: '210mm' }}>
+    <div id="print-portal-root" className="absolute left-[-9999px] top-0 z-[-100] bg-white text-black" style={{ width: '210mm' }}>
       <style type="text/css">
         {`
           .a4-statement-page { 
@@ -243,7 +239,7 @@ export function BillingModule({ sys }) {
             margin-bottom: 10px;
           }
           
-          table { border-collapse: collapse; width: 100%; table-layout: fixed; }
+          table { border-collapse: collapse; width: 100%; }
           
           @media print {
             @page { size: A4; margin: 0 !important; }
@@ -320,46 +316,34 @@ export function BillingModule({ sys }) {
                     </div>
 
                     {/* --- CUSTOMER INFO --- */}
-                    {/* RESOLVED: Rebuilt with strict padding, flex-1, and leading-none to prevent html2canvas clipping */}
-                    <div className="w-full shrink-0 flex justify-between mb-6 font-bold text-[13px]">
-                      
-                      {/* Left Block */}
-                      <div className="w-[65%] pr-4 flex flex-col shrink-0">
-                        <div className="flex items-end mb-3 w-full">
-                          <span className="w-16 shrink-0 text-slate-500 font-bold text-[12px] pb-1 leading-none">TO:</span>
-                          <div className="flex-1 border-b border-black pb-1 leading-none">
-                            <span className="uppercase font-black text-[14px]" style={{ fontFamily: CJK_FONT }}>
-                              {data.customerName}
-                            </span>
-                          </div>
+                    <div className="w-full shrink-0 flex justify-between items-end mb-4 font-bold text-[13px] leading-tight">
+                      <div className="w-[65%] pr-4 flex flex-col min-w-0 overflow-hidden shrink-0">
+                        <div className="flex items-end mb-1.5 w-full min-w-0">
+                          <span className="w-12 shrink-0 text-slate-500 font-bold text-[12px]">TO:</span>
+                          <span className="flex-1 uppercase border-b border-black pb-0.5 font-black text-[14px] whitespace-nowrap overflow-hidden text-ellipsis block" style={{ fontFamily: CJK_FONT }}>
+                            {data.customerName}
+                          </span>
                         </div>
-                        <div className="flex items-end w-full">
-                          <span className="w-20 shrink-0 text-slate-500 font-bold text-[12px] pb-1 leading-none">ADDRESS:</span>
-                          <div className="flex-1 border-b border-black pb-1 leading-none">
-                            <span className="uppercase text-[12px]" style={{ fontFamily: CJK_FONT }}>
-                              {data.customer?.address || '-'}
-                            </span>
-                          </div>
+                        <div className="flex items-end w-full min-w-0">
+                          <span className="w-20 shrink-0 text-slate-500 font-bold text-[12px]">ADDRESS:</span>
+                          <span className="flex-1 uppercase border-b border-black pb-0.5 text-[12px] whitespace-nowrap overflow-hidden text-ellipsis block" style={{ fontFamily: CJK_FONT }}>
+                            {data.customer?.address || '-'}
+                          </span>
                         </div>
                       </div>
 
-                      {/* Right Block */}
-                      <div className="w-[35%] pl-4 flex flex-col items-end shrink-0">
-                        <div className="flex items-end mb-3 w-full justify-end">
-                          <span className="shrink-0 text-slate-500 font-bold text-[12px] mr-3 pb-1 leading-none">STMT MONTH:</span>
-                          <div className="w-24 text-center border-b border-black pb-1 leading-none">
-                            <span className="font-black text-[13px] uppercase">
-                              {displayMonth}
-                            </span>
-                          </div>
+                      <div className="w-[35%] pl-4 flex flex-col items-end justify-end shrink-0">
+                        <div className="flex items-end mb-1.5 w-full justify-end">
+                          <span className="shrink-0 text-slate-500 font-bold text-[12px] mr-2">STMT MONTH:</span>
+                          <span className="w-24 text-center border-b border-black pb-0.5 font-black text-[13px] uppercase inline-block">
+                            {displayMonth}
+                          </span>
                         </div>
                         <div className="flex items-end w-full justify-end">
-                          <span className="shrink-0 text-slate-500 font-bold text-[12px] mr-3 pb-1 leading-none">TERMS:</span>
-                          <div className="w-24 text-center border-b border-black pb-1 leading-none">
-                            <span className="font-bold text-[12px] uppercase">
-                              {data.customer?.payment_terms === 'cod' ? 'C.O.D' : '30 DAYS'}
-                            </span>
-                          </div>
+                          <span className="shrink-0 text-slate-500 font-bold text-[12px] mr-2">TERMS:</span>
+                          <span className="w-24 text-center border-b border-black pb-0.5 font-bold text-[12px] uppercase inline-block">
+                            {data.customer?.payment_terms === 'cod' ? 'C.O.D' : '30 DAYS'}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -369,10 +353,10 @@ export function BillingModule({ sys }) {
                       <table className="w-full text-[13px] text-center mb-0 border-collapse" style={{ fontFamily: CJK_FONT }}>
                         <thead>
                           <tr className="font-bold text-[13px] border-y-2 border-black">
-                            <th style={{ width: '12%' }} className="py-2 px-2 text-center">NO.</th>
-                            <th style={{ width: '28%' }} className="py-2 px-2 text-center">DATE</th>
-                            <th style={{ width: '35%' }} className="py-2 px-2 text-center">INVOICE NO.</th>
-                            <th style={{ width: '25%' }} className="py-2 px-2 text-right pr-4">AMOUNT</th>
+                            <th className="py-2 px-2 text-center w-12">NO.</th>
+                            <th className="py-2 px-2 text-center w-32">DATE</th>
+                            <th className="py-2 px-2 text-center">INVOICE NO.</th>
+                            <th className="py-2 px-2 text-right w-48 pr-4">AMOUNT</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -381,20 +365,20 @@ export function BillingModule({ sys }) {
                             const absoluteIndex = pageIndex * ITEMS_PER_PAGE + idx + 1;
                             return (
                               <tr key={inv.id} className="h-[28px] align-middle">
-                                <td style={{ width: '12%' }} className="p-1 text-center font-medium">{absoluteIndex}</td>
-                                <td style={{ width: '28%' }} className="p-1 text-center font-medium">{inv.date ? new Date(inv.date).toLocaleDateString('en-GB').replace(/\//g, '-') : '-'}</td>
-                                <td style={{ width: '35%' }} className="p-1 text-center font-bold text-black">#{inv.number || inv.id}</td>
-                                <td style={{ width: '25%' }} className="p-1 text-right font-bold text-black pr-4">${formatMoney(billed)}</td>
+                                <td className="p-1 text-center font-medium">{absoluteIndex}</td>
+                                <td className="p-1 text-center font-medium">{inv.date ? new Date(inv.date).toLocaleDateString('en-GB').replace(/\//g, '-') : '-'}</td>
+                                <td className="p-1 text-center font-bold text-black">#{inv.number || inv.id}</td>
+                                <td className="p-1 text-right font-bold text-black pr-4">${formatMoney(billed)}</td>
                               </tr>
                             );
                           })}
                           
                           {pageItems.length < ITEMS_PER_PAGE && Array.from({ length: ITEMS_PER_PAGE - pageItems.length }).map((_, i) => (
                             <tr key={`blank-${i}`} className="h-[28px] align-middle">
-                              <td style={{ width: '12%' }}></td>
-                              <td style={{ width: '28%' }}></td>
-                              <td style={{ width: '35%' }}></td>
-                              <td style={{ width: '25%' }}></td>
+                              <td></td>
+                              <td></td>
+                              <td></td>
+                              <td></td>
                             </tr>
                           ))}
 
