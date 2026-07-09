@@ -18,7 +18,7 @@ export function BillingModule({ sys }) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   });
   const [searchTerm, setSearchTerm] = useState('');
-  const [termFilter, setTermFilter] = useState('All'); // 'All', 'cod', '30_days'
+  const [termFilter, setTermFilter] = useState('All'); 
   
   const [printTarget, setPrintTarget] = useState(null);
   const [isZipping, setIsZipping] = useState(false);
@@ -34,7 +34,6 @@ export function BillingModule({ sys }) {
 
     safeInvoices.forEach(inv => {
       const isCurrentMonth = String(inv.date).startsWith(selectedMonth);
-      
       if (!isCurrentMonth) return;
 
       if (!dataMap[inv.customerId]) {
@@ -83,6 +82,7 @@ export function BillingModule({ sys }) {
     const topCustomer = sortedByRevenue[0] || null;
 
     let displayList = [...relevantCustomers].sort((a, b) => a.customerName.localeCompare(b.customerName));
+    
     if (searchTerm) {
       const lowerSearch = String(searchTerm).toLowerCase();
       displayList = displayList.filter(row => row.customerName.toLowerCase().includes(lowerSearch));
@@ -130,91 +130,117 @@ export function BillingModule({ sys }) {
     }, 300);
   };
 
-  const handleDownloadZip = () => {
-    setIsZipping(true);
-    setPrintTarget('ZIP_ALL'); 
 
-    setTimeout(async () => {
-      const portalRoot = document.getElementById('print-portal-root');
-      try {
-        const zip = new JSZip();
-        
-        // TEMPORARY FIX: Move portal into the viewport (behind the UI) 
-        // so html2canvas renders the CJK fonts and layout precisely as 'Print' does.
-        if (portalRoot) {
-          portalRoot.style.left = '0px';
-        }
+  // ==========================================
+  // ZIP ENGINE: SEPARATED RESPONSIBILITIES
+  // ==========================================
 
-        await document.fonts.ready;
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        const customerWrappers = document.querySelectorAll('.customer-print-wrapper');
-        const d = new Date(`${selectedMonth}-01`);
-        const monthShort = d.toLocaleString('en-US', { month: 'short' });
-        const yearShort = String(d.getFullYear()).slice(-2);
-        const typeStr = termFilter === 'All' ? 'All' : termFilter === 'cod' ? 'COD' : '30Days';
-
-        for (let i = 0; i < analytics.allCustomerStats.length; i++) {
-          const data = analytics.allCustomerStats[i];
-          const wrapper = customerWrappers[i];
-          
-          if (!wrapper) continue;
-
-          const pages = wrapper.querySelectorAll('.a4-statement-page');
-          const pdf = new jsPDF('p', 'mm', 'a4');
-
-          for (let p = 0; p < pages.length; p++) {
-            const pageNode = pages[p];
-            const canvas = await html2canvas(pageNode, { 
-              scale: 2, 
-              useCORS: true, 
-              logging: false 
-            });
-            const imgData = canvas.toDataURL('image/jpeg', 1.0);
-            
-            const pdfWidth = 210; 
-            const pdfHeight = 297; 
-            
-            pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-            
-            if (p < pages.length - 1) {
-              pdf.addPage();
-            }
-          }
-          
-          const customerNameSafe = data.customerName.replace(/[<>:"/\\|?*]/g, '').trim();
-          const fileName = `${customerNameSafe}_${monthShort}_${yearShort}.pdf`;
-          
-          const pdfBlob = pdf.output('blob');
-          zip.file(fileName, pdfBlob);
-        }
-
-        const content = await zip.generateAsync({ type: 'blob' });
-        const url = URL.createObjectURL(content);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `${typeStr}_Statements_${monthShort}_${yearShort}.zip`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-
-      } catch (error) {
-        console.error('Error generating ZIP:', error);
-        alert('Failed to generate ZIP folder. Please check the console for details.');
-      } finally {
-        // Return the portal to its off-screen hidden position
-        if (portalRoot) {
-          portalRoot.style.left = '-9999px';
-        }
-        setIsZipping(false);
-        setPrintTarget(null);
-      }
-    }, 800); 
+  // 1. Readiness: Ensures DOM, Fonts, and Images are 100% settled
+  const ensureReadiness = async (container) => {
+    // Wait for React to finish mounting the specific customer (Layout stabilization)
+    await new Promise(resolve => setTimeout(resolve, 350));
+    
+    // Wait for strict Font loading completion
+    await document.fonts.ready;
+    
+    // Wait for all images inside the specific container to be fully drawn
+    const images = container.querySelectorAll('img');
+    const imagePromises = Array.from(images).map(img => {
+      if (img.complete) return Promise.resolve();
+      return new Promise(resolve => {
+        img.onload = resolve;
+        img.onerror = resolve; // Continue even if an image fails so the loop doesn't hang
+      });
+    });
+    await Promise.all(imagePromises);
   };
 
+  // 2. PDF Generation: Ignorant of customers, only converts raw DOM to PDF
+  const generatePDFFromWrapper = async (wrapperNode) => {
+    const pages = wrapperNode.querySelectorAll('.a4-statement-page');
+    const pdf = new jsPDF('p', 'mm', 'a4');
+
+    for (let p = 0; p < pages.length; p++) {
+      const pageNode = pages[p];
+      
+      const canvas = await html2canvas(pageNode, { 
+        scale: 2, 
+        useCORS: true, 
+        logging: false,
+        backgroundColor: '#ffffff'
+      });
+      
+      const imgData = canvas.toDataURL('image/jpeg', 1.0);
+      const pdfWidth = 210; 
+      const pdfHeight = 297; 
+      
+      pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+      
+      if (p < pages.length - 1) {
+        pdf.addPage();
+      }
+    }
+    return pdf.output('blob');
+  };
+
+  // 3. ZIP Packaging: Orchestrates the sequential rendering lifecycle
+  const handleDownloadZip = async () => {
+    setIsZipping(true);
+    
+    try {
+      const zip = new JSZip();
+      const d = new Date(`${selectedMonth}-01`);
+      const monthShort = d.toLocaleString('en-US', { month: 'short' });
+      const yearShort = String(d.getFullYear()).slice(-2);
+      const typeStr = termFilter === 'All' ? 'All' : termFilter === 'cod' ? 'COD' : '30Days';
+
+      // SEQUENTIAL RENDER LOOP: Process exactly one customer at a time
+      for (const data of analytics.allCustomerStats) {
+        
+        // Render step: Isolate customer in the portal
+        setPrintTarget(data.customer?.id);
+        
+        // Give React a micro-tick to apply the state and mount the node
+        await new Promise(resolve => setTimeout(resolve, 50));
+        
+        const wrapper = document.querySelector('.customer-print-wrapper');
+        if (wrapper) {
+          // Readiness step: Wait for the layout to settle exactly like a native Print
+          await ensureReadiness(wrapper);
+          
+          // PDF Capture step
+          const pdfBlob = await generatePDFFromWrapper(wrapper);
+          
+          // Packaging step
+          const customerNameSafe = data.customerName.replace(/[<>:"/\\|?*]/g, '').trim();
+          const fileName = `${customerNameSafe}_${monthShort}_${yearShort}.pdf`;
+          zip.file(fileName, pdfBlob);
+        }
+      }
+
+      // Finalize Archive
+      const content = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(content);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${typeStr}_Statements_${monthShort}_${yearShort}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+    } catch (error) {
+      console.error('Error generating ZIP:', error);
+      alert('Failed to generate ZIP folder. Please check the console for details.');
+    } finally {
+      setIsZipping(false);
+      setPrintTarget(null); // Clean up the DOM completely
+    }
+  };
+
+
   const statementsToPrint = useMemo(() => {
-    if (printTarget === 'ALL' || printTarget === 'ZIP_ALL') return analytics.allCustomerStats;
+    if (printTarget === 'ALL') return analytics.allCustomerStats;
     if (printTarget) return analytics.allCustomerStats.filter(data => data.customer?.id === printTarget);
     return [];
   }, [printTarget, analytics.allCustomerStats]);
@@ -229,13 +255,12 @@ export function BillingModule({ sys }) {
   const termLabel = termFilter === 'All' ? 'ALL' : termFilter === 'cod' ? 'COD' : '30-DAY';
 
   // =========================================================================
-  // FOOLPROOF PRINT PORTAL
+  // FOOLPROOF PRINT PORTAL - EXACTLY AS YOU ORIGINALLY DESIGNED IT
   // =========================================================================
   const printContent = printTarget ? (
     <div id="print-portal-root" className="absolute left-[-9999px] top-0 z-[-100] bg-white text-black" style={{ width: '210mm' }}>
       <style type="text/css">
         {`
-          /* BASE A4 DIMENSIONS - Applies both on screen (for ZIP capture) and in print */
           .a4-statement-page { 
             width: 210mm; 
             height: 297mm; 
@@ -263,10 +288,8 @@ export function BillingModule({ sys }) {
               overflow: visible !important; 
             }
             
-            /* HIDE THE DASHBOARD COMPLETELY TO PREVENT CLIPPING */
             #root { display: none !important; }
             
-            /* UNHIDE THE PORTAL AND RESTORE NATURAL FLOW */
             #print-portal-root { 
               display: block !important; 
               position: static !important; 
@@ -278,7 +301,6 @@ export function BillingModule({ sys }) {
               visibility: visible !important; 
             }
             
-            /* FORCE HARD PAGE BREAKS DURING NATIVE PRINT */
             .a4-statement-page { 
               margin-bottom: 0 !important;
               page-break-after: always !important; 
@@ -329,8 +351,6 @@ export function BillingModule({ sys }) {
 
                     {/* --- CUSTOMER INFO --- */}
                     <div className="w-full shrink-0 flex justify-between items-end mb-4 font-bold text-[13px] leading-tight">
-                      
-                      {/* Left Block: Bounded tightly to prevent overlap */}
                       <div className="w-[65%] pr-4 flex flex-col min-w-0 overflow-hidden shrink-0">
                         <div className="flex items-end mb-1.5 w-full min-w-0">
                           <span className="w-12 shrink-0 text-slate-500 font-bold text-[12px]">TO:</span>
@@ -346,7 +366,6 @@ export function BillingModule({ sys }) {
                         </div>
                       </div>
 
-                      {/* Right Block: Safe from horizontal push */}
                       <div className="w-[35%] pl-4 flex flex-col items-end justify-end shrink-0">
                         <div className="flex items-end mb-1.5 w-full justify-end">
                           <span className="shrink-0 text-slate-500 font-bold text-[12px] mr-2">STMT MONTH:</span>
@@ -477,7 +496,7 @@ export function BillingModule({ sys }) {
               disabled={analytics.allCustomerStats.length === 0 || isZipping}
               type="button"
             >
-              {isZipping ? <><Loader2 className="mr-2 animate-spin" size={18} /> Zipping Files...</> : <><Download className="mr-2" size={18} /> {termLabel} ZIP</>}
+              {isZipping ? <><Loader2 className="mr-2 animate-spin" size={18} /> Zipping...</> : <><Download className="mr-2" size={18} /> {termLabel} ZIP</>}
             </button>
 
             <button
