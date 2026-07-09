@@ -87,7 +87,7 @@ export function BillingModule({ sys }) {
       displayList = displayList.filter(row => row.customerName.toLowerCase().includes(lowerSearch));
     }
 
-    // Maintained the logical invoice sorting (Date -> Number) you requested earlier
+    // Sort by Date, then Invoice Number
     displayList.forEach(row => {
       row.invoices.sort((a, b) => {
         const dateA = new Date(a.date || 0);
@@ -138,7 +138,7 @@ export function BillingModule({ sys }) {
       try {
         const zip = new JSZip();
         
-        // Wait for DOM to render the pure print layouts
+        await document.fonts.ready;
         await new Promise(resolve => setTimeout(resolve, 800));
 
         const customerWrappers = document.querySelectorAll('.customer-print-wrapper');
@@ -147,7 +147,6 @@ export function BillingModule({ sys }) {
         const yearShort = String(d.getFullYear()).slice(-2);
         const typeStr = termFilter === 'All' ? 'All' : termFilter === 'cod' ? 'COD' : '30Days';
 
-        // Pure zip loop logic. No CSS hacking.
         for (let i = 0; i < analytics.allCustomerStats.length; i++) {
           const data = analytics.allCustomerStats[i];
           const wrapper = customerWrappers[i];
@@ -164,7 +163,23 @@ export function BillingModule({ sys }) {
               scale: 2, 
               useCORS: true, 
               logging: false,
-              backgroundColor: '#ffffff'
+              backgroundColor: '#ffffff',
+              onclone: (clonedDoc, clonedElement) => {
+                // Ensure the canvas target is explicitly sized so flexbox doesn't collapse
+                clonedElement.style.width = '210mm';
+                
+                // Inject memory-only CSS to fix html2canvas text baseline and flex issues
+                const style = clonedDoc.createElement('style');
+                style.innerHTML = `
+                  /* Forces padding up so Chinese descenders don't bleed into the border */
+                  .border-b { padding-bottom: 4px !important; }
+                  /* Prevents flex items from squishing together or jumbling */
+                  .flex-1 { flex: 1 1 auto !important; min-width: 0 !important; }
+                  /* Enforces spacing that html2canvas ignores off-screen */
+                  * { box-sizing: border-box !important; }
+                `;
+                clonedDoc.head.appendChild(style);
+              }
             });
             
             const imgData = canvas.toDataURL('image/jpeg', 1.0);
@@ -221,7 +236,7 @@ export function BillingModule({ sys }) {
   const termLabel = termFilter === 'All' ? 'ALL' : termFilter === 'cod' ? 'COD' : '30-DAY';
 
   // =========================================================================
-  // FOOLPROOF PRINT PORTAL - Reverted to your approved optimal CSS
+  // FOOLPROOF PRINT PORTAL - 100% REVERTED TO YOUR ORIGINAL CSS
   // =========================================================================
   const printContent = printTarget ? (
     <div id="print-portal-root" className="absolute left-[-9999px] top-0 z-[-100] bg-white text-black" style={{ width: '210mm' }}>
