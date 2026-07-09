@@ -87,7 +87,6 @@ export function BillingModule({ sys }) {
       displayList = displayList.filter(row => row.customerName.toLowerCase().includes(lowerSearch));
     }
 
-    // Sort by Date, then Invoice Number
     displayList.forEach(row => {
       row.invoices.sort((a, b) => {
         const dateA = new Date(a.date || 0);
@@ -138,8 +137,9 @@ export function BillingModule({ sys }) {
       try {
         const zip = new JSZip();
         
+        // Wait for fonts to load and the DOM to render the portal completely
         await document.fonts.ready;
-        await new Promise(resolve => setTimeout(resolve, 800));
+        await new Promise(resolve => setTimeout(resolve, 1000));
 
         const customerWrappers = document.querySelectorAll('.customer-print-wrapper');
         const d = new Date(`${selectedMonth}-01`);
@@ -162,24 +162,7 @@ export function BillingModule({ sys }) {
             const canvas = await html2canvas(pageNode, { 
               scale: 2, 
               useCORS: true, 
-              logging: false,
-              backgroundColor: '#ffffff',
-              onclone: (clonedDoc, clonedElement) => {
-                // Ensure the canvas target is explicitly sized so flexbox doesn't collapse
-                clonedElement.style.width = '210mm';
-                
-                // Inject memory-only CSS to fix html2canvas text baseline and flex issues
-                const style = clonedDoc.createElement('style');
-                style.innerHTML = `
-                  /* Forces padding up so Chinese descenders don't bleed into the border */
-                  .border-b { padding-bottom: 4px !important; }
-                  /* Prevents flex items from squishing together or jumbling */
-                  .flex-1 { flex: 1 1 auto !important; min-width: 0 !important; }
-                  /* Enforces spacing that html2canvas ignores off-screen */
-                  * { box-sizing: border-box !important; }
-                `;
-                clonedDoc.head.appendChild(style);
-              }
+              logging: false
             });
             
             const imgData = canvas.toDataURL('image/jpeg', 1.0);
@@ -236,7 +219,7 @@ export function BillingModule({ sys }) {
   const termLabel = termFilter === 'All' ? 'ALL' : termFilter === 'cod' ? 'COD' : '30-DAY';
 
   // =========================================================================
-  // FOOLPROOF PRINT PORTAL - 100% REVERTED TO YOUR ORIGINAL CSS
+  // FOOLPROOF PRINT PORTAL - EXACTLY AS YOU ORIGINALLY DESIGNED IT
   // =========================================================================
   const printContent = printTarget ? (
     <div id="print-portal-root" className="absolute left-[-9999px] top-0 z-[-100] bg-white text-black" style={{ width: '210mm' }}>
@@ -332,6 +315,8 @@ export function BillingModule({ sys }) {
 
                     {/* --- CUSTOMER INFO --- */}
                     <div className="w-full shrink-0 flex justify-between items-end mb-4 font-bold text-[13px] leading-tight">
+                      
+                      {/* Left Block: Bounded tightly to prevent overlap */}
                       <div className="w-[65%] pr-4 flex flex-col min-w-0 overflow-hidden shrink-0">
                         <div className="flex items-end mb-1.5 w-full min-w-0">
                           <span className="w-12 shrink-0 text-slate-500 font-bold text-[12px]">TO:</span>
@@ -347,6 +332,7 @@ export function BillingModule({ sys }) {
                         </div>
                       </div>
 
+                      {/* Right Block: Safe from horizontal push */}
                       <div className="w-[35%] pl-4 flex flex-col items-end justify-end shrink-0">
                         <div className="flex items-end mb-1.5 w-full justify-end">
                           <span className="shrink-0 text-slate-500 font-bold text-[12px] mr-2">STMT MONTH:</span>
