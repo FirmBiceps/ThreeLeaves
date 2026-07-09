@@ -6,6 +6,7 @@ import JSZip from 'jszip';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 
+// Re-use the logo and QR code from your invoices folder
 import logo from '../invoices/three_leaves_logo.png'; 
 import paynowQr from '../invoices/paynow_qr.jpg';
 
@@ -17,7 +18,7 @@ export function BillingModule({ sys }) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   });
   const [searchTerm, setSearchTerm] = useState('');
-  const [termFilter, setTermFilter] = useState('All'); 
+  const [termFilter, setTermFilter] = useState('All'); // 'All', 'cod', '30_days'
   
   const [printTarget, setPrintTarget] = useState(null);
   const [isZipping, setIsZipping] = useState(false);
@@ -33,6 +34,7 @@ export function BillingModule({ sys }) {
 
     safeInvoices.forEach(inv => {
       const isCurrentMonth = String(inv.date).startsWith(selectedMonth);
+      
       if (!isCurrentMonth) return;
 
       if (!dataMap[inv.customerId]) {
@@ -81,7 +83,6 @@ export function BillingModule({ sys }) {
     const topCustomer = sortedByRevenue[0] || null;
 
     let displayList = [...relevantCustomers].sort((a, b) => a.customerName.localeCompare(b.customerName));
-    
     if (searchTerm) {
       const lowerSearch = String(searchTerm).toLowerCase();
       displayList = displayList.filter(row => row.customerName.toLowerCase().includes(lowerSearch));
@@ -134,12 +135,18 @@ export function BillingModule({ sys }) {
     setPrintTarget('ZIP_ALL'); 
 
     setTimeout(async () => {
+      const portalRoot = document.getElementById('print-portal-root');
       try {
         const zip = new JSZip();
         
-        // Wait for fonts to load and the DOM to render the portal completely
+        // TEMPORARY FIX: Move portal into the viewport (behind the UI) 
+        // so html2canvas renders the CJK fonts and layout precisely as 'Print' does.
+        if (portalRoot) {
+          portalRoot.style.left = '0px';
+        }
+
         await document.fonts.ready;
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 500));
 
         const customerWrappers = document.querySelectorAll('.customer-print-wrapper');
         const d = new Date(`${selectedMonth}-01`);
@@ -158,14 +165,13 @@ export function BillingModule({ sys }) {
 
           for (let p = 0; p < pages.length; p++) {
             const pageNode = pages[p];
-            
             const canvas = await html2canvas(pageNode, { 
               scale: 2, 
               useCORS: true, 
-              logging: false
+              logging: false 
             });
-            
             const imgData = canvas.toDataURL('image/jpeg', 1.0);
+            
             const pdfWidth = 210; 
             const pdfHeight = 297; 
             
@@ -197,10 +203,14 @@ export function BillingModule({ sys }) {
         console.error('Error generating ZIP:', error);
         alert('Failed to generate ZIP folder. Please check the console for details.');
       } finally {
+        // Return the portal to its off-screen hidden position
+        if (portalRoot) {
+          portalRoot.style.left = '-9999px';
+        }
         setIsZipping(false);
         setPrintTarget(null);
       }
-    }, 500); 
+    }, 800); 
   };
 
   const statementsToPrint = useMemo(() => {
@@ -219,12 +229,13 @@ export function BillingModule({ sys }) {
   const termLabel = termFilter === 'All' ? 'ALL' : termFilter === 'cod' ? 'COD' : '30-DAY';
 
   // =========================================================================
-  // FOOLPROOF PRINT PORTAL - EXACTLY AS YOU ORIGINALLY DESIGNED IT
+  // FOOLPROOF PRINT PORTAL
   // =========================================================================
   const printContent = printTarget ? (
     <div id="print-portal-root" className="absolute left-[-9999px] top-0 z-[-100] bg-white text-black" style={{ width: '210mm' }}>
       <style type="text/css">
         {`
+          /* BASE A4 DIMENSIONS - Applies both on screen (for ZIP capture) and in print */
           .a4-statement-page { 
             width: 210mm; 
             height: 297mm; 
@@ -252,8 +263,10 @@ export function BillingModule({ sys }) {
               overflow: visible !important; 
             }
             
+            /* HIDE THE DASHBOARD COMPLETELY TO PREVENT CLIPPING */
             #root { display: none !important; }
             
+            /* UNHIDE THE PORTAL AND RESTORE NATURAL FLOW */
             #print-portal-root { 
               display: block !important; 
               position: static !important; 
@@ -265,6 +278,7 @@ export function BillingModule({ sys }) {
               visibility: visible !important; 
             }
             
+            /* FORCE HARD PAGE BREAKS DURING NATIVE PRINT */
             .a4-statement-page { 
               margin-bottom: 0 !important;
               page-break-after: always !important; 
@@ -463,7 +477,7 @@ export function BillingModule({ sys }) {
               disabled={analytics.allCustomerStats.length === 0 || isZipping}
               type="button"
             >
-              {isZipping ? <><Loader2 className="mr-2 animate-spin" size={18} /> Zipping...</> : <><Download className="mr-2" size={18} /> {termLabel} ZIP</>}
+              {isZipping ? <><Loader2 className="mr-2 animate-spin" size={18} /> Zipping Files...</> : <><Download className="mr-2" size={18} /> {termLabel} ZIP</>}
             </button>
 
             <button
