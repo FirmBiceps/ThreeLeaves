@@ -5,6 +5,23 @@ import { supabase } from '../../lib/supabaseClient';
 import { InvoiceGenerator } from './InvoiceGenerator';
 import { InvoicePreviewModal } from './InvoicePreview';
 
+// Helper function to calculate 1st degree profit per invoice
+const calculateInvoiceProfit = (invoice) => {
+  if (!invoice || !Array.isArray(invoice.items)) return 0;
+  return invoice.items.reduce((acc, item) => {
+    const qty = Number(item.quantity || item.qty || 0);
+    const sellPrice = Number(item.price || item.Price || 0);
+    // Checks for standard cost price keys, including your updated SGD format
+    const costPrice = Number(item['cost_price (SGD)'] || item.cost_price || item.costPrice || 0);
+    
+    // Use the explicit line amount if available, otherwise fallback to qty * sellPrice
+    const lineRevenue = Number(item.amount) || (qty * sellPrice);
+    const lineCost = qty * costPrice;
+    
+    return acc + (lineRevenue - lineCost);
+  }, 0);
+};
+
 export function InvoiceModule({ sys }) {
   const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
   const [filter, setFilter] = useState('All');
@@ -87,13 +104,17 @@ export function InvoiceModule({ sys }) {
       const dateA = new Date(a?.date || 0).getTime() || 0; const dateB = new Date(b?.date || 0).getTime() || 0;
       const numA = String(a?.number || a?.id || ''); const numB = String(b?.number || b?.id || '');
       const totA = Number(a?.total) || 0; const totB = Number(b?.total) || 0;
+      const profA = calculateInvoiceProfit(a); const profB = calculateInvoiceProfit(b);
       const custA = String(a?.customer || ''); const custB = String(b?.customer || '');
+      
       switch (sortOption) {
         case 'date_asc': return dateA - dateB; 
         case 'number_desc': return numB.localeCompare(numA, undefined, { numeric: true });
         case 'number_asc': return numA.localeCompare(numB, undefined, { numeric: true }); 
         case 'total_desc': return totB - totA;
         case 'total_asc': return totA - totB; 
+        case 'profit_desc': return profB - profA;
+        case 'profit_asc': return profA - profB;
         case 'customer_asc': return custA.localeCompare(custB);
         case 'customer_desc': return custB.localeCompare(custA); 
         case 'date_desc': default: return dateB - dateA;
@@ -138,6 +159,8 @@ export function InvoiceModule({ sys }) {
                   <option value="date_asc">Date (Oldest First)</option>
                   <option value="total_desc">Amount (Highest)</option>
                   <option value="total_asc">Amount (Lowest)</option>
+                  <option value="profit_desc">Profit (Highest)</option>
+                  <option value="profit_asc">Profit (Lowest)</option>
                   <option value="customer_asc">Customer (A-Z)</option>
                   <option value="customer_desc">Customer (Z-A)</option>
                 </select>
@@ -151,36 +174,52 @@ export function InvoiceModule({ sys }) {
           </div>
 
           <div className="flex-1 overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+            <table className="w-full text-left border-collapse min-w-[900px]">
               <thead>
                 <tr className="text-xs uppercase tracking-widest text-slate-500 font-semibold border-b">
-                  <th className="p-5 pl-8">Invoice No.</th><th className="p-5">Date</th><th className="p-5">Customer</th><th className="p-5 text-center">Terms</th><th className="p-5 text-right">Total</th><th className="p-5 text-center">Status</th><th className="p-5 text-center w-20">Delete</th>
+                  <th className="p-5 pl-8">Invoice No.</th>
+                  <th className="p-5">Date</th>
+                  <th className="p-5">Customer</th>
+                  <th className="p-5 text-center">Terms</th>
+                  <th className="p-5 text-right">Total</th>
+                  <th className="p-5 text-right">Profit</th>
+                  <th className="p-5 text-center">Status</th>
+                  <th className="p-5 text-center w-20">Delete</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
-                {paginatedInvoices.map((inv) => (
-                  <tr key={inv?.id} className="hover:bg-blue-50 cursor-pointer transition-colors group" onClick={() => setPreviewInvoice(inv)}>
-                    <td className="p-5 pl-8 font-mono font-bold text-blue-600">
-                      #{String(inv?.number || inv?.id || '')}
-                      {inv?.isSpecialFormat && <span className="ml-2 bg-purple-100 text-purple-700 border border-purple-200 px-1.5 py-0.5 rounded text-[8px] uppercase tracking-widest font-black inline-flex items-center"><ScanBarcode size={8} className="mr-0.5" /> Spec</span>}
-                    </td>
-                    <td className="p-5 text-slate-500">{String(inv?.date || '')}</td>
-                    <td className="p-5 text-slate-800">{String(inv?.customer || '')}</td>
-                    <td className="p-5 text-center"><span className="text-xs font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-1 rounded-md whitespace-nowrap">{inv?.paymentTerms === 'cod' ? 'C.O.D' : '30 Days'}</span></td>
-                    <td className="p-5 text-right font-black text-slate-900">${formatMoney(inv?.total)}</td>
-                    <td className="p-5 text-center">
-                      <div className="relative inline-flex items-center" onClick={(e) => e.stopPropagation()}>
-                        <select value={inv?.status || 'Unpaid'} onChange={(e) => handleStatusChange(inv.id, e.target.value)} className={`appearance-none cursor-pointer pl-8 pr-8 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest outline-none transition-all ${(inv?.status || 'Unpaid') === 'Paid' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200 hover:bg-emerald-200' : 'bg-orange-100 text-orange-700 border border-orange-200 hover:bg-orange-200'}`}>
-                          <option value="Paid">PAID</option><option value="Unpaid">UNPAID</option>
-                        </select>
-                        <div className="absolute left-2.5 pointer-events-none">{(inv?.status || 'Unpaid') === 'Paid' ? <CheckCircle size={12} className="text-emerald-600" /> : <AlertCircle size={12} className="text-orange-600" />}</div>
-                        <div className="absolute right-2.5 pointer-events-none"><ChevronDown size={12} className={(inv?.status || 'Unpaid') === 'Paid' ? "text-emerald-600" : "text-orange-600"} /></div>
-                      </div>
-                    </td>
-                    <td className="p-5 text-center"><button onClick={(e) => handleDeleteInvoice(e, inv?.id)} className="p-2 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"><Trash2 size={18} /></button></td>
-                  </tr>
-                ))}
-                {paginatedInvoices.length === 0 && (<tr><td colSpan="7" className="p-12 text-center text-sm font-bold text-slate-400">No invoices match your current search and sorting criteria.</td></tr>)}
+                {paginatedInvoices.map((inv) => {
+                  const invoiceProfit = calculateInvoiceProfit(inv);
+
+                  return (
+                    <tr key={inv?.id} className="hover:bg-blue-50 cursor-pointer transition-colors group" onClick={() => setPreviewInvoice(inv)}>
+                      <td className="p-5 pl-8 font-mono font-bold text-blue-600 whitespace-nowrap">
+                        #{String(inv?.number || inv?.id || '')}
+                        {inv?.isSpecialFormat && <span className="ml-2 bg-purple-100 text-purple-700 border border-purple-200 px-1.5 py-0.5 rounded text-[8px] uppercase tracking-widest font-black inline-flex items-center"><ScanBarcode size={8} className="mr-0.5" /> Spec</span>}
+                      </td>
+                      <td className="p-5 text-slate-500 whitespace-nowrap">{String(inv?.date || '')}</td>
+                      <td className="p-5 text-slate-800 font-medium whitespace-nowrap">{String(inv?.customer || '')}</td>
+                      <td className="p-5 text-center">
+                        <span className="text-xs font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-1 rounded-md whitespace-nowrap">
+                          {inv?.paymentTerms === 'cod' ? 'C.O.D' : '30 Days'}
+                        </span>
+                      </td>
+                      <td className="p-5 text-right font-black text-slate-900 whitespace-nowrap">${formatMoney(inv?.total)}</td>
+                      <td className="p-5 text-right font-black text-emerald-600 whitespace-nowrap">${formatMoney(invoiceProfit)}</td>
+                      <td className="p-5 text-center">
+                        <div className="relative inline-flex items-center" onClick={(e) => e.stopPropagation()}>
+                          <select value={inv?.status || 'Unpaid'} onChange={(e) => handleStatusChange(inv.id, e.target.value)} className={`appearance-none cursor-pointer pl-8 pr-8 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest outline-none transition-all ${(inv?.status || 'Unpaid') === 'Paid' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200 hover:bg-emerald-200' : 'bg-orange-100 text-orange-700 border border-orange-200 hover:bg-orange-200'}`}>
+                            <option value="Paid">PAID</option><option value="Unpaid">UNPAID</option>
+                          </select>
+                          <div className="absolute left-2.5 pointer-events-none">{(inv?.status || 'Unpaid') === 'Paid' ? <CheckCircle size={12} className="text-emerald-600" /> : <AlertCircle size={12} className="text-orange-600" />}</div>
+                          <div className="absolute right-2.5 pointer-events-none"><ChevronDown size={12} className={(inv?.status || 'Unpaid') === 'Paid' ? "text-emerald-600" : "text-orange-600"} /></div>
+                        </div>
+                      </td>
+                      <td className="p-5 text-center"><button onClick={(e) => handleDeleteInvoice(e, inv?.id)} className="p-2 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"><Trash2 size={18} /></button></td>
+                    </tr>
+                  );
+                })}
+                {paginatedInvoices.length === 0 && (<tr><td colSpan="8" className="p-12 text-center text-sm font-bold text-slate-400">No invoices match your current search and sorting criteria.</td></tr>)}
               </tbody>
             </table>
           </div>
