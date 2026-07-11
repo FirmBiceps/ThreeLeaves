@@ -116,7 +116,8 @@ function InventoryFormModal({ item, suppliers, onClose, onSave, onDelete }) {
     Unit: item?.Unit || item?.unit || '箱',
     Description: item?.Description || item?.description || '',
     Packing: item?.Packing || item?.packaging || '',
-    cost_price: item?.cost_price ?? item?.costPrice ?? 0,
+    // UPDATED: Bracket notation added here to read from the new header
+    cost_price: item?.['cost_price (SGD)'] ?? item?.cost_price ?? item?.costPrice ?? 0,
     Price: item?.Price || item?.unitPrice || item?.['Unit Price (SG)'] || 0,
     stock: item?.stock ?? item?.Stock ?? 0,
   });
@@ -393,7 +394,8 @@ export function InventoryModule({ sys }) {
         Unit: formData.Unit,
         Description: formData.Description,
         Packing: formData.Packing,
-        cost_price: Number(formData.cost_price) || 0,
+        // UPDATED: Quotes and exact string mapping to write to the new header
+        "cost_price (SGD)": Number(formData.cost_price) || 0,
         Price: Number(formData.Price) || 0,
         stock: parseInt(formData.stock, 10) || 0
       };
@@ -571,7 +573,8 @@ export function InventoryModule({ sys }) {
                 const unit = item?.Unit || item?.unit || '-';
                 const desc = item?.Description || item?.description || '-';
                 const packing = item?.Packing || item?.packaging || '-';
-                const costPrice = item?.cost_price ?? item?.costPrice ?? 0;
+                // UPDATED: Bracket notation added here to read from the new header for the table
+                const costPrice = item?.['cost_price (SGD)'] ?? item?.cost_price ?? item?.costPrice ?? 0;
                 const price = item?.Price || item?.unitPrice || item?.['Unit Price (SG)'] || 0;
                 const stock = item?.stock ?? item?.Stock ?? 0; 
 
