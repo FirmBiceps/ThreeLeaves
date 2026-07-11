@@ -116,7 +116,6 @@ function InventoryFormModal({ item, suppliers, onClose, onSave, onDelete }) {
     Unit: item?.Unit || item?.unit || '箱',
     Description: item?.Description || item?.description || '',
     Packing: item?.Packing || item?.packaging || '',
-    // UPDATED: Bracket notation added here to read from the new header
     cost_price: item?.['cost_price (SGD)'] ?? item?.cost_price ?? item?.costPrice ?? 0,
     Price: item?.Price || item?.unitPrice || item?.['Unit Price (SG)'] || 0,
     stock: item?.stock ?? item?.Stock ?? 0,
@@ -390,11 +389,10 @@ export function InventoryModule({ sys }) {
       const payload = {
         SKU: formData.sku,
         Name: formData.Name,
-        Supplier: formData.Supplier, // Enforced by strict dropdown
+        Supplier: formData.Supplier, 
         Unit: formData.Unit,
         Description: formData.Description,
         Packing: formData.Packing,
-        // UPDATED: Quotes and exact string mapping to write to the new header
         "cost_price (SGD)": Number(formData.cost_price) || 0,
         Price: Number(formData.Price) || 0,
         stock: parseInt(formData.stock, 10) || 0
@@ -548,21 +546,22 @@ export function InventoryModule({ sys }) {
           />
         </div>
 
-        {/* WRAPPED TABLE WITH OVERFLOW-X-AUTO */}
         <div className="w-full overflow-x-auto">
-          <table className="w-full text-left border-collapse whitespace-nowrap min-w-[1200px]">
+          {/* UPDATED: Removed min-w-[1200px] and whitespace-nowrap from table wrapper */}
+          <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-white border-b border-slate-200 text-xs uppercase tracking-widest text-slate-500 font-semibold">
-                <th className="p-5 pl-8">SKU</th>
-                <th className="p-5">Name</th>
-                <th className="p-5">Supplier</th>
-                <th className="p-5 text-center">Unit</th>
-                <th className="p-5">Description</th>
-                <th className="p-5">Packing</th>
-                <th className="p-5 text-right">Cost Price</th>
-                <th className="p-5 text-right">Sell Price</th>
-                <th className="p-5 text-center">Stock</th>
-                <th className="p-5 pr-8 text-center sticky right-0 bg-white shadow-[-4px_0_6px_-1px_rgba(0,0,0,0.05)]">Action</th>
+                {/* UPDATED: Applied dynamic percentage widths and tightened padding to maximize layout efficiency */}
+                <th className="p-4 pl-8 w-[10%]">SKU</th>
+                <th className="p-4 w-[20%]">Name</th>
+                <th className="p-4 w-[15%]">Supplier</th>
+                <th className="p-4 text-center w-[8%]">Unit</th>
+                <th className="p-4 w-[17%]">Description</th>
+                <th className="p-4 w-[10%]">Packing</th>
+                <th className="p-4 text-right w-[8%] whitespace-nowrap">Cost Price</th>
+                <th className="p-4 text-right w-[8%] whitespace-nowrap">Sell Price</th>
+                <th className="p-4 text-center w-[6%]">Stock</th>
+                <th className="p-4 pr-8 text-center sticky right-0 bg-white shadow-[-4px_0_6px_-1px_rgba(0,0,0,0.05)] w-[6%]">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -573,32 +572,32 @@ export function InventoryModule({ sys }) {
                 const unit = item?.Unit || item?.unit || '-';
                 const desc = item?.Description || item?.description || '-';
                 const packing = item?.Packing || item?.packaging || '-';
-                // UPDATED: Bracket notation added here to read from the new header for the table
                 const costPrice = item?.['cost_price (SGD)'] ?? item?.cost_price ?? item?.costPrice ?? 0;
                 const price = item?.Price || item?.unitPrice || item?.['Unit Price (SG)'] || 0;
                 const stock = item?.stock ?? item?.Stock ?? 0; 
 
                 return (
                   <tr key={item.id || `fallback-${idx}`} className="hover:bg-slate-50 transition-colors">
-                    <td className="p-5 pl-8 text-sm font-mono text-slate-500 uppercase">{sku}</td>
-                    <td className="p-5 text-base text-slate-800 font-medium">{name}</td>
-                    <td className="p-5 text-sm font-bold text-indigo-600">{supplier}</td>
-                    <td className="p-5 text-center">
-                      <span className="text-sm text-slate-600 border border-slate-200 px-3 py-1 rounded-md bg-white">
+                    {/* UPDATED: Added target whitespace-nowrap and whitespace-normal rules to format individual cells correctly */}
+                    <td className="p-4 pl-8 text-sm font-mono text-slate-500 uppercase whitespace-nowrap">{sku}</td>
+                    <td className="p-4 text-sm text-slate-800 font-bold whitespace-normal leading-tight">{name}</td>
+                    <td className="p-4 text-sm font-bold text-indigo-600 whitespace-normal leading-tight">{supplier}</td>
+                    <td className="p-4 text-center">
+                      <span className="text-xs text-slate-600 border border-slate-200 px-2 py-1 rounded-md bg-white whitespace-nowrap">
                         {unit}
                       </span>
                     </td>
-                    <td className="p-5 text-sm text-slate-600 max-w-[200px] truncate whitespace-normal leading-tight">{desc}</td>
-                    <td className="p-5 text-sm text-slate-600">{packing}</td>
-                    <td className="p-5 text-right text-base font-bold text-orange-600">
+                    <td className="p-4 text-xs text-slate-600 whitespace-normal leading-tight">{desc}</td>
+                    <td className="p-4 text-sm text-slate-600 whitespace-normal leading-tight">{packing}</td>
+                    <td className="p-4 text-right text-sm font-bold text-orange-600 whitespace-nowrap">
                       ${formatMoney(costPrice)}
                     </td>
-                    <td className="p-5 text-right text-base font-bold text-blue-700">
+                    <td className="p-4 text-right text-sm font-bold text-blue-700 whitespace-nowrap">
                       ${formatMoney(price)}
                     </td>
-                    <td className="p-5 text-center">
+                    <td className="p-4 text-center">
                       <span
-                        className={`text-xs px-3 py-1.5 rounded-md font-bold ${
+                        className={`text-xs px-2.5 py-1 rounded-md font-bold whitespace-nowrap ${
                           stock > 10
                             ? 'bg-emerald-50 text-emerald-700'
                             : 'bg-red-50 text-red-700'
@@ -607,12 +606,12 @@ export function InventoryModule({ sys }) {
                         {stock}
                       </span>
                     </td>
-                    <td className="p-5 pr-8 text-center sticky right-0 bg-white/95 backdrop-blur-sm group-hover:bg-slate-50 shadow-[-4px_0_6px_-1px_rgba(0,0,0,0.05)]">
+                    <td className="p-4 pr-8 text-center sticky right-0 bg-white/95 backdrop-blur-sm group-hover:bg-slate-50 shadow-[-4px_0_6px_-1px_rgba(0,0,0,0.05)]">
                       <button 
                         onClick={() => openEditModal(item)}
-                        className="text-slate-400 hover:text-blue-600 p-2 transition-colors inline-block bg-white hover:bg-blue-50 rounded-lg border border-transparent hover:border-blue-100 shadow-sm"
+                        className="text-slate-400 hover:text-blue-600 p-1.5 transition-colors inline-block bg-white hover:bg-blue-50 rounded-lg border border-transparent hover:border-blue-100 shadow-sm"
                       >
-                        <Edit size={18} />
+                        <Edit size={16} />
                       </button>
                     </td>
                   </tr>
