@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { FileText, Plus, Filter, ArrowUpDown, Search, ScanBarcode, CheckCircle, AlertCircle, ChevronDown, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+mport { useEffect, useMemo, useState } from 'react';
+import { FileText, Plus, Filter, ArrowUpDown, Search, ScanBarcode, CheckCircle, AlertCircle, ChevronDown, Trash2, ChevronLeft, ChevronRight, DollarSign, TrendingUp, Clock3, RotateCcw, X } from 'lucide-react';
 import { formatMoney } from '../../utils/format';
 import { supabase } from '../../lib/supabaseClient';
 import { InvoiceGenerator } from './InvoiceGenerator';
@@ -126,23 +126,156 @@ export function InvoiceModule({ sys }) {
   const totalPages = Math.ceil(filteredInvoices.length / ITEMS_PER_PAGE) || 1;
   const paginatedInvoices = filteredInvoices.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
+  // Dashboard-style summary for the currently filtered invoice list
+  const invoiceSummary = useMemo(() => {
+    return filteredInvoices.reduce(
+      (summary, invoice) => {
+        summary.totalAmount += Number(invoice?.total) || 0;
+        summary.totalProfit += calculateInvoiceProfit(invoice);
+        if ((invoice?.status || 'Unpaid') === 'Unpaid') summary.unpaidCount += 1;
+        return summary;
+      },
+      {
+        totalAmount: 0,
+        totalProfit: 0,
+        unpaidCount: 0,
+      }
+    );
+  }, [filteredInvoices]);
+
+  const hasActiveFilters =
+    searchTerm.trim() !== '' ||
+    filter !== 'All' ||
+    termFilter !== 'All' ||
+    sortOption !== 'number_desc';
+
+  const clearAllFilters = () => {
+    setSearchTerm('');
+    setFilter('All');
+    setTermFilter('All');
+    setSortOption('number_desc');
+    setCurrentPage(1);
+  };
+
   return (
     <div className="p-8 h-full overflow-y-auto relative print:p-0 print:overflow-visible">
       <div className={(previewInvoice || isGeneratorOpen) ? "print:hidden" : "block"}>
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-2xl font-semibold text-slate-900 flex items-center"><FileText className="mr-3 text-blue-600" size={28} /> Invoice History</h1>
-          <button className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-medium shadow-lg hover:bg-blue-700" onClick={() => setIsGeneratorOpen(true)}><Plus className="mr-2" size={18} /> New Invoice</button>
+        <div className="mb-8 flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+          <div>
+            <div className="flex items-center">
+              <div className="mr-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 ring-1 ring-blue-100">
+                <FileText className="text-blue-600" size={24} />
+              </div>
+              <div>
+                <h1 className="text-2xl font-semibold text-slate-900">Invoice History</h1>
+                <p className="mt-1 text-sm text-slate-500">
+                  Review, search and manage customer invoices from one place.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <button
+            className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-6 py-3 font-medium text-white shadow-lg shadow-blue-600/20 transition-all hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-xl active:translate-y-0"
+            onClick={() => setIsGeneratorOpen(true)}
+          >
+            <Plus className="mr-2" size={18} />
+            New Invoice
+          </button>
         </div>
 
-        <div className="bg-white rounded-3xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
-          <div className="flex flex-wrap justify-between items-center border-b bg-slate-50 p-4 gap-4 shrink-0">
-            <div className="flex bg-white rounded-lg p-1 border shadow-sm">
-              {['All', 'Today', 'This Week', 'This Month'].map((opt) => (
-                <button key={opt} onClick={() => setFilter(opt)} className={`px-4 py-1.5 text-[11px] font-black uppercase rounded-md ${filter === opt ? 'bg-slate-800 text-white' : 'text-slate-500'}`}>{opt}</button>
-              ))}
+        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Invoices</p>
+                <p className="mt-2 text-2xl font-black text-slate-900">{filteredInvoices.length}</p>
+              </div>
+              <div className="rounded-xl bg-blue-50 p-3 text-blue-600">
+                <FileText size={20} />
+              </div>
+            </div>
+            <p className="mt-3 text-xs text-slate-500">Matching the current view</p>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Invoice Value</p>
+                <p className="mt-2 text-2xl font-black text-slate-900">${formatMoney(invoiceSummary.totalAmount)}</p>
+              </div>
+              <div className="rounded-xl bg-indigo-50 p-3 text-indigo-600">
+                <DollarSign size={20} />
+              </div>
+            </div>
+            <p className="mt-3 text-xs text-slate-500">Total value in this result set</p>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Estimated Profit</p>
+                <p className="mt-2 text-2xl font-black text-emerald-600">${formatMoney(invoiceSummary.totalProfit)}</p>
+              </div>
+              <div className="rounded-xl bg-emerald-50 p-3 text-emerald-600">
+                <TrendingUp size={20} />
+              </div>
+            </div>
+            <p className="mt-3 text-xs text-slate-500">Calculated from invoice line items</p>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Unpaid</p>
+                <p className="mt-2 text-2xl font-black text-orange-600">{invoiceSummary.unpaidCount}</p>
+              </div>
+              <div className="rounded-xl bg-orange-50 p-3 text-orange-600">
+                <Clock3 size={20} />
+              </div>
+            </div>
+            <p className="mt-3 text-xs text-slate-500">Invoices still awaiting payment</p>
+          </div>
+        </div>
+
+        <div className="flex flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <div className="shrink-0 border-b border-slate-200 bg-slate-50/80 p-4 sm:p-5">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-bold text-slate-800">Find an invoice</p>
+                <p className="mt-0.5 text-xs text-slate-500">Use filters, sorting or customer and invoice number search.</p>
+              </div>
+
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={clearAllFilters}
+                  className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 shadow-sm transition-colors hover:bg-slate-100 hover:text-slate-900"
+                >
+                  <RotateCcw size={14} className="mr-1.5" />
+                  Reset filters
+                </button>
+              )}
             </div>
 
-            <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex w-full overflow-x-auto rounded-xl border border-slate-200 bg-white p-1 shadow-sm xl:w-auto">
+                {['All', 'Today', 'This Week', 'This Month'].map((opt) => (
+                  <button
+                    key={opt}
+                    onClick={() => setFilter(opt)}
+                    className={`whitespace-nowrap rounded-lg px-4 py-2 text-[11px] font-black uppercase tracking-wide transition-all ${
+                      filter === opt
+                        ? 'bg-slate-900 text-white shadow-sm'
+                        : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'
+                    }`}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex w-full flex-wrap items-center gap-3 xl:w-auto">
               <div className="relative flex items-center bg-white border rounded-xl shadow-sm px-3 py-2 w-full sm:w-36 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
                 <Filter className="text-slate-400 mr-2 shrink-0" size={16} />
                 <select className="w-full bg-transparent outline-none text-xs font-bold text-slate-700 cursor-pointer appearance-none" value={termFilter} onChange={(e) => setTermFilter(e.target.value)}>
@@ -166,17 +299,34 @@ export function InvoiceModule({ sys }) {
                 </select>
               </div>
 
-              <div className="flex items-center bg-white border rounded-xl px-4 py-2 w-full sm:w-64 shadow-sm focus-within:ring-2 focus-within:ring-blue-100 transition-all">
-                <Search className="text-slate-400 mr-2 shrink-0" size={16} />
-                <input type="text" placeholder="Search..." className="w-full bg-transparent outline-none text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+              <div className="flex w-full items-center rounded-xl border border-slate-200 bg-white px-4 py-2 shadow-sm transition-all focus-within:border-blue-300 focus-within:ring-4 focus-within:ring-blue-100 sm:w-72">
+                <Search className="mr-2 shrink-0 text-slate-400" size={16} />
+                <input
+                  type="text"
+                  placeholder="Customer or invoice number..."
+                  className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+                {searchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchTerm('')}
+                    className="ml-2 rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                    aria-label="Clear search"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
               </div>
             </div>
+          </div>
           </div>
 
           <div className="flex-1 overflow-x-auto">
             <table className="w-full text-left border-collapse min-w-[900px]">
-              <thead>
-                <tr className="text-xs uppercase tracking-widest text-slate-500 font-semibold border-b">
+              <thead className="sticky top-0 z-10 bg-white/95 backdrop-blur">
+                <tr className="border-b border-slate-200 text-xs font-semibold uppercase tracking-widest text-slate-500">
                   <th className="p-5 pl-8">Invoice No.</th>
                   <th className="p-5">Date</th>
                   <th className="p-5">Customer</th>
@@ -192,7 +342,7 @@ export function InvoiceModule({ sys }) {
                   const invoiceProfit = calculateInvoiceProfit(inv);
 
                   return (
-                    <tr key={inv?.id} className="hover:bg-blue-50 cursor-pointer transition-colors group" onClick={() => setPreviewInvoice(inv)}>
+                    <tr key={inv?.id} className="group cursor-pointer transition-all hover:bg-blue-50/70" onClick={() => setPreviewInvoice(inv)}>
                       <td className="p-5 pl-8 font-mono font-bold text-blue-600 whitespace-nowrap">
                         #{String(inv?.number || inv?.id || '')}
                         {inv?.isSpecialFormat && <span className="ml-2 bg-purple-100 text-purple-700 border border-purple-200 px-1.5 py-0.5 rounded text-[8px] uppercase tracking-widest font-black inline-flex items-center"><ScanBarcode size={8} className="mr-0.5" /> Spec</span>}
@@ -219,18 +369,40 @@ export function InvoiceModule({ sys }) {
                     </tr>
                   );
                 })}
-                {paginatedInvoices.length === 0 && (<tr><td colSpan="8" className="p-12 text-center text-sm font-bold text-slate-400">No invoices match your current search and sorting criteria.</td></tr>)}
+                {paginatedInvoices.length === 0 && (
+                  <tr>
+                    <td colSpan="8" className="px-6 py-16 text-center">
+                      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+                        <Search size={24} />
+                      </div>
+                      <p className="mt-4 text-sm font-bold text-slate-700">No matching invoices</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        Try a different customer, invoice number, date range or payment term.
+                      </p>
+                      {hasActiveFilters && (
+                        <button
+                          type="button"
+                          onClick={clearAllFilters}
+                          className="mt-4 inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 shadow-sm hover:bg-slate-50"
+                        >
+                          <RotateCcw size={14} className="mr-1.5" />
+                          Clear filters
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
 
           {/* ===== PAGINATION CONTROLS ===== */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between px-8 py-4 border-t border-slate-100 bg-white shrink-0">
+            <div className="flex shrink-0 flex-col gap-4 border-t border-slate-100 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8">
               <span className="text-xs text-slate-500 font-bold uppercase tracking-widest">
                 Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1} to {Math.min(currentPage * ITEMS_PER_PAGE, filteredInvoices.length)} of {filteredInvoices.length} invoices
               </span>
-              <div className="flex space-x-2">
+              <div className="flex items-center space-x-2">
                 <button
                   onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                   disabled={currentPage === 1}
