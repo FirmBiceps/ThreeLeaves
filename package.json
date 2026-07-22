@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview"
   },
- "dependencies": {
+  "dependencies": {
     "leaflet": "^1.9.4",
     "lucide-react": "^0.469.0",
     "react": "^18.2.0",
@@ -16,7 +16,9 @@
     "@supabase/supabase-js": "2.49.8",
     "html2canvas": "^1.4.1",
     "jspdf": "^2.5.1",
-    "jszip": "^3.10.1"
+    "jszip": "^3.10.1",
+    "xlsx": "^0.19.0",
+    "jspdf-autotable": "^3.5.28"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.3",
