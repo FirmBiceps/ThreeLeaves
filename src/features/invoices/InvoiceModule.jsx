@@ -1,4 +1,4 @@
-mport { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { FileText, Plus, Filter, ArrowUpDown, Search, ScanBarcode, CheckCircle, AlertCircle, ChevronDown, Trash2, ChevronLeft, ChevronRight, DollarSign, TrendingUp, Clock3, RotateCcw, X } from 'lucide-react';
 import { formatMoney } from '../../utils/format';
 import { supabase } from '../../lib/supabaseClient';
