@@ -73,7 +73,36 @@ function exportInventoryToExcel(items) {
   XLSX.writeFile(workbook, `inventory-${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
 
-function exportInventoryToPDF(items, selectedColumnKeys) {
+async function loadChinesePdfFont(document) {
+  const fontUrl = '/fonts/NotoSansSC-Regular.ttf';
+  const fontFileName = 'NotoSansSC-Regular.ttf';
+  const fontFamily = 'NotoSansSC';
+
+  const response = await fetch(fontUrl);
+
+  if (!response.ok) {
+    throw new Error(`Unable to load the Chinese PDF font from ${fontUrl}.`);
+  }
+
+  const fontBuffer = await response.arrayBuffer();
+  const fontBytes = new Uint8Array(fontBuffer);
+  let binaryString = '';
+  const chunkSize = 0x8000;
+
+  for (let index = 0; index < fontBytes.length; index += chunkSize) {
+    const chunk = fontBytes.subarray(index, index + chunkSize);
+    binaryString += String.fromCharCode(...chunk);
+  }
+
+  const fontBase64 = window.btoa(binaryString);
+
+  document.addFileToVFS(fontFileName, fontBase64);
+  document.addFont(fontFileName, fontFamily, 'normal');
+
+  return fontFamily;
+}
+
+async function exportInventoryToPDF(items, selectedColumnKeys) {
   const rows = normaliseInventoryForExport(items);
   const selectedColumns = INVENTORY_EXPORT_COLUMNS.filter((column) =>
     selectedColumnKeys.includes(column.key)
@@ -96,6 +125,18 @@ function exportInventoryToPDF(items, selectedColumnKeys) {
     unit: 'pt',
     format: 'a4',
   });
+
+  let tableFont;
+
+  try {
+    tableFont = await loadChinesePdfFont(document);
+  } catch (error) {
+    console.error('Chinese PDF font error:', error);
+    window.alert(
+      'The Chinese PDF font could not be loaded. Check that public/fonts/NotoSansSC-Regular.ttf exists.'
+    );
+    return;
+  }
 
   const pageWidth = document.internal.pageSize.getWidth();
   const pageHeight = document.internal.pageSize.getHeight();
@@ -130,13 +171,14 @@ function exportInventoryToPDF(items, selectedColumnKeys) {
         if (column.key === 'Price' || column.key === 'cost_price (SGD)') {
           return `$${Number(value || 0).toFixed(2)}`;
         }
-        return value ?? '';
+        return String(value ?? '');
       })
     ),
     theme: 'grid',
     margin: { top: 92, right: 32, bottom: 42, left: 32 },
     styles: {
-      font: 'helvetica',
+      font: tableFont,
+      fontStyle: 'normal',
       fontSize,
       cellPadding: 4,
       overflow: 'linebreak',
@@ -146,9 +188,10 @@ function exportInventoryToPDF(items, selectedColumnKeys) {
       textColor: [30, 41, 59],
     },
     headStyles: {
+      font: tableFont,
+      fontStyle: 'normal',
       fillColor: [30, 64, 175],
       textColor: [255, 255, 255],
-      fontStyle: 'bold',
       halign: 'left',
     },
     alternateRowStyles: {
