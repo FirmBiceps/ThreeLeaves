@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { Search, Plus, Edit, Package, X, Trash2, Save, CheckCircle, Download, FileText } from 'lucide-react';
+import { Search, Plus, Edit, Package, X, Trash2, Save, CheckCircle, Download, FileText, LoaderCircle } from 'lucide-react';
 import { formatMoney } from '../../utils/format';
 import { supabase } from '../../lib/supabaseClient';
 import * as XLSX from 'xlsx';
@@ -78,13 +78,24 @@ async function loadChinesePdfFont(document) {
   const fontFileName = 'NotoSansSC-Regular.ttf';
   const fontFamily = 'NotoSansSC';
 
-  const response = await fetch(fontUrl);
+  const response = await fetch(fontUrl, { cache: 'force-cache' });
 
   if (!response.ok) {
-    throw new Error(`Unable to load the Chinese PDF font from ${fontUrl}.`);
+    throw new Error(`Unable to load ${fontUrl} (HTTP ${response.status}).`);
+  }
+
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('text/html')) {
+    throw new Error(
+      `${fontUrl} returned HTML instead of a font. Add the TTF file under public/fonts.`
+    );
   }
 
   const fontBuffer = await response.arrayBuffer();
+  if (fontBuffer.byteLength < 1000) {
+    throw new Error(`${fontUrl} is empty or is not a valid font file.`);
+  }
+
   const fontBytes = new Uint8Array(fontBuffer);
   let binaryString = '';
   const chunkSize = 0x8000;
@@ -95,14 +106,15 @@ async function loadChinesePdfFont(document) {
   }
 
   const fontBase64 = window.btoa(binaryString);
-
   document.addFileToVFS(fontFileName, fontBase64);
   document.addFont(fontFileName, fontFamily, 'normal');
+  document.setFont(fontFamily, 'normal');
 
   return fontFamily;
 }
 
 async function exportInventoryToPDF(items, selectedColumnKeys) {
+  try {
   const rows = normaliseInventoryForExport(items);
   const selectedColumns = INVENTORY_EXPORT_COLUMNS.filter((column) =>
     selectedColumnKeys.includes(column.key)
@@ -110,12 +122,12 @@ async function exportInventoryToPDF(items, selectedColumnKeys) {
 
   if (rows.length === 0) {
     window.alert('There is no inventory data to export.');
-    return;
+    return false;
   }
 
   if (selectedColumns.length === 0) {
     window.alert('Select at least one column for the PDF.');
-    return;
+    return false;
   }
 
   const orientation = selectedColumns.length <= 4 ? 'portrait' : 'landscape';
@@ -135,7 +147,7 @@ async function exportInventoryToPDF(items, selectedColumnKeys) {
     window.alert(
       'The Chinese PDF font could not be loaded. Check that public/fonts/NotoSansSC-Regular.ttf exists.'
     );
-    return;
+    return false;
   }
 
   const pageWidth = document.internal.pageSize.getWidth();
@@ -216,12 +228,19 @@ async function exportInventoryToPDF(items, selectedColumnKeys) {
   });
 
   document.save(`inventory-catalogue-${new Date().toISOString().slice(0, 10)}.pdf`);
+  return true;
+  } catch (error) {
+    console.error('Inventory PDF export failed:', error);
+    window.alert(`Unable to generate the PDF: ${error?.message || 'Unknown error'}`);
+    return false;
+  }
 }
 
 // ==========================================
 // COMPONENT: PDF COLUMN SELECTOR
 // ==========================================
 function InventoryPdfColumnPicker({ onClose, onExport }) {
+  const [isExporting, setIsExporting] = useState(false);
   const [selectedColumns, setSelectedColumns] = useState(
     INVENTORY_EXPORT_COLUMNS
       .filter((column) => column.defaultVisible)
@@ -234,6 +253,16 @@ function InventoryPdfColumnPicker({ onClose, onExport }) {
         ? current.filter((key) => key !== columnKey)
         : [...current, columnKey]
     );
+  };
+
+  const handleExport = async () => {
+    if (isExporting || selectedColumns.length === 0) return;
+    setIsExporting(true);
+    try {
+      await onExport(selectedColumns);
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (
@@ -309,11 +338,15 @@ function InventoryPdfColumnPicker({ onClose, onExport }) {
               </button>
               <button
                 type="button"
-                disabled={selectedColumns.length === 0}
-                onClick={() => onExport(selectedColumns)}
+                disabled={selectedColumns.length === 0 || isExporting}
+                onClick={handleExport}
                 className="flex items-center rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white shadow-lg transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <FileText size={16} className="mr-2" /> Export PDF
+                {isExporting ? (
+                  <><LoaderCircle size={16} className="mr-2 animate-spin" /> Generating PDF...</>
+                ) : (
+                  <><FileText size={16} className="mr-2" /> Export PDF</>
+                )}
               </button>
             </div>
           </div>
@@ -973,9 +1006,10 @@ export function InventoryModule({ sys }) {
       {isPdfColumnPickerOpen && (
         <InventoryPdfColumnPicker
           onClose={() => setIsPdfColumnPickerOpen(false)}
-          onExport={(selectedColumns) => {
-            exportInventoryToPDF(filteredInventory, selectedColumns);
-            setIsPdfColumnPickerOpen(false);
+          onExport={async (selectedColumns) => {
+            const success = await exportInventoryToPDF(filteredInventory, selectedColumns);
+            if (success) setIsPdfColumnPickerOpen(false);
+            return success;
           }}
         />
       )}
