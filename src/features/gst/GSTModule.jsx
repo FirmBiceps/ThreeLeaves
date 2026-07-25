@@ -1,335 +1,1256 @@
-import { useMemo, useState } from 'react';
-import { Calendar, Info, Plus, Trash2 } from 'lucide-react';
-import { EntityModal } from '../../components/shared/EntityModal';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  AlertCircle,
+  BarChart3,
+  Building2,
+  CalendarRange,
+  CheckCircle2,
+  ChevronDown,
+  CircleDollarSign,
+  FileText,
+  Info,
+  PackagePlus,
+  Plus,
+  ReceiptText,
+  RefreshCcw,
+  Search,
+  ShoppingCart,
+  Trash2,
+  TrendingDown,
+  TrendingUp,
+  X,
+} from 'lucide-react';
 import { formatMoney } from '../../utils/format';
+import { supabase } from '../../lib/supabaseClient';
 
-function GstTransactionModal({ onClose, onSave }) {
-  const [form, setForm] = useState({
-    date: new Date().toISOString().split('T')[0],
-    type: 'input',
-    desc: '',
-    category: 'Purchases',
-    amount: '',
-    gst: '',
-  });
+const GST_RATE = 0.09;
+const SALES_EXCLUSION_STORAGE_KEY = 'three-leaves-gst-sales-exclusions-v1';
 
-  const calcAutoGst = (amount) => {
-    setForm((current) => ({
-      ...current,
-      amount,
-      gst: (Number(amount || 0) * 0.09).toFixed(2),
-    }));
+const QUARTERS = [
+  { value: 'Q1', label: 'Q1', months: [0, 1, 2] },
+  { value: 'Q2', label: 'Q2', months: [3, 4, 5] },
+  { value: 'Q3', label: 'Q3', months: [6, 7, 8] },
+  { value: 'Q4', label: 'Q4', months: [9, 10, 11] },
+];
+
+const PURCHASE_CATEGORIES = [
+  'Inventory Purchase',
+  'Overheads',
+  'Capital Goods',
+  'Freight / Delivery',
+  'Professional Fees',
+  'Utilities',
+  'Other Purchase',
+];
+
+const EXCLUSION_REASONS = [
+  'Cancelled invoice',
+  'Duplicate invoice',
+  'Not subject to GST',
+  'Recorded in another GST period',
+  'Credit adjustment required',
+  'Other',
+];
+
+function getCurrentQuarter() {
+  const now = new Date();
+  return {
+    year: now.getFullYear(),
+    quarter: `Q${Math.floor(now.getMonth() / 3) + 1}`,
+  };
+}
+
+function getQuarterDateRange(year, quarter) {
+  const quarterConfig = QUARTERS.find((entry) => entry.value === quarter) || QUARTERS[0];
+  const startMonth = quarterConfig.months[0];
+  const endMonth = quarterConfig.months[2];
+
+  const start = new Date(year, startMonth, 1);
+  const end = new Date(year, endMonth + 1, 0, 23, 59, 59, 999);
+
+  return { start, end };
+}
+
+function isDateInRange(dateValue, range) {
+  if (!dateValue) return false;
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return false;
+  return date >= range.start && date <= range.end;
+}
+
+function toMoneyNumber(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function getInvoiceSubtotal(invoice) {
+  const explicitSubtotal =
+    invoice?.subtotal ??
+    invoice?.subTotal ??
+    invoice?.amount_before_gst ??
+    invoice?.amountBeforeGst;
+
+  if (explicitSubtotal !== undefined && explicitSubtotal !== null && explicitSubtotal !== '') {
+    return toMoneyNumber(explicitSubtotal);
+  }
+
+  const items = Array.isArray(invoice?.items) ? invoice.items : [];
+  if (items.length > 0) {
+    return items.reduce((sum, item) => {
+      const quantity = toMoneyNumber(item?.qty ?? item?.quantity);
+      const price = toMoneyNumber(item?.unitPrice ?? item?.price ?? item?.Price);
+      return sum + quantity * price;
+    }, 0);
+  }
+
+  const total = toMoneyNumber(invoice?.total);
+  return total > 0 ? total / (1 + GST_RATE) : 0;
+}
+
+function getInvoiceGst(invoice) {
+  const explicitGst =
+    invoice?.gstAmount ??
+    invoice?.gst_amount ??
+    invoice?.gst ??
+    invoice?.taxAmount ??
+    invoice?.tax_amount;
+
+  if (explicitGst !== undefined && explicitGst !== null && explicitGst !== '') {
+    return {
+      amount: toMoneyNumber(explicitGst),
+      source: 'saved',
+    };
+  }
+
+  const subtotal = getInvoiceSubtotal(invoice);
+  const total = toMoneyNumber(invoice?.total);
+
+  if (subtotal > 0 && total > subtotal) {
+    return {
+      amount: total - subtotal,
+      source: 'derived',
+    };
+  }
+
+  return {
+    amount: subtotal * GST_RATE,
+    source: 'calculated',
+  };
+}
+
+function getInventoryIdentity(item) {
+  return item?.id || item?.SKU || item?.sku || item?.Name || item?.name || item?.Items || '';
+}
+
+function getInventoryName(item) {
+  return String(item?.Name || item?.name || item?.Items || 'Unnamed Product');
+}
+
+function getInventorySku(item) {
+  return String(item?.SKU || item?.sku || '');
+}
+
+function getSupplierName(supplier) {
+  return String(supplier?.name || supplier?.Name || supplier?.supplier_name || 'Unnamed Supplier');
+}
+
+function loadStoredSalesExclusions() {
+  try {
+    const raw = window.localStorage.getItem(SALES_EXCLUSION_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (error) {
+    console.error('Unable to load GST sales exclusions:', error);
+    return {};
+  }
+}
+
+function saveStoredSalesExclusions(exclusions) {
+  try {
+    window.localStorage.setItem(SALES_EXCLUSION_STORAGE_KEY, JSON.stringify(exclusions));
+  } catch (error) {
+    console.error('Unable to save GST sales exclusions:', error);
+  }
+}
+
+function DashboardCard({ icon: Icon, label, value, helper, tone = 'slate' }) {
+  const toneMap = {
+    blue: 'border-blue-100 bg-blue-50 text-blue-700',
+    emerald: 'border-emerald-100 bg-emerald-50 text-emerald-700',
+    amber: 'border-amber-100 bg-amber-50 text-amber-700',
+    red: 'border-red-100 bg-red-50 text-red-700',
+    slate: 'border-slate-200 bg-white text-slate-700',
+    indigo: 'border-indigo-100 bg-indigo-50 text-indigo-700',
   };
 
   return (
-    <EntityModal
-      onClose={onClose}
-      onSave={() =>
-        onSave({
-          ...form,
-          id: `g${Date.now()}`,
-          amount: Number(form.amount || 0),
-          gst: Number(form.gst || 0),
-        })
-      }
-      title="Log GST Transaction"
-    >
-      <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+    <div className={`rounded-2xl border p-5 shadow-sm ${toneMap[tone] || toneMap.slate}`}>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] opacity-70">{label}</p>
+          <p className="mt-2 font-mono text-2xl font-black tracking-tight">{value}</p>
+          <p className="mt-2 text-xs font-semibold opacity-80">{helper}</p>
+        </div>
+        <div className="rounded-xl bg-white/70 p-2.5 shadow-sm">
+          <Icon size={20} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ title, description }) {
+  return (
+    <div className="flex min-h-56 flex-col items-center justify-center px-6 text-center">
+      <div className="rounded-2xl bg-slate-100 p-4 text-slate-400">
+        <ReceiptText size={28} />
+      </div>
+      <h3 className="mt-4 text-sm font-black text-slate-700">{title}</h3>
+      <p className="mt-1 max-w-md text-xs font-medium text-slate-400">{description}</p>
+    </div>
+  );
+}
+
+function SalesExclusionModal({ invoice, existing, onClose, onSave }) {
+  const [reason, setReason] = useState(existing?.reason || EXCLUSION_REASONS[0]);
+  const [notes, setNotes] = useState(existing?.notes || '');
+
+  return (
+    <div className="fixed inset-0 z-[7000] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-lg overflow-hidden rounded-3xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between bg-slate-900 px-6 py-4 text-white">
           <div>
-            <label className="ml-1 text-[10px] font-black uppercase tracking-widest text-gray-400">
-              Date
-            </label>
-            <input
-              className="mt-1 w-full rounded-xl border bg-gray-50 p-3 text-sm font-bold"
-              onChange={(event) => setForm((current) => ({ ...current, date: event.target.value }))}
-              type="date"
-              value={form.date}
-            />
+            <h2 className="text-sm font-black uppercase tracking-widest">Exclude Sales Invoice</h2>
+            <p className="mt-1 text-xs text-slate-300">
+              Invoice #{invoice?.number || invoice?.id || 'N/A'}
+            </p>
           </div>
+          <button type="button" onClick={onClose} className="rounded-full p-1.5 hover:bg-slate-800">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="space-y-5 p-6">
           <div>
-            <label className="ml-1 text-[10px] font-black uppercase tracking-widest text-gray-400">
-              Tax Type
+            <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">
+              Exclusion reason
             </label>
             <select
-              className="mt-1 w-full rounded-xl border bg-gray-50 p-3 text-sm font-bold"
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  type: event.target.value,
-                  category: event.target.value === 'input' ? 'Purchases' : 'Sales',
-                }))
-              }
-              value={form.type}
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="input">Input (Purchases / Expenses)</option>
-              <option value="output">Output (Sales / Income)</option>
+              {EXCLUSION_REASONS.map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
             </select>
           </div>
-        </div>
 
-        <div>
-          <label className="ml-1 text-[10px] font-black uppercase tracking-widest text-gray-400">
-            Category
-          </label>
-          <select
-            className="mt-1 w-full rounded-xl border bg-gray-50 p-3 text-sm"
-            onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))}
-            value={form.category}
-          >
-            {form.type === 'input' ? (
-              <>
-                <option>Purchases</option>
-                <option>Overheads</option>
-                <option>Capital Goods</option>
-              </>
-            ) : (
-              <>
-                <option>Sales</option>
-                <option>Other Income</option>
-              </>
-            )}
-          </select>
-        </div>
-
-        <div>
-          <label className="ml-1 text-[10px] font-black uppercase tracking-widest text-gray-400">
-            Description
-          </label>
-          <input
-            className="mt-1 w-full rounded-xl border bg-gray-50 p-3 text-sm"
-            onChange={(event) => setForm((current) => ({ ...current, desc: event.target.value }))}
-            placeholder="e.g., Office Supplies"
-            value={form.desc}
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="ml-1 text-[10px] font-black uppercase tracking-widest text-gray-400">
-              Amount (ex-GST)
+            <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">
+              Notes
             </label>
-            <input
-              className="mt-1 w-full rounded-xl border bg-gray-50 p-3 font-mono text-sm"
-              onChange={(event) => calcAutoGst(event.target.value)}
-              placeholder="0.00"
-              step="0.01"
-              type="number"
-              value={form.amount}
+            <textarea
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              rows={4}
+              placeholder="Add a short audit note..."
+              className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          <div>
-            <label className="ml-1 text-[10px] font-black uppercase tracking-widest text-indigo-500">
-              GST Amount
-            </label>
-            <input
-              className="mt-1 w-full rounded-xl border border-indigo-200 bg-indigo-50 p-3 font-mono text-sm font-bold text-indigo-700"
-              onChange={(event) => setForm((current) => ({ ...current, gst: event.target.value }))}
-              placeholder="0.00"
-              step="0.01"
-              type="number"
-              value={form.gst}
-            />
+
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs font-semibold text-amber-800">
+            This temporary version stores exclusions in this browser only. The later Supabase migration will make exclusions shared and auditable across users.
+          </div>
+
+          <div className="flex justify-end gap-3 border-t border-slate-100 pt-5">
+            <button type="button" onClick={onClose} className="rounded-xl px-5 py-2.5 text-sm font-bold text-slate-500 hover:bg-slate-100">
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => onSave({ reason, notes })}
+              className="rounded-xl bg-amber-600 px-5 py-2.5 text-sm font-black text-white shadow-lg hover:bg-amber-700"
+            >
+              Exclude invoice
+            </button>
           </div>
         </div>
       </div>
-    </EntityModal>
+    </div>
+  );
+}
+
+function PurchaseEntryModal({ suppliers, inventory, onClose, onSave }) {
+  const [form, setForm] = useState({
+    supplierId: '',
+    supplierInvoiceNumber: '',
+    invoiceDate: new Date().toISOString().slice(0, 10),
+    category: 'Inventory Purchase',
+    notes: '',
+    gstRate: GST_RATE,
+  });
+  const [items, setItems] = useState([
+    { productId: '', quantity: 1, unitCost: 0, gstRate: GST_RATE },
+  ]);
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+
+  const safeSuppliers = Array.isArray(suppliers) ? suppliers : [];
+  const safeInventory = Array.isArray(inventory) ? inventory : [];
+
+  const subtotal = useMemo(
+    () => items.reduce((sum, item) => sum + toMoneyNumber(item.quantity) * toMoneyNumber(item.unitCost), 0),
+    [items]
+  );
+
+  const gstAmount = useMemo(
+    () => items.reduce((sum, item) => {
+      const lineSubtotal = toMoneyNumber(item.quantity) * toMoneyNumber(item.unitCost);
+      return sum + lineSubtotal * toMoneyNumber(item.gstRate);
+    }, 0),
+    [items]
+  );
+
+  const total = subtotal + gstAmount;
+
+  const updateItem = (index, patch) => {
+    setItems((current) => current.map((item, itemIndex) => (
+      itemIndex === index ? { ...item, ...patch } : item
+    )));
+  };
+
+  const removeItem = (index) => {
+    setItems((current) => current.filter((_, itemIndex) => itemIndex !== index));
+  };
+
+  const handleSubmit = async () => {
+    setErrorMessage('');
+
+    const cleanItems = items
+      .map((item) => ({
+        ...item,
+        quantity: toMoneyNumber(item.quantity),
+        unitCost: toMoneyNumber(item.unitCost),
+        gstRate: toMoneyNumber(item.gstRate),
+      }))
+      .filter((item) => item.productId && item.quantity > 0);
+
+    if (!form.supplierId) {
+      setErrorMessage('Select a supplier.');
+      return;
+    }
+
+    if (!form.supplierInvoiceNumber.trim()) {
+      setErrorMessage('Enter the supplier invoice number.');
+      return;
+    }
+
+    if (cleanItems.length === 0) {
+      setErrorMessage('Add at least one valid purchase item.');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await onSave({
+        ...form,
+        supplierInvoiceNumber: form.supplierInvoiceNumber.trim(),
+        notes: form.notes.trim(),
+        items: cleanItems,
+        subtotal,
+        gstAmount,
+        total,
+      });
+    } catch (error) {
+      setErrorMessage(error?.message || 'Unable to save purchase entry.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[7000] flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm">
+      <div className="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+        <div className="flex shrink-0 items-center justify-between bg-slate-900 px-6 py-4 text-white">
+          <div>
+            <h2 className="flex items-center text-sm font-black uppercase tracking-widest">
+              <ShoppingCart className="mr-2 text-emerald-400" size={18} />
+              Register Supplier Purchase
+            </h2>
+            <p className="mt-1 text-xs text-slate-300">Capture input GST and stock-in purchased items.</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-full p-1.5 hover:bg-slate-800">
+            <X size={19} />
+          </button>
+        </div>
+
+        <div className="flex-1 space-y-6 overflow-y-auto bg-slate-50 p-6">
+          <div className="grid grid-cols-1 gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:grid-cols-4">
+            <div className="md:col-span-2">
+              <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">Supplier</label>
+              <select
+                value={form.supplierId}
+                onChange={(event) => setForm((current) => ({ ...current, supplierId: event.target.value }))}
+                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Select supplier...</option>
+                {safeSuppliers.map((supplier) => (
+                  <option key={supplier.id || getSupplierName(supplier)} value={supplier.id || getSupplierName(supplier)}>
+                    {getSupplierName(supplier)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">Supplier Invoice No.</label>
+              <input
+                value={form.supplierInvoiceNumber}
+                onChange={(event) => setForm((current) => ({ ...current, supplierInvoiceNumber: event.target.value }))}
+                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="e.g. SUP-2026-001"
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">Invoice Date</label>
+              <input
+                type="date"
+                value={form.invoiceDate}
+                onChange={(event) => setForm((current) => ({ ...current, invoiceDate: event.target.value }))}
+                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">Category</label>
+              <select
+                value={form.category}
+                onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))}
+                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {PURCHASE_CATEGORIES.map((category) => (
+                  <option key={category} value={category}>{category}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">Notes</label>
+              <input
+                value={form.notes}
+                onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))}
+                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Optional internal notes"
+              />
+            </div>
+          </div>
+
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+              <div>
+                <h3 className="text-sm font-black text-slate-800">Purchased Items</h3>
+                <p className="mt-1 text-xs font-medium text-slate-400">Each item will be added to stock when this purchase is saved.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setItems((current) => [...current, { productId: '', quantity: 1, unitCost: 0, gstRate: GST_RATE }])}
+                className="flex items-center rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700 hover:bg-blue-100"
+              >
+                <Plus size={14} className="mr-1.5" /> Add item
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="min-w-[900px] w-full text-left">
+                <thead className="border-b bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  <tr>
+                    <th className="p-4 pl-5">Product</th>
+                    <th className="p-4 text-center">Qty</th>
+                    <th className="p-4 text-right">Unit Cost</th>
+                    <th className="p-4 text-center">GST Rate</th>
+                    <th className="p-4 text-right">GST</th>
+                    <th className="p-4 text-right">Line Total</th>
+                    <th className="p-4 pr-5 text-center">Remove</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-sm">
+                  {items.map((item, index) => {
+                    const lineSubtotal = toMoneyNumber(item.quantity) * toMoneyNumber(item.unitCost);
+                    const lineGst = lineSubtotal * toMoneyNumber(item.gstRate);
+                    return (
+                      <tr key={`purchase-line-${index}`}>
+                        <td className="p-4 pl-5">
+                          <select
+                            value={item.productId}
+                            onChange={(event) => {
+                              const product = safeInventory.find((entry) => String(getInventoryIdentity(entry)) === String(event.target.value));
+                              updateItem(index, {
+                                productId: event.target.value,
+                                unitCost: product
+                                  ? toMoneyNumber(product?.['cost_price (SGD)'] ?? product?.cost_price ?? product?.costPrice)
+                                  : item.unitCost,
+                              });
+                            }}
+                            className="w-full rounded-lg border border-slate-200 bg-white p-2.5 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500"
+                          >
+                            <option value="">Select product...</option>
+                            {safeInventory.map((product) => {
+                              const identity = getInventoryIdentity(product);
+                              return (
+                                <option key={identity} value={identity}>
+                                  {getInventorySku(product) ? `[${getInventorySku(product)}] ` : ''}{getInventoryName(product)}
+                                </option>
+                              );
+                            })}
+                          </select>
+                        </td>
+                        <td className="p-4 text-center">
+                          <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={item.quantity}
+                            onChange={(event) => updateItem(index, { quantity: event.target.value })}
+                            className="w-24 rounded-lg border border-slate-200 p-2.5 text-center font-mono font-bold outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </td>
+                        <td className="p-4 text-right">
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={item.unitCost}
+                            onChange={(event) => updateItem(index, { unitCost: event.target.value })}
+                            className="w-28 rounded-lg border border-slate-200 p-2.5 text-right font-mono font-bold outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </td>
+                        <td className="p-4 text-center">
+                          <select
+                            value={item.gstRate}
+                            onChange={(event) => updateItem(index, { gstRate: Number(event.target.value) })}
+                            className="rounded-lg border border-slate-200 bg-white p-2.5 text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500"
+                          >
+                            <option value={GST_RATE}>9%</option>
+                            <option value={0}>0%</option>
+                          </select>
+                        </td>
+                        <td className="p-4 text-right font-mono font-black text-emerald-600">${formatMoney(lineGst)}</td>
+                        <td className="p-4 text-right font-mono font-black text-slate-900">${formatMoney(lineSubtotal + lineGst)}</td>
+                        <td className="p-4 pr-5 text-center">
+                          <button
+                            type="button"
+                            disabled={items.length === 1}
+                            onClick={() => removeItem(index)}
+                            className="rounded-lg p-2 text-slate-300 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-30"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Purchase subtotal</p>
+              <p className="mt-2 font-mono text-2xl font-black text-slate-900">${formatMoney(subtotal)}</p>
+            </div>
+            <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5 shadow-sm">
+              <p className="text-[10px] font-black uppercase tracking-widest text-emerald-500">Input GST</p>
+              <p className="mt-2 font-mono text-2xl font-black text-emerald-800">${formatMoney(gstAmount)}</p>
+            </div>
+            <div className="rounded-2xl border border-blue-100 bg-blue-50 p-5 shadow-sm">
+              <p className="text-[10px] font-black uppercase tracking-widest text-blue-500">Invoice total</p>
+              <p className="mt-2 font-mono text-2xl font-black text-blue-900">${formatMoney(total)}</p>
+            </div>
+          </div>
+
+          {errorMessage && (
+            <div className="flex items-start rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">
+              <AlertCircle size={18} className="mr-2 mt-0.5 shrink-0" />
+              {errorMessage}
+            </div>
+          )}
+        </div>
+
+        <div className="flex shrink-0 items-center justify-between border-t border-slate-200 bg-white px-6 py-4">
+          <p className="max-w-2xl text-xs font-medium text-slate-400">
+            Temporary workflow: the GST record and inventory stock update are saved now. A later database migration will add formal purchase invoice and stock movement tables.
+          </p>
+          <div className="flex gap-3">
+            <button type="button" onClick={onClose} disabled={isSaving} className="rounded-xl px-5 py-2.5 text-sm font-bold text-slate-500 hover:bg-slate-100">
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={isSaving}
+              className="flex items-center rounded-xl bg-emerald-600 px-6 py-2.5 text-sm font-black text-white shadow-lg hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {isSaving ? <RefreshCcw size={16} className="mr-2 animate-spin" /> : <CheckCircle2 size={16} className="mr-2" />}
+              {isSaving ? 'Saving...' : 'Post Purchase'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
 export function GSTModule({ sys }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [filterMonth, setFilterMonth] = useState(new Date().toISOString().slice(0, 7));
+  const current = getCurrentQuarter();
+  const [selectedYear, setSelectedYear] = useState(current.year);
+  const [selectedQuarter, setSelectedQuarter] = useState(current.quarter);
+  const [activeTab, setActiveTab] = useState('overview');
+  const [salesSearch, setSalesSearch] = useState('');
+  const [purchaseSearch, setPurchaseSearch] = useState('');
+  const [showExcludedSales, setShowExcludedSales] = useState(true);
+  const [salesExclusions, setSalesExclusions] = useState(() => loadStoredSalesExclusions());
+  const [exclusionInvoice, setExclusionInvoice] = useState(null);
+  const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
+  const [notification, setNotification] = useState(null);
 
-  const allGstRecords = useMemo(() => {
-    const records = [...sys.gstRecords];
+  const safeInvoices = Array.isArray(sys?.invoices) ? sys.invoices : [];
+  const safeGstRecords = Array.isArray(sys?.gstRecords) ? sys.gstRecords : [];
+  const safeSuppliers = Array.isArray(sys?.suppliers) ? sys.suppliers : [];
+  const safeInventory = Array.isArray(sys?.inventory) ? sys.inventory : [];
 
-    sys.invoices.forEach((invoice) => {
-      const netAmount = (invoice.total || 0) / 1.09;
-      const gstAmount = (invoice.total || 0) - netAmount;
-      records.push({
-        id: `auto_${invoice.id}`,
-        date: invoice.date || '',
-        type: 'output',
-        desc: `Sales Invoice #${invoice.number || 'N/A'} to ${invoice.customer || 'Unknown'}`,
-        category: 'Sales',
-        amount: netAmount,
-        gst: gstAmount,
-        isAuto: true,
-      });
+  const quarterRange = useMemo(
+    () => getQuarterDateRange(Number(selectedYear), selectedQuarter),
+    [selectedYear, selectedQuarter]
+  );
+
+  useEffect(() => {
+    saveStoredSalesExclusions(salesExclusions);
+  }, [salesExclusions]);
+
+  const showNotification = (message, type = 'success') => {
+    setNotification({ message, type });
+    window.setTimeout(() => setNotification(null), 5000);
+  };
+
+  const salesRows = useMemo(() => {
+    return safeInvoices
+      .filter((invoice) => isDateInRange(invoice?.date, quarterRange))
+      .map((invoice) => {
+        const invoiceId = String(invoice?.id || invoice?.number || '');
+        const subtotal = getInvoiceSubtotal(invoice);
+        const gstResult = getInvoiceGst(invoice);
+        const total = toMoneyNumber(invoice?.total) || subtotal + gstResult.amount;
+        const exclusion = salesExclusions[invoiceId] || null;
+
+        return {
+          invoice,
+          invoiceId,
+          subtotal,
+          gstAmount: gstResult.amount,
+          gstSource: gstResult.source,
+          total,
+          exclusion,
+          isExcluded: Boolean(exclusion),
+        };
+      })
+      .sort((left, right) => new Date(right.invoice?.date || 0) - new Date(left.invoice?.date || 0));
+  }, [safeInvoices, quarterRange, salesExclusions]);
+
+  const filteredSalesRows = useMemo(() => {
+    const search = salesSearch.trim().toLowerCase();
+    return salesRows.filter((row) => {
+      if (!showExcludedSales && row.isExcluded) return false;
+      if (!search) return true;
+      const invoice = row.invoice;
+      return (
+        String(invoice?.number || invoice?.id || '').toLowerCase().includes(search) ||
+        String(invoice?.customer || '').toLowerCase().includes(search) ||
+        String(invoice?.date || '').toLowerCase().includes(search)
+      );
     });
+  }, [salesRows, salesSearch, showExcludedSales]);
 
-    return records
-      .filter((record) => (record.date || '').startsWith(filterMonth))
-      .sort((left, right) => new Date(right.date) - new Date(left.date));
-  }, [filterMonth, sys.gstRecords, sys.invoices]);
+  const purchaseRows = useMemo(() => {
+    return safeGstRecords
+      .filter((record) => record?.type === 'input' && isDateInRange(record?.date, quarterRange))
+      .sort((left, right) => new Date(right?.date || 0) - new Date(left?.date || 0));
+  }, [safeGstRecords, quarterRange]);
+
+  const filteredPurchaseRows = useMemo(() => {
+    const search = purchaseSearch.trim().toLowerCase();
+    if (!search) return purchaseRows;
+    return purchaseRows.filter((record) => (
+      String(record?.desc || '').toLowerCase().includes(search) ||
+      String(record?.category || '').toLowerCase().includes(search) ||
+      String(record?.date || '').toLowerCase().includes(search)
+    ));
+  }, [purchaseRows, purchaseSearch]);
 
   const report = useMemo(() => {
-    const outputs = allGstRecords.filter((record) => record.type === 'output');
-    const inputs = allGstRecords.filter((record) => record.type === 'input');
+    const includedSales = salesRows.filter((row) => !row.isExcluded);
+    const excludedSales = salesRows.filter((row) => row.isExcluded);
 
-    const outGst = outputs.reduce((sum, record) => sum + (record.gst || 0), 0);
-    const inGst = inputs.reduce((sum, record) => sum + (record.gst || 0), 0);
+    const taxableSales = includedSales.reduce((sum, row) => sum + row.subtotal, 0);
+    const outputGst = includedSales.reduce((sum, row) => sum + row.gstAmount, 0);
+    const taxablePurchases = purchaseRows.reduce((sum, record) => sum + toMoneyNumber(record?.amount), 0);
+    const inputGst = purchaseRows.reduce((sum, record) => sum + toMoneyNumber(record?.gst), 0);
+    const reviewCount = salesRows.filter((row) => row.gstSource !== 'saved').length;
 
     return {
-      outGst,
-      inGst,
-      netPayable: outGst - inGst,
+      taxableSales,
+      outputGst,
+      taxablePurchases,
+      inputGst,
+      netPayable: outputGst - inputGst,
+      includedSalesCount: includedSales.length,
+      excludedSalesCount: excludedSales.length,
+      purchaseCount: purchaseRows.length,
+      reviewCount,
     };
-  }, [allGstRecords]);
+  }, [salesRows, purchaseRows]);
+
+  const availableYears = useMemo(() => {
+    const years = new Set([current.year]);
+    safeInvoices.forEach((invoice) => {
+      const year = new Date(invoice?.date || '').getFullYear();
+      if (Number.isFinite(year)) years.add(year);
+    });
+    safeGstRecords.forEach((record) => {
+      const year = new Date(record?.date || '').getFullYear();
+      if (Number.isFinite(year)) years.add(year);
+    });
+    return Array.from(years).sort((a, b) => b - a);
+  }, [safeInvoices, safeGstRecords, current.year]);
+
+  const handleExcludeInvoice = (invoice, details) => {
+    const invoiceId = String(invoice?.id || invoice?.number || '');
+    if (!invoiceId) return;
+
+    setSalesExclusions((currentExclusions) => ({
+      ...currentExclusions,
+      [invoiceId]: {
+        ...details,
+        excludedAt: new Date().toISOString(),
+      },
+    }));
+    setExclusionInvoice(null);
+    showNotification(`Invoice #${invoice?.number || invoice?.id || ''} excluded from GST calculation.`, 'warning');
+  };
+
+  const handleRestoreInvoice = (invoice) => {
+    const invoiceId = String(invoice?.id || invoice?.number || '');
+    setSalesExclusions((currentExclusions) => {
+      const next = { ...currentExclusions };
+      delete next[invoiceId];
+      return next;
+    });
+    showNotification(`Invoice #${invoice?.number || invoice?.id || ''} restored to GST calculation.`);
+  };
+
+  const handleDeletePurchaseRecord = async (record) => {
+    const confirmed = window.confirm('Delete this manual purchase GST record? This does not reverse any stock previously added.');
+    if (!confirmed) return;
+
+    try {
+      const { error } = await supabase.from('gst_records').delete().eq('id', record.id);
+      if (error) throw error;
+
+      const nextRecords = safeGstRecords.filter((entry) => entry?.id !== record.id);
+      if (sys?.setGstRecords) {
+        sys.setGstRecords(nextRecords);
+      }
+      showNotification('Purchase GST record deleted.', 'warning');
+    } catch (error) {
+      console.error('Unable to delete GST record:', error);
+      showNotification(error?.message || 'Unable to delete GST record.', 'error');
+    }
+  };
+
+  const handleSavePurchase = async (purchase) => {
+    const supplier = safeSuppliers.find((entry) => String(entry?.id || getSupplierName(entry)) === String(purchase.supplierId));
+    const supplierName = getSupplierName(supplier);
+    const purchaseRecordId = `purchase_${Date.now()}`;
+
+    const purchasedItemNames = purchase.items.map((line) => {
+      const product = safeInventory.find((entry) => String(getInventoryIdentity(entry)) === String(line.productId));
+      return `${getInventoryName(product)} x ${line.quantity}`;
+    });
+
+    const gstRecord = {
+      id: purchaseRecordId,
+      date: purchase.invoiceDate,
+      type: 'input',
+      desc: `${supplierName} • Invoice ${purchase.supplierInvoiceNumber} • ${purchasedItemNames.join(', ')}`,
+      category: purchase.category,
+      amount: Number(purchase.subtotal.toFixed(2)),
+      gst: Number(purchase.gstAmount.toFixed(2)),
+    };
+
+    const { error: gstError } = await supabase.from('gst_records').insert([gstRecord]);
+    if (gstError) throw gstError;
+
+    const updatedInventory = [...safeInventory];
+
+    for (const line of purchase.items) {
+      const productIndex = updatedInventory.findIndex((entry) => String(getInventoryIdentity(entry)) === String(line.productId));
+      if (productIndex === -1) continue;
+
+      const product = updatedInventory[productIndex];
+      const currentStock = toMoneyNumber(product?.stock ?? product?.Stock);
+      const nextStock = currentStock + toMoneyNumber(line.quantity);
+      const costPrice = toMoneyNumber(line.unitCost);
+
+      const payload = {
+        stock: nextStock,
+        'cost_price (SGD)': costPrice,
+      };
+
+      let updateQuery = supabase.from('product_list').update(payload);
+      if (product?.id) {
+        updateQuery = updateQuery.eq('id', product.id);
+      } else if (product?.Name || product?.name || product?.Items) {
+        updateQuery = updateQuery.eq('Name', getInventoryName(product));
+      } else {
+        continue;
+      }
+
+      const { data, error } = await updateQuery.select().single();
+      if (error) throw error;
+
+      updatedInventory[productIndex] = {
+        ...product,
+        ...(data || {}),
+        stock: nextStock,
+        'cost_price (SGD)': costPrice,
+      };
+    }
+
+    if (sys?.setGstRecords) {
+      sys.setGstRecords([...safeGstRecords, gstRecord]);
+    }
+    if (sys?.setInventory) {
+      sys.setInventory(updatedInventory);
+    }
+
+    setIsPurchaseModalOpen(false);
+    showNotification('Purchase posted, input GST recorded, and inventory stock increased.');
+  };
+
+  const netTone = report.netPayable >= 0 ? 'red' : 'emerald';
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="min-h-full space-y-6 bg-slate-50/60 p-8">
+      <div className="flex flex-col justify-between gap-5 xl:flex-row xl:items-center">
         <div>
-          <h2 className="text-xl font-black text-slate-800">GST Transaction Ledger</h2>
-          <p className="text-sm font-medium text-gray-500">
-            Record keeping for input and output tax computation
-          </p>
-        </div>
-        <div className="flex items-center space-x-3">
-          <div className="flex items-center space-x-3 rounded-xl border border-gray-200 bg-white px-4 py-2 shadow-sm">
-            <Calendar className="text-blue-600" size={18} />
-            <input
-              className="cursor-pointer bg-transparent text-sm font-bold text-slate-700 outline-none focus:ring-0"
-              onChange={(event) => setFilterMonth(event.target.value)}
-              type="month"
-              value={filterMonth}
-            />
+          <div className="flex items-center gap-3">
+            <div className="rounded-2xl bg-indigo-600 p-3 text-white shadow-lg shadow-indigo-500/20">
+              <ReceiptText size={24} />
+            </div>
+            <div>
+              <h1 className="text-2xl font-semibold text-slate-900">Quarterly GST Centre</h1>
+              <p className="mt-1 text-sm font-medium text-slate-500">
+                Automated sales GST, manual supplier purchases, and quarterly tax overview.
+              </p>
+            </div>
           </div>
-          {sys.hasPerm('manage_gst') && (
-            <button
-              className="flex items-center rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-black text-white shadow-lg shadow-indigo-500/20 transition-all hover:bg-indigo-700"
-              onClick={() => setIsOpen(true)}
-              type="button"
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm">
+            <CalendarRange size={17} className="ml-2 text-indigo-600" />
+            <select
+              value={selectedYear}
+              onChange={(event) => setSelectedYear(Number(event.target.value))}
+              className="rounded-lg border-none bg-transparent px-2 py-2 text-sm font-black text-slate-700 outline-none"
             >
-              <Plus className="mr-2" size={16} /> Log Transaction
+              {availableYears.map((year) => (
+                <option key={year} value={year}>{year}</option>
+              ))}
+            </select>
+            <select
+              value={selectedQuarter}
+              onChange={(event) => setSelectedQuarter(event.target.value)}
+              className="rounded-lg border-none bg-slate-100 px-3 py-2 text-sm font-black text-slate-700 outline-none"
+            >
+              {QUARTERS.map((quarter) => (
+                <option key={quarter.value} value={quarter.value}>{quarter.label}</option>
+              ))}
+            </select>
+          </div>
+
+          {sys?.hasPerm?.('manage_gst') && (
+            <button
+              type="button"
+              onClick={() => setIsPurchaseModalOpen(true)}
+              className="flex items-center rounded-xl bg-emerald-600 px-5 py-3 text-sm font-black text-white shadow-lg shadow-emerald-500/20 transition-all hover:bg-emerald-700 active:scale-95"
+            >
+              <PackagePlus size={18} className="mr-2" /> Register Purchase
             </button>
           )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-        <div className="overflow-hidden rounded-2xl border border-indigo-100 bg-indigo-50 p-6 shadow-sm">
-          <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-indigo-400">
-            Total Output GST (Box 1)
-          </p>
-          <h4 className="font-mono text-3xl font-black tracking-tighter text-indigo-900">
-            ${formatMoney(report.outGst)}
-          </h4>
-          <p className="mt-2 text-xs font-bold text-indigo-600">Tax collected from sales</p>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <DashboardCard
+          icon={TrendingUp}
+          label="Output GST"
+          value={`$${formatMoney(report.outputGst)}`}
+          helper={`${report.includedSalesCount} included sales invoice${report.includedSalesCount === 1 ? '' : 's'}`}
+          tone="indigo"
+        />
+        <DashboardCard
+          icon={TrendingDown}
+          label="Input GST"
+          value={`$${formatMoney(report.inputGst)}`}
+          helper={`${report.purchaseCount} supplier purchase record${report.purchaseCount === 1 ? '' : 's'}`}
+          tone="emerald"
+        />
+        <DashboardCard
+          icon={CircleDollarSign}
+          label={report.netPayable >= 0 ? 'Net GST Payable' : 'GST Refund Claimable'}
+          value={`$${formatMoney(Math.abs(report.netPayable))}`}
+          helper={report.netPayable >= 0 ? 'Estimated amount owed to IRAS' : 'Estimated amount claimable from IRAS'}
+          tone={netTone}
+        />
+        <DashboardCard
+          icon={AlertCircle}
+          label="Review Required"
+          value={String(report.reviewCount + report.excludedSalesCount)}
+          helper={`${report.reviewCount} GST fallback • ${report.excludedSalesCount} excluded`}
+          tone="amber"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Taxable Sales</p>
+              <p className="mt-2 font-mono text-2xl font-black text-slate-900">${formatMoney(report.taxableSales)}</p>
+            </div>
+            <div className="rounded-xl bg-indigo-50 p-3 text-indigo-600"><BarChart3 size={22} /></div>
+          </div>
+          <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+            <div className="h-full rounded-full bg-indigo-500" style={{ width: '100%' }} />
+          </div>
         </div>
-        <div className="overflow-hidden rounded-2xl border border-emerald-100 bg-emerald-50 p-6 shadow-sm">
-          <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-emerald-400">
-            Total Input GST (Box 5)
-          </p>
-          <h4 className="font-mono text-3xl font-black tracking-tighter text-emerald-900">
-            ${formatMoney(report.inGst)}
-          </h4>
-          <p className="mt-2 text-xs font-bold text-emerald-600">Tax claimable from purchases</p>
-        </div>
-        <div
-          className={`overflow-hidden rounded-2xl border p-6 text-white shadow-sm ${
-            report.netPayable >= 0
-              ? 'border-red-600 bg-red-500'
-              : 'border-emerald-600 bg-emerald-500'
-          }`}
-        >
-          <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-white/70">
-            Net GST Payable (Box 6)
-          </p>
-          <h4 className="font-mono text-3xl font-black tracking-tighter">
-            ${formatMoney(Math.abs(report.netPayable))}
-          </h4>
-          <p className="mt-2 text-xs font-bold opacity-90">
-            {report.netPayable >= 0 ? 'Amount owed to IRAS' : 'Refund claimable from IRAS'}
-          </p>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Taxable Purchases</p>
+              <p className="mt-2 font-mono text-2xl font-black text-slate-900">${formatMoney(report.taxablePurchases)}</p>
+            </div>
+            <div className="rounded-xl bg-emerald-50 p-3 text-emerald-600"><ShoppingCart size={22} /></div>
+          </div>
+          <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+            <div
+              className="h-full rounded-full bg-emerald-500"
+              style={{ width: `${Math.min(100, report.taxableSales > 0 ? (report.taxablePurchases / report.taxableSales) * 100 : 0)}%` }}
+            />
+          </div>
         </div>
       </div>
 
-      <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-        <table className="w-full text-left">
-          <thead className="border-b bg-gray-50 text-[10px] font-black uppercase tracking-widest text-gray-400">
-            <tr>
-              <th className="p-4 pl-6">Date</th>
-              <th className="p-4">Type</th>
-              <th className="p-4">Description</th>
-              <th className="p-4">Category</th>
-              <th className="p-4 text-right">Value (ex-GST)</th>
-              <th className="p-4 text-right">GST Amount</th>
-              <th className="p-4 pr-6 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100 text-sm">
-            {allGstRecords.map((record) => (
-              <tr className="transition-colors hover:bg-gray-50" key={record.id}>
-                <td className="p-4 pl-6 font-bold text-gray-600">{record.date}</td>
-                <td className="p-4">
-                  <span
-                    className={`rounded-md border px-2 py-1 text-[9px] font-black uppercase tracking-widest ${
-                      record.type === 'output'
-                        ? 'border-indigo-200 bg-indigo-50 text-indigo-600'
-                        : 'border-emerald-200 bg-emerald-50 text-emerald-600'
-                    }`}
-                  >
-                    {record.type}
-                  </span>
-                </td>
-                <td className="p-4 font-bold text-slate-800">
-                  {record.desc}
-                  {record.isAuto && (
-                    <span className="ml-2 rounded-full bg-blue-100 px-2 py-0.5 text-[8px] font-black uppercase text-blue-600">
-                      Auto
-                    </span>
-                  )}
-                </td>
-                <td className="p-4 font-bold text-gray-500">{record.category}</td>
-                <td className="p-4 text-right font-mono font-bold text-gray-600">
-                  ${formatMoney(record.amount)}
-                </td>
-                <td
-                  className={`p-4 text-right font-mono font-black ${
-                    record.type === 'output' ? 'text-indigo-600' : 'text-emerald-600'
+      <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col justify-between gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4 lg:flex-row lg:items-center">
+          <div className="flex flex-wrap gap-2">
+            {[
+              { value: 'overview', label: 'Overview', icon: BarChart3 },
+              { value: 'sales', label: 'Sales GST', icon: FileText },
+              { value: 'purchases', label: 'Purchase GST', icon: ShoppingCart },
+            ].map((tab) => {
+              const Icon = tab.icon;
+              return (
+                <button
+                  key={tab.value}
+                  type="button"
+                  onClick={() => setActiveTab(tab.value)}
+                  className={`flex items-center rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-widest transition-all ${
+                    activeTab === tab.value
+                      ? 'bg-slate-900 text-white shadow-md'
+                      : 'text-slate-500 hover:bg-white hover:text-slate-800'
                   }`}
                 >
-                  ${formatMoney(record.gst)}
-                </td>
-                <td className="p-4 pr-6 text-right">
-                  {record.isAuto ? (
-                    <Info className="inline-block text-gray-300" size={16} />
-                  ) : (
-                    <button
-                      className="rounded-lg p-1.5 text-red-300 transition-colors hover:text-red-600"
-                      onClick={() =>
-                        sys.setGstRecords(sys.gstRecords.filter((entry) => entry.id !== record.id))
-                      }
-                      type="button"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                  <Icon size={14} className="mr-2" /> {tab.label}
+                </button>
+              );
+            })}
+          </div>
+          <div className="text-xs font-bold text-slate-400">
+            {quarterRange.start.toLocaleDateString('en-SG')} – {quarterRange.end.toLocaleDateString('en-SG')}
+          </div>
+        </div>
+
+        {activeTab === 'overview' && (
+          <div className="grid grid-cols-1 gap-6 p-6 xl:grid-cols-2">
+            <div className="overflow-hidden rounded-2xl border border-slate-200">
+              <div className="flex items-center justify-between border-b bg-slate-50 px-5 py-4">
+                <div>
+                  <h3 className="text-sm font-black text-slate-800">Sales GST Snapshot</h3>
+                  <p className="mt-1 text-xs font-medium text-slate-400">Latest automated sales invoices in this quarter.</p>
+                </div>
+                <button type="button" onClick={() => setActiveTab('sales')} className="text-xs font-black text-indigo-600 hover:text-indigo-800">View all</button>
+              </div>
+              <div className="divide-y divide-slate-100">
+                {salesRows.slice(0, 5).map((row) => (
+                  <div key={row.invoiceId} className="flex items-center justify-between gap-4 px-5 py-4">
+                    <div>
+                      <p className="text-sm font-black text-slate-800">#{row.invoice?.number || row.invoice?.id}</p>
+                      <p className="mt-1 text-xs font-medium text-slate-400">{row.invoice?.customer || 'Unknown customer'} • {row.invoice?.date || '-'}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className={`font-mono text-sm font-black ${row.isExcluded ? 'text-slate-400 line-through' : 'text-indigo-600'}`}>${formatMoney(row.gstAmount)}</p>
+                      <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-slate-400">{row.isExcluded ? 'Excluded' : row.gstSource}</p>
+                    </div>
+                  </div>
+                ))}
+                {salesRows.length === 0 && <EmptyState title="No sales invoices" description="No sales invoices fall inside this quarter." />}
+              </div>
+            </div>
+
+            <div className="overflow-hidden rounded-2xl border border-slate-200">
+              <div className="flex items-center justify-between border-b bg-slate-50 px-5 py-4">
+                <div>
+                  <h3 className="text-sm font-black text-slate-800">Purchase GST Snapshot</h3>
+                  <p className="mt-1 text-xs font-medium text-slate-400">Latest manually entered supplier purchase records.</p>
+                </div>
+                <button type="button" onClick={() => setActiveTab('purchases')} className="text-xs font-black text-emerald-600 hover:text-emerald-800">View all</button>
+              </div>
+              <div className="divide-y divide-slate-100">
+                {purchaseRows.slice(0, 5).map((record) => (
+                  <div key={record.id} className="flex items-center justify-between gap-4 px-5 py-4">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-black text-slate-800">{record.desc || 'Supplier purchase'}</p>
+                      <p className="mt-1 text-xs font-medium text-slate-400">{record.category || 'Purchase'} • {record.date || '-'}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-mono text-sm font-black text-emerald-600">${formatMoney(record.gst)}</p>
+                      <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Input GST</p>
+                    </div>
+                  </div>
+                ))}
+                {purchaseRows.length === 0 && <EmptyState title="No purchase GST records" description="Register a supplier purchase to record input GST and stock-in items." />}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'sales' && (
+          <div>
+            <div className="flex flex-col justify-between gap-4 border-b border-slate-100 px-5 py-4 lg:flex-row lg:items-center">
+              <div className="flex w-full max-w-lg items-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 shadow-sm focus-within:ring-2 focus-within:ring-indigo-100">
+                <Search size={16} className="mr-2 text-slate-400" />
+                <input
+                  value={salesSearch}
+                  onChange={(event) => setSalesSearch(event.target.value)}
+                  placeholder="Search invoice number, customer, or date..."
+                  className="w-full bg-transparent text-sm font-medium outline-none"
+                />
+              </div>
+              <label className="flex cursor-pointer items-center gap-2 text-xs font-black text-slate-500">
+                <input
+                  type="checkbox"
+                  checked={showExcludedSales}
+                  onChange={(event) => setShowExcludedSales(event.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                Show excluded invoices
+              </label>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="min-w-[1050px] w-full text-left">
+                <thead className="border-b bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  <tr>
+                    <th className="p-4 pl-6">Invoice</th>
+                    <th className="p-4">Date</th>
+                    <th className="p-4">Customer</th>
+                    <th className="p-4 text-right">Subtotal</th>
+                    <th className="p-4 text-right">GST</th>
+                    <th className="p-4 text-right">Total</th>
+                    <th className="p-4 text-center">GST Source</th>
+                    <th className="p-4 text-center">Status</th>
+                    <th className="p-4 pr-6 text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-sm">
+                  {filteredSalesRows.map((row) => (
+                    <tr key={row.invoiceId} className={`transition-colors ${row.isExcluded ? 'bg-slate-50 opacity-70' : 'hover:bg-indigo-50/40'}`}>
+                      <td className="p-4 pl-6 font-mono font-black text-indigo-600">#{row.invoice?.number || row.invoice?.id || '-'}</td>
+                      <td className="p-4 font-semibold text-slate-500">{row.invoice?.date || '-'}</td>
+                      <td className="p-4 font-black text-slate-800">{row.invoice?.customer || 'Unknown customer'}</td>
+                      <td className="p-4 text-right font-mono font-bold text-slate-600">${formatMoney(row.subtotal)}</td>
+                      <td className="p-4 text-right font-mono font-black text-indigo-600">${formatMoney(row.gstAmount)}</td>
+                      <td className="p-4 text-right font-mono font-black text-slate-900">${formatMoney(row.total)}</td>
+                      <td className="p-4 text-center">
+                        <span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-widest ${
+                          row.gstSource === 'saved'
+                            ? 'bg-emerald-50 text-emerald-700'
+                            : 'bg-amber-50 text-amber-700'
+                        }`}>
+                          {row.gstSource === 'saved' ? 'Saved GST' : 'Fallback'}
+                        </span>
+                      </td>
+                      <td className="p-4 text-center">
+                        {row.isExcluded ? (
+                          <div>
+                            <span className="rounded-full bg-slate-200 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-slate-600">Excluded</span>
+                            <p className="mt-1 text-[10px] font-semibold text-slate-400">{row.exclusion?.reason}</p>
+                          </div>
+                        ) : (
+                          <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-indigo-700">Included</span>
+                        )}
+                      </td>
+                      <td className="p-4 pr-6 text-center">
+                        {row.isExcluded ? (
+                          <button
+                            type="button"
+                            onClick={() => handleRestoreInvoice(row.invoice)}
+                            className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-emerald-700 hover:bg-emerald-100"
+                          >
+                            Restore
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setExclusionInvoice(row.invoice)}
+                            className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-amber-700 hover:bg-amber-100"
+                          >
+                            Exclude
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {filteredSalesRows.length === 0 && (
+                    <tr><td colSpan="9"><EmptyState title="No matching sales invoices" description="Adjust the quarter or search term to view automated sales GST records." /></td></tr>
                   )}
-                </td>
-              </tr>
-            ))}
-            {allGstRecords.length === 0 && (
-              <tr>
-                <td className="p-12 text-center text-sm font-bold text-gray-400" colSpan="7">
-                  No GST transactions logged for this month.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'purchases' && (
+          <div>
+            <div className="flex flex-col justify-between gap-4 border-b border-slate-100 px-5 py-4 lg:flex-row lg:items-center">
+              <div className="flex w-full max-w-lg items-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 shadow-sm focus-within:ring-2 focus-within:ring-emerald-100">
+                <Search size={16} className="mr-2 text-slate-400" />
+                <input
+                  value={purchaseSearch}
+                  onChange={(event) => setPurchaseSearch(event.target.value)}
+                  placeholder="Search supplier, category, invoice, or date..."
+                  className="w-full bg-transparent text-sm font-medium outline-none"
+                />
+              </div>
+              {sys?.hasPerm?.('manage_gst') && (
+                <button
+                  type="button"
+                  onClick={() => setIsPurchaseModalOpen(true)}
+                  className="flex items-center rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black uppercase tracking-widest text-white shadow-lg hover:bg-emerald-700"
+                >
+                  <Plus size={15} className="mr-2" /> New Purchase
+                </button>
+              )}
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="min-w-[900px] w-full text-left">
+                <thead className="border-b bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  <tr>
+                    <th className="p-4 pl-6">Date</th>
+                    <th className="p-4">Supplier / Purchase Details</th>
+                    <th className="p-4">Category</th>
+                    <th className="p-4 text-right">Value ex-GST</th>
+                    <th className="p-4 text-right">Input GST</th>
+                    <th className="p-4 text-right">Total</th>
+                    <th className="p-4 pr-6 text-center">Delete</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-sm">
+                  {filteredPurchaseRows.map((record) => {
+                    const amount = toMoneyNumber(record?.amount);
+                    const gst = toMoneyNumber(record?.gst);
+                    return (
+                      <tr key={record.id} className="hover:bg-emerald-50/40">
+                        <td className="p-4 pl-6 font-bold text-slate-500">{record.date || '-'}</td>
+                        <td className="p-4 font-black text-slate-800">{record.desc || 'Supplier purchase'}</td>
+                        <td className="p-4 font-bold text-slate-500">{record.category || 'Purchase'}</td>
+                        <td className="p-4 text-right font-mono font-bold text-slate-600">${formatMoney(amount)}</td>
+                        <td className="p-4 text-right font-mono font-black text-emerald-600">${formatMoney(gst)}</td>
+                        <td className="p-4 text-right font-mono font-black text-slate-900">${formatMoney(amount + gst)}</td>
+                        <td className="p-4 pr-6 text-center">
+                          {sys?.hasPerm?.('manage_gst') ? (
+                            <button
+                              type="button"
+                              onClick={() => handleDeletePurchaseRecord(record)}
+                              className="rounded-lg p-2 text-slate-300 hover:bg-red-50 hover:text-red-600"
+                            >
+                              <Trash2 size={17} />
+                            </button>
+                          ) : (
+                            <Info size={16} className="inline text-slate-300" />
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {filteredPurchaseRows.length === 0 && (
+                    <tr><td colSpan="7"><EmptyState title="No purchase GST records" description="Register a supplier purchase to capture input GST and increase stock." /></td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
 
-      {isOpen && (
-        <GstTransactionModal
-          onClose={() => setIsOpen(false)}
-          onSave={(record) => {
-            sys.setGstRecords([...sys.gstRecords, record]);
-            setIsOpen(false);
-          }}
+      <div className="rounded-2xl border border-blue-100 bg-blue-50 p-5 text-sm text-blue-800">
+        <div className="flex items-start gap-3">
+          <Info size={19} className="mt-0.5 shrink-0 text-blue-600" />
+          <div>
+            <p className="font-black">Temporary database compatibility mode</p>
+            <p className="mt-1 text-xs font-semibold leading-5 text-blue-700">
+              Purchase GST is stored in your existing <code>gst_records</code> table and stock is updated in <code>product_list</code>. Sales exclusions are browser-local until the Supabase adjustment table is added. Formal purchase invoices, line items, stock movements, and shared exclusions should be added in the next database migration.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {exclusionInvoice && (
+        <SalesExclusionModal
+          invoice={exclusionInvoice}
+          existing={salesExclusions[String(exclusionInvoice?.id || exclusionInvoice?.number || '')]}
+          onClose={() => setExclusionInvoice(null)}
+          onSave={(details) => handleExcludeInvoice(exclusionInvoice, details)}
         />
+      )}
+
+      {isPurchaseModalOpen && (
+        <PurchaseEntryModal
+          suppliers={safeSuppliers}
+          inventory={safeInventory}
+          onClose={() => setIsPurchaseModalOpen(false)}
+          onSave={handleSavePurchase}
+        />
+      )}
+
+      {notification && (
+        <div className={`fixed bottom-8 left-1/2 z-[8000] flex -translate-x-1/2 items-center rounded-xl px-6 py-3 text-sm font-bold text-white shadow-2xl ${
+          notification.type === 'error'
+            ? 'bg-red-600'
+            : notification.type === 'warning'
+              ? 'bg-amber-600'
+              : 'bg-emerald-600'
+        }`}>
+          {notification.type === 'error' ? <AlertCircle size={18} className="mr-2" /> : <CheckCircle2 size={18} className="mr-2" />}
+          {notification.message}
+        </div>
       )}
     </div>
   );
