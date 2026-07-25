@@ -4,7 +4,7 @@ import { formatMoney } from '../../utils/format';
 import { supabase } from '../../lib/supabaseClient';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import html2canvas from 'html2canvas';
 
 
 // ==========================================
@@ -73,161 +73,219 @@ function exportInventoryToExcel(items) {
   XLSX.writeFile(workbook, `inventory-${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
 
-async function loadChinesePdfFont(document) {
-  const fontUrl = `${import.meta.env.BASE_URL}fonts/NotoSansSC-Regular.ttf`;  const fontFileName = 'NotoSansSC-Regular.ttf';
-  const fontFamily = 'NotoSansSC';
+function createPdfCell(value, options = {}) {
+  const cell = document.createElement(options.header ? 'th' : 'td');
+  cell.textContent = String(value ?? '');
+  Object.assign(cell.style, {
+    border: '1px solid #e2e8f0',
+    padding: options.header ? '8px 7px' : '7px',
+    fontSize: options.fontSize || '10px',
+    lineHeight: '1.35',
+    verticalAlign: 'middle',
+    textAlign: options.align || 'left',
+    overflowWrap: 'anywhere',
+    wordBreak: 'break-word',
+    color: options.header ? '#ffffff' : '#1e293b',
+    background: options.header ? '#1e40af' : options.background || '#ffffff',
+    fontWeight: options.header ? '700' : '400',
+    fontFamily:
+      '"Noto Sans SC", "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", Arial, sans-serif',
+  });
+  return cell;
+}
 
-  const response = await fetch(fontUrl, { cache: 'force-cache' });
+function buildInventoryPdfPage({ rows, selectedColumns, pageNumber, totalPages, generatedDate, totalProducts, landscape }) {
+  const page = document.createElement('div');
+  const pageWidth = landscape ? 1123 : 794;
+  const pageHeight = landscape ? 794 : 1123;
 
-  if (!response.ok) {
-    throw new Error(`Unable to load ${fontUrl} (HTTP ${response.status}).`);
-  }
+  Object.assign(page.style, {
+    width: `${pageWidth}px`,
+    minHeight: `${pageHeight}px`,
+    boxSizing: 'border-box',
+    background: '#ffffff',
+    color: '#0f172a',
+    padding: '0 32px 34px',
+    position: 'fixed',
+    left: '-100000px',
+    top: '0',
+    zIndex: '-1',
+    fontFamily:
+      '"Noto Sans SC", "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", Arial, sans-serif',
+  });
 
-  const contentType = response.headers.get('content-type') || '';
-  if (contentType.includes('text/html')) {
-    throw new Error(
-      `${fontUrl} returned HTML instead of a font. Add the TTF file under public/fonts.`
-    );
-  }
+  const header = document.createElement('div');
+  Object.assign(header.style, {
+    height: '78px',
+    margin: '0 -32px 16px',
+    padding: '0 32px',
+    background: '#0f172a',
+    color: '#ffffff',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  });
 
-  const fontBuffer = await response.arrayBuffer();
-  if (fontBuffer.byteLength < 1000) {
-    throw new Error(`${fontUrl} is empty or is not a valid font file.`);
-  }
+  const titleWrap = document.createElement('div');
+  titleWrap.innerHTML = '<div style="font-size:23px;font-weight:800;letter-spacing:.02em">THREE LEAVES</div><div style="font-size:14px;font-weight:700;margin-top:3px">Inventory Catalogue</div>';
 
-  const fontBytes = new Uint8Array(fontBuffer);
-  let binaryString = '';
-  const chunkSize = 0x8000;
+  const meta = document.createElement('div');
+  Object.assign(meta.style, { textAlign: 'right', fontSize: '10px', lineHeight: '1.7', color: '#e2e8f0' });
+  meta.textContent = `Generated: ${generatedDate}
+${totalProducts} product${totalProducts === 1 ? '' : 's'}`;
+  meta.style.whiteSpace = 'pre-line';
 
-  for (let index = 0; index < fontBytes.length; index += chunkSize) {
-    const chunk = fontBytes.subarray(index, index + chunkSize);
-    binaryString += String.fromCharCode(...chunk);
-  }
+  header.append(titleWrap, meta);
+  page.appendChild(header);
 
-  const fontBase64 = window.btoa(binaryString);
-  document.addFileToVFS(fontFileName, fontBase64);
-  document.addFont(fontFileName, fontFamily, 'normal');
-  document.setFont(fontFamily, 'normal');
+  const table = document.createElement('table');
+  Object.assign(table.style, {
+    width: '100%',
+    borderCollapse: 'collapse',
+    tableLayout: 'fixed',
+  });
 
-  return fontFamily;
+  const colgroup = document.createElement('colgroup');
+  const widthMap = {
+    SKU: 10,
+    Name: 18,
+    Supplier: 16,
+    Unit: 9,
+    Description: 21,
+    Packing: 11,
+    'cost_price (SGD)': 10,
+    Price: 10,
+    stock: 7,
+  };
+  const totalWeight = selectedColumns.reduce((sum, column) => sum + (widthMap[column.key] || 10), 0);
+  selectedColumns.forEach((column) => {
+    const col = document.createElement('col');
+    col.style.width = `${((widthMap[column.key] || 10) / totalWeight) * 100}%`;
+    colgroup.appendChild(col);
+  });
+  table.appendChild(colgroup);
+
+  const thead = document.createElement('thead');
+  const headerRow = document.createElement('tr');
+  selectedColumns.forEach((column) => {
+    const numeric = ['Price', 'cost_price (SGD)', 'stock'].includes(column.key);
+    headerRow.appendChild(createPdfCell(column.label, { header: true, align: numeric ? 'right' : 'left', fontSize: landscape ? '9px' : '10px' }));
+  });
+  thead.appendChild(headerRow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  rows.forEach((row, rowIndex) => {
+    const tr = document.createElement('tr');
+    selectedColumns.forEach((column) => {
+      const numeric = ['Price', 'cost_price (SGD)', 'stock'].includes(column.key);
+      let value = row[column.key];
+      if (column.key === 'Price' || column.key === 'cost_price (SGD)') {
+        value = `$${Number(value || 0).toFixed(2)}`;
+      }
+      tr.appendChild(createPdfCell(value, {
+        align: numeric ? 'right' : 'left',
+        background: rowIndex % 2 ? '#f8fafc' : '#ffffff',
+        fontSize: landscape ? '8.5px' : '9.5px',
+      }));
+    });
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  page.appendChild(table);
+
+  const footer = document.createElement('div');
+  Object.assign(footer.style, {
+    position: 'absolute',
+    left: '32px',
+    right: '32px',
+    bottom: '14px',
+    borderTop: '1px solid #e2e8f0',
+    paddingTop: '7px',
+    display: 'flex',
+    justifyContent: 'space-between',
+    color: '#64748b',
+    fontSize: '9px',
+  });
+  footer.innerHTML = `<span>Three Leaves Inventory Catalogue</span><span>Page ${pageNumber} of ${totalPages}</span>`;
+  page.appendChild(footer);
+
+  return page;
 }
 
 async function exportInventoryToPDF(items, selectedColumnKeys) {
   try {
-  const rows = normaliseInventoryForExport(items);
-  const selectedColumns = INVENTORY_EXPORT_COLUMNS.filter((column) =>
-    selectedColumnKeys.includes(column.key)
-  );
-
-  if (rows.length === 0) {
-    window.alert('There is no inventory data to export.');
-    return false;
-  }
-
-  if (selectedColumns.length === 0) {
-    window.alert('Select at least one column for the PDF.');
-    return false;
-  }
-
-  const orientation = selectedColumns.length <= 4 ? 'portrait' : 'landscape';
-  const fontSize = selectedColumns.length >= 8 ? 6.5 : selectedColumns.length >= 6 ? 7.5 : 9;
-  const document = new jsPDF({
-    orientation,
-    unit: 'pt',
-    format: 'a4',
-  });
-
-  let tableFont;
-
-  try {
-    tableFont = await loadChinesePdfFont(document);
-  } catch (error) {
-    console.error('Chinese PDF font error:', error);
-    window.alert(
-      'The Chinese PDF font could not be loaded. Check that public/fonts/NotoSansSC-Regular.ttf exists.'
+    const rows = normaliseInventoryForExport(items);
+    const selectedColumns = INVENTORY_EXPORT_COLUMNS.filter((column) =>
+      selectedColumnKeys.includes(column.key)
     );
-    return false;
-  }
 
-  const pageWidth = document.internal.pageSize.getWidth();
-  const pageHeight = document.internal.pageSize.getHeight();
-  const generatedDate = new Date().toLocaleDateString('en-SG', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
+    if (rows.length === 0) {
+      window.alert('There is no inventory data to export.');
+      return false;
+    }
 
-  document.setFillColor(15, 23, 42);
-  document.rect(0, 0, pageWidth, 74, 'F');
-  document.setTextColor(255, 255, 255);
-  document.setFont('helvetica', 'bold');
-  document.setFontSize(20);
-  document.text('THREE LEAVES', 40, 31);
-  document.setFontSize(12);
-  document.text('Inventory Catalogue', 40, 53);
+    if (selectedColumns.length === 0) {
+      window.alert('Select at least one column for the PDF.');
+      return false;
+    }
 
-  document.setFont('helvetica', 'normal');
-  document.setFontSize(9);
-  document.text(`Generated: ${generatedDate}`, pageWidth - 40, 31, { align: 'right' });
-  document.text(`${rows.length} product${rows.length === 1 ? '' : 's'}`, pageWidth - 40, 50, {
-    align: 'right',
-  });
+    const landscape = selectedColumns.length > 4;
+    const rowsPerPage = landscape ? 27 : 34;
+    const totalPages = Math.ceil(rows.length / rowsPerPage);
+    const generatedDate = new Date().toLocaleDateString('en-SG', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
 
-  autoTable(document, {
-    startY: 92,
-    head: [selectedColumns.map((column) => column.label)],
-    body: rows.map((row) =>
-      selectedColumns.map((column) => {
-        const value = row[column.key];
-        if (column.key === 'Price' || column.key === 'cost_price (SGD)') {
-          return `$${Number(value || 0).toFixed(2)}`;
+    const pdf = new jsPDF({
+      orientation: landscape ? 'landscape' : 'portrait',
+      unit: 'pt',
+      format: 'a4',
+      compress: true,
+    });
+
+    for (let pageIndex = 0; pageIndex < totalPages; pageIndex += 1) {
+      const pageRows = rows.slice(pageIndex * rowsPerPage, (pageIndex + 1) * rowsPerPage);
+      const pageElement = buildInventoryPdfPage({
+        rows: pageRows,
+        selectedColumns,
+        pageNumber: pageIndex + 1,
+        totalPages,
+        generatedDate,
+        totalProducts: rows.length,
+        landscape,
+      });
+
+      document.body.appendChild(pageElement);
+
+      try {
+        const canvas = await html2canvas(pageElement, {
+          backgroundColor: '#ffffff',
+          scale: 1.5,
+          useCORS: true,
+          logging: false,
+          windowWidth: landscape ? 1123 : 794,
+          windowHeight: landscape ? 794 : 1123,
+        });
+
+        const imageData = canvas.toDataURL('image/jpeg', 0.92);
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+
+        if (pageIndex > 0) {
+          pdf.addPage('a4', landscape ? 'landscape' : 'portrait');
         }
-        return String(value ?? '');
-      })
-    ),
-    theme: 'grid',
-    margin: { top: 92, right: 32, bottom: 42, left: 32 },
-    styles: {
-      font: tableFont,
-      fontStyle: 'normal',
-      fontSize,
-      cellPadding: 4,
-      overflow: 'linebreak',
-      valign: 'middle',
-      lineColor: [226, 232, 240],
-      lineWidth: 0.5,
-      textColor: [30, 41, 59],
-    },
-    headStyles: {
-      font: tableFont,
-      fontStyle: 'normal',
-      fillColor: [30, 64, 175],
-      textColor: [255, 255, 255],
-      halign: 'left',
-    },
-    alternateRowStyles: {
-      fillColor: [248, 250, 252],
-    },
-    columnStyles: selectedColumns.reduce((styles, column, index) => {
-      if (column.key === 'Price' || column.key === 'cost_price (SGD)' || column.key === 'stock') {
-        styles[index] = { halign: 'right' };
-      }
-      return styles;
-    }, {}),
-    didDrawPage: () => {
-      const currentPage = document.internal.getCurrentPageInfo().pageNumber;
-      document.setDrawColor(226, 232, 240);
-      document.line(32, pageHeight - 30, pageWidth - 32, pageHeight - 30);
-      document.setFont('helvetica', 'normal');
-      document.setFontSize(8);
-      document.setTextColor(100, 116, 139);
-      document.text('Three Leaves Inventory Catalogue', 32, pageHeight - 15);
-      document.text(`Page ${currentPage}`, pageWidth - 32, pageHeight - 15, { align: 'right' });
-    },
-  });
 
-  document.save(`inventory-catalogue-${new Date().toISOString().slice(0, 10)}.pdf`);
-  return true;
+        pdf.addImage(imageData, 'JPEG', 0, 0, pdfWidth, pdfHeight, undefined, 'FAST');
+      } finally {
+        pageElement.remove();
+      }
+    }
+
+    pdf.save(`inventory-catalogue-${new Date().toISOString().slice(0, 10)}.pdf`);
+    return true;
   } catch (error) {
     console.error('Inventory PDF export failed:', error);
     window.alert(`Unable to generate the PDF: ${error?.message || 'Unknown error'}`);
