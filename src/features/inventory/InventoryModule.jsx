@@ -74,8 +74,7 @@ function exportInventoryToExcel(items) {
 }
 
 async function loadChinesePdfFont(document) {
-  const fontUrl = '/fonts/NotoSansSC-Regular.ttf';
-  const fontFileName = 'NotoSansSC-Regular.ttf';
+  const fontUrl = `${import.meta.env.BASE_URL}fonts/NotoSansSC-Regular.ttf`;  const fontFileName = 'NotoSansSC-Regular.ttf';
   const fontFamily = 'NotoSansSC';
 
   const response = await fetch(fontUrl, { cache: 'force-cache' });
