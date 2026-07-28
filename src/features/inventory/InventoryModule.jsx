@@ -74,43 +74,91 @@ function exportInventoryToExcel(items) {
 }
 
 async function loadChinesePdfFont(document) {
-  const fontUrl = '/fonts/NotoSansSC-Regular.ttf';
   const fontFileName = 'NotoSansSC-Regular.ttf';
   const fontFamily = 'NotoSansSC';
+  const baseUrl = String(import.meta.env.BASE_URL || '/');
+  const normalisedBaseUrl = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
 
-  const response = await fetch(fontUrl, { cache: 'force-cache' });
+  // Try the Vite base path first, then the domain-root path as a fallback.
+  const candidateUrls = [
+    `${normalisedBaseUrl}fonts/${fontFileName}`,
+    `/fonts/${fontFileName}`,
+  ].filter((url, index, urls) => urls.indexOf(url) === index);
 
-  if (!response.ok) {
-    throw new Error(`Unable to load ${fontUrl} (HTTP ${response.status}).`);
+  let lastError = null;
+
+  for (const fontUrl of candidateUrls) {
+    try {
+      const response = await fetch(fontUrl, {
+        cache: 'no-store',
+        headers: { Accept: 'font/ttf,application/octet-stream,*/*' },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status} while loading ${fontUrl}`);
+      }
+
+      const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+      const fontBuffer = await response.arrayBuffer();
+      const fontBytes = new Uint8Array(fontBuffer);
+
+      if (contentType.includes('text/html')) {
+        throw new Error(`${fontUrl} returned an HTML page instead of the font file.`);
+      }
+
+      if (fontBytes.byteLength < 1000) {
+        const smallFileText = new TextDecoder().decode(fontBytes);
+        if (smallFileText.includes('git-lfs.github.com/spec')) {
+          throw new Error(
+            `${fontUrl} is a Git LFS pointer, not the actual font. Upload the real TTF file to the repository.`
+          );
+        }
+        throw new Error(`${fontUrl} is only ${fontBytes.byteLength} bytes and is not a valid font file.`);
+      }
+
+      // jsPDF needs a TrueType font. OpenType/CFF fonts start with "OTTO"
+      // and cannot simply be renamed from .otf to .ttf.
+      const signature = String.fromCharCode(...fontBytes.slice(0, 4));
+      const isTrueType =
+        (fontBytes[0] === 0x00 && fontBytes[1] === 0x01 && fontBytes[2] === 0x00 && fontBytes[3] === 0x00) ||
+        signature === 'true' ||
+        signature === 'ttcf';
+
+      if (!isTrueType) {
+        if (signature === 'OTTO') {
+          throw new Error(
+            `${fontUrl} is an OpenType/CFF font, not a TrueType font. Use a genuine .ttf version.`
+          );
+        }
+        throw new Error(
+          `${fontUrl} has an unsupported font signature (${JSON.stringify(signature)}). Use a genuine TrueType .ttf file.`
+        );
+      }
+
+      let binaryString = '';
+      const chunkSize = 0x8000;
+      for (let index = 0; index < fontBytes.length; index += chunkSize) {
+        binaryString += String.fromCharCode(...fontBytes.subarray(index, index + chunkSize));
+      }
+
+      const fontBase64 = window.btoa(binaryString);
+      document.addFileToVFS(fontFileName, fontBase64);
+      document.addFont(fontFileName, fontFamily, 'normal');
+
+      const registeredFonts = document.getFontList?.() || {};
+      if (!registeredFonts[fontFamily]) {
+        throw new Error('jsPDF received the font but could not register it. The TTF may be incompatible or corrupted.');
+      }
+
+      document.setFont(fontFamily, 'normal');
+      return fontFamily;
+    } catch (error) {
+      lastError = error;
+      console.error(`Chinese PDF font load failed for ${fontUrl}:`, error);
+    }
   }
 
-  const contentType = response.headers.get('content-type') || '';
-  if (contentType.includes('text/html')) {
-    throw new Error(
-      `${fontUrl} returned HTML instead of a font. Add the TTF file under public/fonts.`
-    );
-  }
-
-  const fontBuffer = await response.arrayBuffer();
-  if (fontBuffer.byteLength < 1000) {
-    throw new Error(`${fontUrl} is empty or is not a valid font file.`);
-  }
-
-  const fontBytes = new Uint8Array(fontBuffer);
-  let binaryString = '';
-  const chunkSize = 0x8000;
-
-  for (let index = 0; index < fontBytes.length; index += chunkSize) {
-    const chunk = fontBytes.subarray(index, index + chunkSize);
-    binaryString += String.fromCharCode(...chunk);
-  }
-
-  const fontBase64 = window.btoa(binaryString);
-  document.addFileToVFS(fontFileName, fontBase64);
-  document.addFont(fontFileName, fontFamily, 'normal');
-  document.setFont(fontFamily, 'normal');
-
-  return fontFamily;
+  throw lastError || new Error('The Chinese PDF font could not be loaded.');
 }
 
 async function exportInventoryToPDF(items, selectedColumnKeys) {
@@ -156,7 +204,8 @@ async function exportInventoryToPDF(items, selectedColumnKeys) {
   } catch (error) {
     console.error('Chinese PDF font error:', error);
     window.alert(
-      'The Chinese PDF font could not be loaded. Check that public/fonts/NotoSansSC-Regular.ttf exists.'
+      `Chinese PDF font error:
+${error?.message || 'Unknown font-loading error.'}`
     );
     return false;
   }
