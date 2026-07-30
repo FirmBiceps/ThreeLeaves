@@ -294,6 +294,8 @@ export function LoginView({
           normalizedUsername
         );
 
+      console.info('Attempting Supabase login as:', internalEmail);
+
       const {
         data: authData,
         error: authError,
@@ -305,18 +307,21 @@ export function LoginView({
           }
         );
 
-      if (
-        authError ||
-        !authData?.user
-      ) {
-        registerFailedAttempt();
+      if (authError || !authData?.user) {
+        console.error('Supabase authentication error:', authError);
+
+        updateError(
+          `Authentication failed: ${
+            authError?.message ||
+            'No authenticated user was returned.'
+          }`
+        );
+
         setPassword('');
 
-        window.requestAnimationFrame(
-          () => {
-            passwordInputRef.current?.focus();
-          }
-        );
+        window.requestAnimationFrame(() => {
+          passwordInputRef.current?.focus();
+        });
 
         return;
       }
@@ -339,15 +344,19 @@ export function LoginView({
         .eq('id', authData.user.id)
         .single();
 
-      if (
-        profileError ||
-        !profile
-      ) {
+      if (profileError || !profile) {
+        console.error('User profile error:', profileError);
+
         await supabase.auth.signOut();
 
-        throw new Error(
-          'Your account profile is not configured. Contact the system administrator.'
+        updateError(
+          `Authentication succeeded, but profile loading failed: ${
+            profileError?.message ||
+            'No matching profile was found.'
+          }`
         );
+
+        return;
       }
 
       if (!profile.is_active) {
