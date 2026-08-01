@@ -27,7 +27,27 @@ function splitIntoPages(items, pageSize) {
   return pages.length > 0 ? pages : [[]];
 }
 
-function getPageDensity(itemCount, isSpecialFormat) {
+function getPageDensity(itemCount, isSpecialFormat, isLastPage) {
+  /*
+   * A continuation page does not contain totals, remarks, PayNow details,
+   * or the signature footer. It therefore has considerably more vertical
+   * space available than the final page. Use that space to make the first
+   * 30 products larger and more comfortable instead of leaving a large gap.
+   */
+  if (!isLastPage && itemCount <= ITEMS_PER_PAGE) {
+    return {
+      tableText: isSpecialFormat
+        ? 'text-[13px] leading-[1.3]'
+        : 'text-[15px] leading-[1.35]',
+      cellPad: isSpecialFormat ? 'py-[2.5px]' : 'py-[3.5px]',
+      headerText: 'text-[14px]',
+      headerPad: 'py-2',
+      totalText: 'text-[17px]',
+      subtotalText: 'text-[15px]',
+      gstText: 'text-[14px]',
+    };
+  }
+
   // Preserve the original formatting for invoices with up to 20 products.
   if (itemCount <= 14) {
     return {
@@ -575,7 +595,8 @@ export function InvoicePreview({
                 ).trim();
                 return name !== '' && name !== '-';
               }).length,
-              Boolean(isSpecialFormat)
+              Boolean(isSpecialFormat),
+              isLastPage
             );
 
             return (
@@ -775,10 +796,10 @@ export function InvoicePreview({
                         </tr>
                       </>
                     ) : (
-                      <tr className="h-[30px] border-t-2 border-black bg-white">
+                      <tr className="h-[34px] border-t-2 border-black bg-white">
                         <td
                           colSpan="5"
-                          className="px-3 py-1 text-right text-[11px] font-bold uppercase tracking-wider text-slate-500"
+                          className="px-3 py-1.5 text-right text-[11px] font-bold uppercase tracking-wider text-slate-500"
                         >
                           Continued on page {pageIndex + 2}
                         </td>
