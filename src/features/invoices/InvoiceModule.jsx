@@ -22,6 +22,81 @@ const calculateInvoiceProfit = (invoice) => {
   }, 0);
 };
 
+// Convert any searchable value into a consistent lowercase string.
+const normaliseSearchValue = (value) =>
+  String(value ?? '').trim().toLowerCase();
+
+// Return all useful SKU and product-description values from one invoice item.
+// Several possible property names are supported because older and newer
+// invoices may store product data under different keys.
+const getInvoiceItemSearchValues = (item) => {
+  if (!item || typeof item !== 'object') return [];
+
+  return [
+    item.sku,
+    item.SKU,
+    item.productSku,
+    item.product_sku,
+    item.code,
+    item.itemCode,
+    item.item_code,
+    item.productCode,
+    item.product_code,
+
+    item.description,
+    item.Description,
+    item.productDescription,
+    item.product_description,
+    item.itemDescription,
+    item.item_description,
+
+    item.name,
+    item.Name,
+    item.productName,
+    item.product_name,
+    item.itemName,
+    item.item_name,
+
+    item.product?.sku,
+    item.product?.SKU,
+    item.product?.code,
+    item.product?.description,
+    item.product?.name,
+  ]
+    .map(normaliseSearchValue)
+    .filter(Boolean);
+};
+
+// Search customer, invoice number, SKU and product description.
+// Every typed word must appear somewhere in the invoice, while the words
+// may match different fields or different invoice items.
+const invoiceMatchesSearch = (invoice, searchTerm) => {
+  const searchTokens = normaliseSearchValue(searchTerm)
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (searchTokens.length === 0) return true;
+
+  const invoiceItems = Array.isArray(invoice?.items) ? invoice.items : [];
+
+  const searchableValues = [
+    invoice?.customer,
+    invoice?.customerName,
+    invoice?.customer_name,
+    invoice?.number,
+    invoice?.invoiceNumber,
+    invoice?.invoice_number,
+    invoice?.id,
+    ...invoiceItems.flatMap(getInvoiceItemSearchValues),
+  ]
+    .map(normaliseSearchValue)
+    .filter(Boolean);
+
+  const combinedSearchText = searchableValues.join(' ');
+
+  return searchTokens.every((token) => combinedSearchText.includes(token));
+};
+
 export function InvoiceModule({ sys }) {
   const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
   const [filter, setFilter] = useState('All');
@@ -81,9 +156,10 @@ export function InvoiceModule({ sys }) {
 
   const filteredInvoices = useMemo(() => {
     let result = [...safeInvoices];
-    if (searchTerm) {
-      const searchLower = String(searchTerm).toLowerCase();
-      result = result.filter(inv => String(inv?.customer || '').toLowerCase().includes(searchLower) || String(inv?.number || inv?.id || '').toLowerCase().includes(searchLower));
+    if (searchTerm.trim()) {
+      result = result.filter((invoice) =>
+        invoiceMatchesSearch(invoice, searchTerm)
+      );
     }
     const today = new Date(); today.setHours(0, 0, 0, 0);
     result = result.filter(inv => {
@@ -243,7 +319,7 @@ export function InvoiceModule({ sys }) {
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-bold text-slate-800">Find an invoice</p>
-                <p className="mt-0.5 text-xs text-slate-500">Use filters, sorting or customer and invoice number search.</p>
+                <p className="mt-0.5 text-xs text-slate-500">Search by customer, invoice number, SKU or product description.</p>
               </div>
 
               {hasActiveFilters && (
@@ -303,7 +379,7 @@ export function InvoiceModule({ sys }) {
                 <Search className="mr-2 shrink-0 text-slate-400" size={16} />
                 <input
                   type="text"
-                  placeholder="Customer or invoice number..."
+                  placeholder="Customer, invoice no., SKU or product..."
                   className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
@@ -377,7 +453,7 @@ export function InvoiceModule({ sys }) {
                       </div>
                       <p className="mt-4 text-sm font-bold text-slate-700">No matching invoices</p>
                       <p className="mt-1 text-xs text-slate-500">
-                        Try a different customer, invoice number, date range or payment term.
+                        Try a different customer, invoice number, SKU, product description, date range or payment term.
                       </p>
                       {hasActiveFilters && (
                         <button
