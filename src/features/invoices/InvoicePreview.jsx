@@ -1,275 +1,809 @@
-import { Eye, FileText, ChevronLeft, Save, Printer, Edit, X } from 'lucide-react';
+import { useMemo } from 'react';
+import {
+  ChevronLeft,
+  Edit,
+  Eye,
+  FileText,
+  Printer,
+  Save,
+  X,
+} from 'lucide-react';
 import { formatMoney } from '../../utils/format';
 import logo from './three_leaves_logo.png';
 import paynowQr from './paynow_qr.jpg';
 
-const CJK_FONT = '"Microsoft YaHei", "微软雅黑", "PingFang SC", "Hiragino Sans GB", "SimHei", "黑体", "SimSun", "宋体", serif';
+const CJK_FONT =
+  '"Microsoft YaHei", "微软雅黑", "PingFang SC", "Hiragino Sans GB", "SimHei", "黑体", "SimSun", "宋体", serif';
 
-export function InvoicePreview({ 
-  mode = 'generator', // 'generator' | 'history'
-  customer, gst, invoiceNumber, invoiceDate, items, remarks,
-  onBack, onRegister, onPrint, onEdit, onClose, 
-  paymentTerms, subtotal, sys, total, existingInvoice, isSpecialFormat, poNumber, carPlateNo 
+const ITEMS_PER_PAGE = 40;
+
+function splitIntoPages(items, pageSize) {
+  const pages = [];
+
+  for (let index = 0; index < items.length; index += pageSize) {
+    pages.push(items.slice(index, index + pageSize));
+  }
+
+  return pages.length > 0 ? pages : [[]];
+}
+
+function getPageDensity(itemCount, isSpecialFormat) {
+  // Keep the original appearance unchanged for invoices with up to 20 items.
+  if (itemCount <= 14) {
+    return {
+      tableText: isSpecialFormat ? 'text-[14px]' : 'text-[15px]',
+      cellPad: isSpecialFormat ? 'py-1.5' : 'py-1',
+      headerText: 'text-[14px]',
+      headerPad: 'py-2',
+      totalText: 'text-[17px]',
+      subtotalText: 'text-[15px]',
+      gstText: 'text-[14px]',
+    };
+  }
+
+  if (itemCount <= 20) {
+    return {
+      tableText: isSpecialFormat
+        ? 'text-[12px] leading-tight'
+        : 'text-[14px] leading-tight',
+      cellPad: 'py-0.5',
+      headerText: 'text-[14px]',
+      headerPad: 'py-2',
+      totalText: 'text-[16px]',
+      subtotalText: 'text-[14px]',
+      gstText: 'text-[13px]',
+    };
+  }
+
+  if (itemCount <= 28) {
+    return {
+      tableText: isSpecialFormat
+        ? 'text-[12px] leading-[1.18]'
+        : 'text-[14px] leading-[1.25]',
+      cellPad: isSpecialFormat ? 'py-[1.5px]' : 'py-[2px]',
+      headerText: 'text-[13px]',
+      headerPad: 'py-1.5',
+      totalText: 'text-[16px]',
+      subtotalText: 'text-[14px]',
+      gstText: 'text-[13px]',
+    };
+  }
+
+  if (itemCount <= 34) {
+    return {
+      tableText: isSpecialFormat
+        ? 'text-[11.5px] leading-[1.12]'
+        : 'text-[13px] leading-[1.18]',
+      cellPad: isSpecialFormat ? 'py-[1px]' : 'py-[1.5px]',
+      headerText: 'text-[12px]',
+      headerPad: 'py-1.5',
+      totalText: 'text-[16px]',
+      subtotalText: 'text-[14px]',
+      gstText: 'text-[13px]',
+    };
+  }
+
+  // 35–40 items: compact enough for one A4 page, but still readable.
+  return {
+    tableText: isSpecialFormat
+      ? 'text-[10.5px] leading-[1.08]'
+      : 'text-[12px] leading-[1.12]',
+    cellPad: isSpecialFormat ? 'py-[0.5px]' : 'py-[1px]',
+    headerText: 'text-[11px]',
+    headerPad: 'py-1',
+    totalText: 'text-[15px]',
+    subtotalText: 'text-[13px]',
+    gstText: 'text-[12px]',
+  };
+}
+
+function formatInvoiceDate(invoiceDate) {
+  if (invoiceDate && !Number.isNaN(new Date(invoiceDate).getTime())) {
+    return new Date(invoiceDate)
+      .toLocaleDateString('en-GB')
+      .replace(/\//g, '-');
+  }
+
+  return new Date().toLocaleDateString('en-GB').replace(/\//g, '-');
+}
+
+function InvoiceHeader({
+  isSpecialFormat,
+  invoiceNumber,
+  invoiceDate,
+  paymentTerms,
+  poNumber,
+  customer,
+  existingInvoice,
+  customerAddress,
+}) {
+  if (isSpecialFormat) {
+    return (
+      <div className="w-full shrink-0">
+        <div className="mb-3 flex w-full shrink-0 items-start justify-between border-b-2 border-slate-800 pb-4">
+          <div className="flex w-[55%] flex-col gap-2 pr-4">
+            <img
+              src={logo}
+              className="h-auto w-[100px] object-contain"
+              alt="Logo"
+            />
+
+            <div className="leading-snug">
+              <h1
+                className="text-[16px] font-black uppercase tracking-tight"
+                style={{ fontFamily: CJK_FONT }}
+              >
+                Three Leaves (Singapore) Trading Enterprise
+              </h1>
+              <h2
+                className="mb-1 text-[14px] font-bold"
+                style={{ fontFamily: CJK_FONT }}
+              >
+                三叶（新加坡） 贸易公司
+              </h2>
+              <div className="text-[9px] font-bold leading-tight tracking-tight text-[#d55e2d]">
+                <p>CO.REG NO.53033969B &nbsp;|&nbsp; GST REG NO. M90355440L</p>
+                <p>280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
+                <p>HP: 97578869 (Mr Ye) &nbsp;|&nbsp; HP: 91113505 (Min) &nbsp;|&nbsp; 3leaves.sg@gmail.com</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex w-[45%] flex-col items-end pl-4 text-right">
+            <img
+              src={`https://bwipjs-api.metafloor.com/?bcid=code128&text=${encodeURIComponent(
+                String(invoiceNumber || '')
+              )}&scale=3&height=10&includetext=true&textxalign=center`}
+              alt="Barcode"
+              className="mb-3 h-[60px] w-auto max-w-full object-contain"
+            />
+            <h2
+              className="mb-1 text-[20px] font-black leading-none tracking-[0.3em]"
+              style={{ fontFamily: CJK_FONT }}
+            >
+              發票
+            </h2>
+            <h3 className="mb-3 text-[14px] font-black uppercase tracking-widest text-black">
+              TAX INVOICE
+            </h3>
+
+            <table className="w-full max-w-[200px] text-right text-[12px] font-bold text-slate-800">
+              <tbody>
+                <tr>
+                  <td className="w-[40%] pb-1 text-left text-slate-500">NO:</td>
+                  <td className="pb-1 text-[14px] font-black text-red-600">
+                    {invoiceNumber}
+                  </td>
+                </tr>
+                <tr>
+                  <td className="pb-1 text-left text-slate-500">TERM:</td>
+                  <td className="pb-1">
+                    {paymentTerms === 'cod' ? 'COD' : '30 Days'}
+                  </td>
+                </tr>
+                {poNumber && (
+                  <tr>
+                    <td className="text-left text-slate-500">PO NO:</td>
+                    <td>{poNumber}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="mb-3 flex shrink-0 items-end justify-between text-[12px] font-bold">
+          <div className="w-[65%] leading-relaxed">
+            <div className="flex items-start">
+              <span className="w-[45px] shrink-0 text-slate-500">TO:</span>
+              <span className="flex-1 border-b border-slate-800 pb-0.5 uppercase">
+                {String(customer?.name || existingInvoice?.customer || '')}
+              </span>
+            </div>
+            <div className="mt-1 flex items-start">
+              <span className="w-[45px] shrink-0 text-slate-500">ADD:</span>
+              <span className="flex-1 truncate border-b border-slate-800 pb-0.5 uppercase">
+                {String(customerAddress)}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex w-[30%] items-end">
+            <span className="w-[45px] shrink-0 text-slate-500">DATE:</span>
+            <span className="flex-1 border-b border-slate-800 pb-0.5 text-right">
+              {formatInvoiceDate(invoiceDate)}
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full shrink-0">
+      <div className="mb-4 flex w-full shrink-0 justify-between">
+        <div className="flex flex-1 flex-col pr-4">
+          <div className="mb-5 flex items-start justify-between">
+            <div className="flex items-center">
+              <div className="mr-4 w-[110px] shrink-0">
+                <img
+                  src={logo}
+                  alt="Three Leaves Logo"
+                  className="h-auto w-full object-contain"
+                />
+              </div>
+
+              <div className="flex-1 overflow-visible whitespace-nowrap pt-2 text-left leading-snug">
+                <h1
+                  className="text-[17px] font-black"
+                  style={{ fontFamily: CJK_FONT }}
+                >
+                  THREE LEAVES (SINGAPORE) TRADING ENTERPRISE
+                </h1>
+                <h2
+                  className="mb-1 text-[16px] font-bold"
+                  style={{ fontFamily: CJK_FONT }}
+                >
+                  三叶（新加坡） 贸易公司
+                </h2>
+                <div className="text-[10.5px] font-bold leading-tight tracking-tight text-[#d55e2d]">
+                  <p className="whitespace-nowrap">
+                    CO.REG NO.53033969B &nbsp;&nbsp; GST REG NO. M90355440L
+                  </p>
+                  <p className="whitespace-nowrap">
+                    280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322
+                  </p>
+                  <p className="whitespace-nowrap">
+                    HP: 97578869 (Mr Ye) &nbsp;&nbsp; HP: 91113505 (Min) &nbsp;&nbsp; Email: 3leaves.sg@gmail.com
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="mb-2 flex w-full items-end justify-between text-[14px] font-bold">
+            <div className="flex flex-1 items-end pr-4">
+              <span className="mr-2 shrink-0 text-black">TO:</span>
+              <span
+                className="flex-1 whitespace-nowrap border-b border-black pb-0.5 text-[13px] uppercase tracking-tight"
+                style={{ fontFamily: CJK_FONT }}
+              >
+                {String(customer?.name || existingInvoice?.customer || '')}
+              </span>
+            </div>
+
+            <div className="flex w-[35%] items-end pl-2">
+              <span className="mr-2 shrink-0 text-black">DATE:</span>
+              <span className="flex-1 border-b border-black pb-0.5 text-center">
+                {formatInvoiceDate(invoiceDate)}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex w-full items-end text-[14px] font-bold">
+            <span className="mr-2 shrink-0 text-black">ADDRESS:</span>
+            <span
+              className="flex-1 whitespace-nowrap border-b border-black pb-0.5 text-[12px] uppercase tracking-tighter"
+              style={{ fontFamily: CJK_FONT }}
+            >
+              {String(customerAddress)}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex w-[180px] shrink-0 flex-col items-start pl-4 pt-1">
+          <h2
+            className="mb-1 text-[22px] font-bold leading-none tracking-[0.4em]"
+            style={{ fontFamily: CJK_FONT }}
+          >
+            發票
+          </h2>
+          <h3 className="mb-2 text-[15px] font-black uppercase tracking-wide text-black">
+            TAX INVOICE
+          </h3>
+
+          <div className="mb-2 mt-auto flex w-full flex-col gap-3">
+            <div className="flex items-baseline">
+              <span className="w-[50px] shrink-0 text-[15px] font-bold text-black">
+                No.
+              </span>
+              <span className="text-[17px] font-bold leading-none tracking-wider text-red-600">
+                {String(invoiceNumber)}
+              </span>
+            </div>
+            <div className="flex items-baseline">
+              <span className="w-[50px] shrink-0 text-[15px] font-bold text-black">
+                Term:
+              </span>
+              <span className="text-[16px] font-bold leading-none text-red-600">
+                {paymentTerms === 'cod' ? 'COD' : '30 Days'}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InvoiceFooter() {
+  return (
+    <div className="mt-4 flex w-full shrink-0 items-end pt-2">
+      <div className="w-[70%] pr-4 text-[12px] font-bold leading-snug">
+        <div style={{ fontFamily: CJK_FONT }}>
+          <p className="text-[12px]">
+            请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息
+          </p>
+          <p className="whitespace-nowrap text-[10px] text-slate-800">
+            Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.
+          </p>
+
+          <div className="mt-2 flex items-center">
+            <div className="mr-3 flex h-[80px] w-[80px] shrink-0 items-center justify-center">
+              <img
+                src={paynowQr}
+                alt="PayNow QR Code"
+                className="h-[80px] w-[80px] object-contain"
+              />
+            </div>
+
+            <div className="flex flex-col justify-center text-[11px]">
+              <p>UEN: 53033969B</p>
+              <p>A/C Name: Three Leaves (Singapore) Trading Enterprise</p>
+              <p>A/C Number: 535-846562-001</p>
+              <p>Bank Name: OCBC</p>
+              <p className="mt-0.5 text-[10px] font-normal text-slate-800">
+                All payments must be made payable to Three Leaves (Singapore) Trading Enterprise.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex w-[30%] shrink-0 flex-col justify-end pb-1 pl-2">
+        <div className="h-12" />
+        <div className="border-t-2 border-black pt-1.5 text-center text-[12px] font-bold uppercase tracking-widest">
+          Received By
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function InvoicePreview({
+  mode = 'generator',
+  customer,
+  gst,
+  invoiceNumber,
+  invoiceDate,
+  items,
+  remarks,
+  onBack,
+  onRegister,
+  onPrint,
+  onEdit,
+  onClose,
+  paymentTerms,
+  subtotal,
+  sys,
+  total,
+  existingInvoice,
+  isSpecialFormat,
+  poNumber,
+  carPlateNo,
 }) {
   const customerAddress = customer?.address || existingInvoice?.address || '';
   const safeInventory = Array.isArray(sys?.inventory) ? sys.inventory : [];
   const safeItems = Array.isArray(items) ? items.filter(Boolean) : [];
 
-  const actualItemCount = safeItems.filter(item => {
-    const n = String(item?.name || item?.Items || item?.rawSearchString || '').trim();
-    return n !== '' && n !== '-';
-  }).length;
-
-  let baseText = "text-[15px]";
-  let cellPad = "py-1";
-  let descPad = "pt-1.5";
-  let totalText = "text-[17px]";
-  let subtotalText = "text-[15px]";
-  let gstText = "text-[14px]";
-
-  let spBaseText = "text-[14px]";
-  let spCellPad = "py-1.5";
-
-  if (actualItemCount > 20) {
-    baseText = "text-[13px] leading-none"; 
-    cellPad = "py-0"; 
-    descPad = "pt-0.5";
-    totalText = "text-[15px]";
-    subtotalText = "text-[13px]";
-    gstText = "text-[12px]";
-    
-    spBaseText = "text-[11px] leading-tight";
-    spCellPad = "py-0";
-  } else if (actualItemCount > 14) {
-    baseText = "text-[14px] leading-tight";
-    cellPad = "py-0.5";
-    descPad = "pt-1";
-    totalText = "text-[16px]";
-    subtotalText = "text-[14px]";
-    gstText = "text-[13px]";
-    
-    spBaseText = "text-[12px] leading-tight";
-    spCellPad = "py-0.5";
-  }
+  const itemPages = useMemo(
+    () => splitIntoPages(safeItems, ITEMS_PER_PAGE),
+    [safeItems]
+  );
 
   return (
     <div className="fixed inset-0 z-[5000] overflow-y-auto bg-slate-950/90 print:static print:block print:bg-white print:p-0 print:backdrop-filter-none">
       <style type="text/css">
         {`
+          #printable-invoice-wrapper {
+            width: 100%;
+          }
+
+          .invoice-print-page {
+            position: relative;
+            display: flex;
+            width: 210mm;
+            height: 297mm;
+            flex-direction: column;
+            box-sizing: border-box;
+            background: white;
+            padding: 15mm 10mm;
+          }
+
+          .invoice-page-number {
+            position: absolute;
+            right: 10mm;
+            bottom: 5mm;
+            font-size: 9px;
+            font-weight: 700;
+          }
+
           @media print {
             @page { size: A4; margin: 0 !important; }
-            html, body { margin: 0 !important; padding: 0 !important; background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            body * { visibility: hidden !important; }
-            #printable-invoice-wrapper, #printable-invoice-wrapper * { visibility: visible !important; }
-            #printable-invoice-wrapper { position: absolute !important; left: 0 !important; top: 0 !important; width: 210mm !important; height: 297mm !important; padding: 15mm 10mm !important; margin: 0 !important; background: white !important; backdrop-filter: none !important; box-sizing: border-box !important; display: flex !important; flex-direction: column !important;}
-            *, html, body, div, p, span, h1, h2, h3, table, th, td { font-family: ${CJK_FONT} !important; }
-            tr, td, th { page-break-inside: avoid; break-inside: avoid; }
+
+            html, body {
+              margin: 0 !important;
+              padding: 0 !important;
+              background: white !important;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+
+            body * {
+              visibility: hidden !important;
+            }
+
+            #printable-invoice-wrapper,
+            #printable-invoice-wrapper * {
+              visibility: visible !important;
+            }
+
+            #printable-invoice-wrapper {
+              position: absolute !important;
+              left: 0 !important;
+              top: 0 !important;
+              width: 210mm !important;
+              height: auto !important;
+              padding: 0 !important;
+              margin: 0 !important;
+              background: white !important;
+              box-sizing: border-box !important;
+            }
+
+            .invoice-print-page {
+              width: 210mm !important;
+              height: 297mm !important;
+              min-height: 297mm !important;
+              padding: 15mm 10mm !important;
+              margin: 0 !important;
+              box-shadow: none !important;
+              border-radius: 0 !important;
+              page-break-after: always !important;
+              break-after: page !important;
+              overflow: hidden !important;
+            }
+
+            .invoice-print-page:last-child {
+              page-break-after: auto !important;
+              break-after: auto !important;
+            }
+
+            *, html, body, div, p, span, h1, h2, h3, table, th, td {
+              font-family: ${CJK_FONT} !important;
+            }
+
+            tr, td, th {
+              page-break-inside: avoid;
+              break-inside: avoid;
+            }
           }
         `}
       </style>
-      <div className="flex min-h-full flex-col items-center py-12 print:block print:py-0 print:m-0">
-        <div className="w-full max-w-[210mm] shrink-0 bg-slate-900 px-8 py-4 flex justify-between items-center text-white rounded-t-2xl shadow-2xl print:hidden border-b-4 border-blue-600">
+
+      <div className="flex min-h-full flex-col items-center py-12 print:m-0 print:block print:py-0">
+        <div className="flex w-full max-w-[210mm] shrink-0 items-center justify-between rounded-t-2xl border-b-4 border-blue-600 bg-slate-900 px-8 py-4 text-white shadow-2xl print:hidden">
           <div className="flex items-center">
-            {mode === 'generator' ? <Eye size={24} className="mr-3 text-blue-400" /> : <FileText size={24} className="mr-3 text-blue-400" />}
+            {mode === 'generator' ? (
+              <Eye size={24} className="mr-3 text-blue-400" />
+            ) : (
+              <FileText size={24} className="mr-3 text-blue-400" />
+            )}
+
             <div>
-              <h2 className="text-sm font-black tracking-widest uppercase text-slate-200">{mode === 'generator' ? 'Invoice Layout Check' : 'A4 Print Preview'}</h2>
-              <p className="text-lg font-bold text-white leading-none mt-0.5">#{String(invoiceNumber)}</p>
+              <h2 className="text-sm font-black uppercase tracking-widest text-slate-200">
+                {mode === 'generator'
+                  ? 'Invoice Layout Check'
+                  : 'A4 Print Preview'}
+              </h2>
+              <p className="mt-0.5 text-lg font-bold leading-none text-white">
+                #{String(invoiceNumber)}
+              </p>
+              {itemPages.length > 1 && (
+                <p className="mt-1 text-xs font-semibold text-blue-300">
+                  {itemPages.length} print pages · maximum {ITEMS_PER_PAGE} items per page
+                </p>
+              )}
             </div>
           </div>
+
           <div className="flex items-center space-x-3">
             {mode === 'generator' ? (
               <>
-                <button className="flex items-center rounded bg-slate-800 px-5 py-2.5 font-bold text-white transition-all hover:bg-slate-700 border border-slate-700 text-sm" onClick={onBack} type="button"><ChevronLeft size={16} className="mr-1" /> Edit Draft</button>
-                <button className="flex items-center rounded bg-white px-5 py-2.5 font-bold text-slate-900 shadow-lg transition-all hover:bg-slate-50 text-sm" onClick={() => onRegister(false)} type="button"><Save className="mr-2" size={16} /> Save Invoice</button>
+                <button
+                  className="flex items-center rounded border border-slate-700 bg-slate-800 px-5 py-2.5 text-sm font-bold text-white transition-all hover:bg-slate-700"
+                  onClick={onBack}
+                  type="button"
+                >
+                  <ChevronLeft size={16} className="mr-1" />
+                  Edit Draft
+                </button>
+                <button
+                  className="flex items-center rounded bg-white px-5 py-2.5 text-sm font-bold text-slate-900 shadow-lg transition-all hover:bg-slate-50"
+                  onClick={() => onRegister(false)}
+                  type="button"
+                >
+                  <Save className="mr-2" size={16} />
+                  Save Invoice
+                </button>
               </>
             ) : (
               <>
-                <button onClick={onPrint} className="flex items-center text-sm font-bold bg-blue-600 hover:bg-blue-500 px-5 py-2.5 rounded-xl transition-colors shadow-lg"><Printer size={18} className="mr-2" /> Print</button>
-                <button onClick={onEdit} className="flex items-center text-sm font-bold bg-slate-800 hover:bg-slate-700 px-5 py-2.5 rounded-xl transition-colors border border-slate-700"><Edit size={16} className="mr-2" /> Edit</button>
-                <button onClick={onClose} className="hover:bg-slate-700 p-2.5 rounded-full transition-colors ml-2 bg-slate-800"><X size={20} /></button>
+                <button
+                  onClick={onPrint}
+                  className="flex items-center rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-bold shadow-lg transition-colors hover:bg-blue-500"
+                  type="button"
+                >
+                  <Printer size={18} className="mr-2" />
+                  Print
+                </button>
+                <button
+                  onClick={onEdit}
+                  className="flex items-center rounded-xl border border-slate-700 bg-slate-800 px-5 py-2.5 text-sm font-bold transition-colors hover:bg-slate-700"
+                  type="button"
+                >
+                  <Edit size={16} className="mr-2" />
+                  Edit
+                </button>
+                <button
+                  onClick={onClose}
+                  className="ml-2 rounded-full bg-slate-800 p-2.5 transition-colors hover:bg-slate-700"
+                  type="button"
+                >
+                  <X size={20} />
+                </button>
               </>
             )}
           </div>
         </div>
-        
-        <div id="printable-invoice-wrapper" lang="zh" className="flex w-full max-w-[210mm] h-[297mm] flex-col bg-white py-[15mm] px-[10mm] text-black shadow-2xl rounded-b-2xl print:w-[210mm] print:h-[297mm] print:max-w-none print:rounded-none print:shadow-none box-border" style={{ fontFamily: CJK_FONT }}>
-          
-          {isSpecialFormat ? (
-            <div className="flex flex-col h-full w-full">
-              <div className="flex w-full justify-between items-start border-b-2 border-slate-800 pb-4 mb-3 shrink-0">
-                <div className="flex flex-col gap-2 w-[55%] pr-4">
-                  <img src={logo} className="w-[100px] h-auto object-contain" alt="Logo" />
-                  <div className="leading-snug">
-                    <h1 className="font-black text-[16px] uppercase tracking-tight" style={{ fontFamily: CJK_FONT }}>Three Leaves (Singapore) Trading Enterprise</h1>
-                    <h2 className="font-bold text-[14px] mb-1" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
-                    <div className="text-[#d55e2d] font-bold text-[9px] leading-tight tracking-tight">
-                      <p>CO.REG NO.53033969B &nbsp;|&nbsp; GST REG NO. M90355440L</p>
-                      <p>280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p>
-                      <p>HP: 97578869 (Mr Ye) &nbsp;|&nbsp; HP: 91113505 (Min) &nbsp;|&nbsp; 3leaves.sg@gmail.com</p>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="flex flex-col items-end w-[45%] text-right pl-4">
-                  <img 
-                    src={`https://bwipjs-api.metafloor.com/?bcid=code128&text=${invoiceNumber}&scale=3&height=10&includetext=true&textxalign=center`} 
-                    alt="Barcode" 
-                    className="h-[60px] w-auto max-w-full object-contain mb-3" 
-                  />
-                  <h2 className="text-[20px] font-black tracking-[0.3em] leading-none mb-1" style={{ fontFamily: CJK_FONT }}>發票</h2>
-                  <h3 className="text-[14px] font-black tracking-widest uppercase mb-3 text-black">TAX INVOICE</h3>
-                  
-                  <table className="text-[12px] font-bold text-slate-800 text-right w-full max-w-[200px]">
-                    <tbody>
-                      <tr>
-                        <td className="text-slate-500 pb-1 text-left w-[40%]">NO:</td>
-                        <td className="text-red-600 text-[14px] font-black pb-1">{invoiceNumber}</td>
-                      </tr>
-                      <tr>
-                        <td className="text-slate-500 pb-1 text-left">TERM:</td>
-                        <td className="pb-1">{paymentTerms === 'cod' ? 'COD' : '30 Days'}</td>
-                      </tr>
-                      {poNumber && (
-                        <tr>
-                          <td className="text-slate-500 text-left">PO NO:</td>
-                          <td>{poNumber}</td>
+
+        <div
+          id="printable-invoice-wrapper"
+          lang="zh"
+          className="flex w-full flex-col items-center gap-8 print:block print:gap-0"
+          style={{ fontFamily: CJK_FONT }}
+        >
+          {itemPages.map((pageItems, pageIndex) => {
+            const isLastPage = pageIndex === itemPages.length - 1;
+            const density = getPageDensity(
+              pageItems.filter((item) => {
+                const name = String(
+                  item?.name ||
+                    item?.Items ||
+                    item?.rawSearchString ||
+                    ''
+                ).trim();
+                return name !== '' && name !== '-';
+              }).length,
+              Boolean(isSpecialFormat)
+            );
+
+            return (
+              <div
+                key={`invoice-page-${pageIndex}`}
+                className="invoice-print-page rounded-b-2xl shadow-2xl print:rounded-none print:shadow-none"
+                style={{ fontFamily: CJK_FONT }}
+              >
+                <InvoiceHeader
+                  isSpecialFormat={Boolean(isSpecialFormat)}
+                  invoiceNumber={invoiceNumber}
+                  invoiceDate={invoiceDate}
+                  paymentTerms={paymentTerms}
+                  poNumber={poNumber}
+                  customer={customer}
+                  existingInvoice={existingInvoice}
+                  customerAddress={customerAddress}
+                />
+
+                <table
+                  className={`mb-0 mt-2 h-full w-full flex-grow border-2 border-black text-center ${density.tableText}`}
+                  style={{ fontFamily: CJK_FONT }}
+                >
+                  <thead className="border-b-2 border-black">
+                    <tr className={`bg-white font-bold ${density.headerText}`}>
+                      <th className={`${density.headerPad} w-12 px-1 text-center`}>
+                        NO.
+                      </th>
+                      <th className={`${density.headerPad} px-2 text-left`}>
+                        DESCRIPTION
+                      </th>
+                      <th className={`${density.headerPad} w-24 px-1 text-center`}>
+                        QUANTITY
+                      </th>
+                      <th className={`${density.headerPad} w-32 px-1 text-center`}>
+                        UNIT PRICE
+                      </th>
+                      <th className={`${density.headerPad} w-32 px-1 text-center`}>
+                        AMOUNT
+                      </th>
+                    </tr>
+                  </thead>
+
+                  <tbody style={{ fontFamily: CJK_FONT }}>
+                    {pageItems.map((item, itemIndex) => {
+                      const globalIndex =
+                        pageIndex * ITEMS_PER_PAGE + itemIndex;
+                      const foundProduct = safeInventory.find(
+                        (entry) => entry?.id === item?.itemId
+                      );
+                      const productName = foundProduct
+                        ? String(
+                            foundProduct.Name ||
+                              foundProduct.name ||
+                              foundProduct.Items ||
+                              ''
+                          )
+                        : String(
+                            item?.name ||
+                              item?.Items ||
+                              item?.rawSearchString ||
+                              ''
+                          ).trim();
+                      const isBlank =
+                        productName === '' || productName === '-';
+
+                      return (
+                        <tr
+                          key={`${item?.itemId || 'item'}-${globalIndex}`}
+                          className="align-middle text-slate-900"
+                          style={{ fontFamily: CJK_FONT }}
+                        >
+                          <td
+                            className={`px-1 text-center align-middle font-normal ${density.cellPad}`}
+                          >
+                            {globalIndex + 1}
+                          </td>
+                          <td
+                            className={`px-1 pl-2 text-left align-middle font-normal ${density.cellPad}`}
+                            style={{ fontFamily: CJK_FONT }}
+                          >
+                            {!isBlank ? (
+                              <span className="block whitespace-nowrap">
+                                ☐ {productName}
+                              </span>
+                            ) : (
+                              <div className="select-none text-transparent">☐</div>
+                            )}
+                          </td>
+                          <td
+                            className={`px-1 text-center align-middle font-normal ${density.cellPad}`}
+                            style={{ fontFamily: CJK_FONT }}
+                          >
+                            {String(item?.qty || item?.quantity || 0)}{' '}
+                            {String(item?.unit || '')}
+                          </td>
+                          <td
+                            className={`px-1 text-center align-middle font-normal ${density.cellPad}`}
+                          >
+                            ${formatMoney(item?.unitPrice)}
+                          </td>
+                          <td
+                            className={`px-1 text-center align-middle font-normal ${density.cellPad}`}
+                          >
+                            $
+                            {formatMoney(
+                              (Number(item?.qty || item?.quantity) || 0) *
+                                (Number(item?.unitPrice) || 0)
+                            )}
+                          </td>
                         </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+                      );
+                    })}
 
-              <div className="flex justify-between items-end mb-3 shrink-0 text-[12px] font-bold">
-                <div className="w-[65%] leading-relaxed">
-                  <div className="flex items-start">
-                    <span className="w-[45px] shrink-0 text-slate-500">TO:</span>
-                    <span className="flex-1 uppercase border-b border-slate-800 pb-0.5">{String(customer?.name || existingInvoice?.customer || '')}</span>
-                  </div>
-                  <div className="flex items-start mt-1">
-                    <span className="w-[45px] shrink-0 text-slate-500">ADD:</span>
-                    <span className="flex-1 uppercase border-b border-slate-800 pb-0.5 truncate">{String(customerAddress)}</span>
-                  </div>
-                </div>
-                <div className="w-[30%] flex items-end">
-                  <span className="w-[45px] shrink-0 text-slate-500">DATE:</span>
-                  <span className="flex-1 border-b border-slate-800 pb-0.5 text-right">{invoiceDate && !isNaN(new Date(invoiceDate).getTime()) ? new Date(invoiceDate).toLocaleDateString('en-GB').replace(/\//g, '-') : new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}</span>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col w-full shrink-0">
-              <div className="flex w-full mb-4 justify-between shrink-0">
-                <div className="flex-1 flex flex-col pr-4">
-                  <div className="flex items-start justify-between mb-5">
-                    <div className="flex items-center">
-                      <div className="w-[110px] shrink-0 mr-4"><img src={logo} alt="Three Leaves Logo" className="w-full h-auto object-contain" /></div>
-                      <div className="flex-1 text-left leading-snug pt-2 whitespace-nowrap overflow-visible">
-                        <h1 className="font-black text-[17px]" style={{ fontFamily: CJK_FONT }}>THREE LEAVES (SINGAPORE) TRADING ENTERPRISE</h1><h2 className="font-bold text-[16px] mb-1" style={{ fontFamily: CJK_FONT }}>三叶（新加坡） 贸易公司</h2>
-                        <div className="text-[#d55e2d] font-bold text-[10.5px] leading-tight tracking-tight"><p className="whitespace-nowrap">CO.REG NO.53033969B &nbsp;&nbsp; GST REG NO. M90355440L</p><p className="whitespace-nowrap">280 Woodlands Industrial Park E5 #06-35/36 Harvest @ Singapore 757322</p><p className="whitespace-nowrap">HP: 97578869 (Mr Ye) &nbsp;&nbsp; HP: 91113505 (Min) &nbsp;&nbsp; Email: 3leaves.sg@gmail.com</p></div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex justify-between items-end w-full mb-2 text-[14px] font-bold">
-                    <div className="flex items-end flex-1 pr-4"><span className="shrink-0 mr-2 text-black">TO:</span><span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[13px] tracking-tight" style={{ fontFamily: CJK_FONT }}>{String(customer?.name || existingInvoice?.customer || '')}</span></div>
-                    <div className="flex items-end w-[35%] pl-2"><span className="shrink-0 mr-2 text-black">DATE:</span><span className="flex-1 text-center border-b border-black pb-0.5">{invoiceDate && !isNaN(new Date(invoiceDate).getTime()) ? new Date(invoiceDate).toLocaleDateString('en-GB').replace(/\//g, '-') : new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}</span></div>
-                  </div>
-                  <div className="flex items-end w-full text-[14px] font-bold"><span className="shrink-0 mr-2 text-black">ADDRESS:</span><span className="flex-1 uppercase border-b border-black pb-0.5 whitespace-nowrap text-[12px] tracking-tighter" style={{ fontFamily: CJK_FONT }}>{String(customerAddress)}</span></div>
-                </div>
-                <div className="w-[180px] shrink-0 flex flex-col items-start pl-4 pt-1">
-                  <h2 className="text-[22px] font-bold tracking-[0.4em] leading-none mb-1" style={{ fontFamily: CJK_FONT }}>發票</h2><h3 className="text-[15px] font-black tracking-wide uppercase mb-2 text-black">TAX INVOICE</h3>
-                  <div className="w-full flex flex-col gap-3 mt-auto mb-2">
-                    <div className="flex items-baseline"><span className="font-bold w-[50px] shrink-0 text-black text-[15px]">No.</span><span className="text-red-600 font-bold tracking-wider text-[17px] leading-none">{String(invoiceNumber)}</span></div>
-                    <div className="flex items-baseline"><span className="font-bold w-[50px] shrink-0 text-black text-[15px]">Term:</span><span className="text-red-600 font-bold text-[16px] leading-none">{paymentTerms === 'cod' ? 'COD' : '30 Days'}</span></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
+                    <tr className="h-full">
+                      <td />
+                      <td className="py-4 text-center align-middle">
+                        {isSpecialFormat && carPlateNo && isLastPage && (
+                          <div className="inline-block text-slate-900">
+                            <span className="text-[14px] font-bold">
+                              Car Plate No:{' '}
+                            </span>
+                            <span className="text-[16px] font-black">
+                              {carPlateNo}
+                            </span>
+                          </div>
+                        )}
+                      </td>
+                      <td />
+                      <td />
+                      <td />
+                    </tr>
 
-          <table className={`w-full h-full flex-grow border-2 border-black text-center mb-0 mt-2 ${isSpecialFormat ? spBaseText : baseText}`} style={{ fontFamily: CJK_FONT }}>
-            <thead className="border-b-2 border-black">
-              <tr className="font-bold bg-white text-[14px]"><th className="py-2 px-1 w-12 text-center">NO.</th><th className="py-2 px-2 text-left">DESCRIPTION</th><th className="py-2 px-1 w-24 text-center">QUANTITY</th><th className="py-2 px-1 w-32 text-center">UNIT PRICE</th><th className="py-2 px-1 w-32 text-center">AMOUNT</th></tr>
-            </thead>
-            <tbody style={{ fontFamily: CJK_FONT }}>
-              {safeItems.map((item, idx) => {
-                const foundProduct = safeInventory.find((entry) => entry?.id === item?.itemId);
-                const productName = foundProduct ? String(foundProduct.Name || foundProduct.name || foundProduct.Items || '') : String(item?.name || item?.Items || item?.rawSearchString || '').trim();
-                const isBlank = productName === '' || productName === '-';
-                
-                return (
-                  <tr key={idx} className="align-top text-slate-900" style={{ fontFamily: CJK_FONT }}>
-                    <td className={`px-1 text-center font-normal ${isSpecialFormat ? spCellPad : cellPad}`}>{idx + 1}</td>
-                    <td className={`px-1 text-left pl-2 font-normal ${isSpecialFormat ? spCellPad : cellPad} ${isSpecialFormat ? '' : descPad}`} style={{ fontFamily: CJK_FONT }}>
-                      {!isBlank ? (
-                        <span>☐ {productName}</span>
-                      ) : (
-                        <div className="text-transparent select-none">☐</div>
-                      )}
-                    </td>
-                    <td className={`px-1 text-center font-normal ${isSpecialFormat ? spCellPad : cellPad}`} style={{ fontFamily: CJK_FONT }}>{String(item?.qty || item?.quantity || 0)} {String(item?.unit || '')}</td>
-                    <td className={`px-1 text-center font-normal ${isSpecialFormat ? spCellPad : cellPad}`}>${formatMoney(item?.unitPrice)}</td>
-                    <td className={`px-1 text-center font-normal ${isSpecialFormat ? spCellPad : cellPad}`}>
-                      ${formatMoney((Number(item?.qty || item?.quantity) || 0) * (Number(item?.unitPrice) || 0))}
-                    </td>
-                  </tr>
-                );
-              })}
-              
-              <tr className="h-full">
-                <td></td>
-                <td className="text-center align-middle py-4">
-                  {isSpecialFormat && carPlateNo && (
-                    <div className="inline-block text-slate-900">
-                       <span className="text-[14px] font-bold">Car Plate No: </span>
-                       <span className="text-[16px] font-black">{carPlateNo}</span>
-                    </div>
-                  )}
-                </td>
-                <td></td><td></td><td></td>
-              </tr>
-              
-              {/* ===== DEDICATED INVOICE REMARKS 2-ROW SPLIT ===== */}
-              <tr className="border-t-2 border-black font-bold h-[28px]">
-                {!isSpecialFormat ? (
-                  <td colSpan="3" className="bg-white border-r-2 border-black px-2 py-1 align-middle text-left text-[12px] font-bold text-slate-800">
-                    Remarks:
-                  </td>
-                ) : (
-                  <td colSpan="3" rowSpan="3" className="bg-white border-r-2 border-black p-2 align-top text-left"></td>
-                )}
-                <td className={`p-1 text-center bg-white ${gstText}`}>SUBTOTAL</td>
-                <td className={`p-1 text-center bg-white ${subtotalText}`}>${formatMoney(subtotal)}</td>
-              </tr>
-              <tr className="font-bold h-[28px] border-t border-black bg-white">
-                {!isSpecialFormat && (
-                  <td colSpan="3" rowSpan="2" className="bg-white border-r-2 border-black px-2 py-1 align-top text-left">
-                    <div className="w-full max-h-[44px] overflow-hidden text-[11px] font-normal text-slate-800 whitespace-pre-wrap break-words leading-tight" style={{ fontFamily: CJK_FONT }}>
-                      {remarks}
-                    </div>
-                  </td>
-                )}
-                <td className={`p-1 text-center ${gstText}`}>9% GST</td>
-                <td className={`p-1 text-center ${subtotalText}`}>${formatMoney(gst)}</td>
-              </tr>
-              <tr className="font-bold h-[32px] border-t-2 border-black bg-white">
-                <td className="p-1 text-center text-[16px]">TOTAL</td>
-                <td className={`p-1 text-center ${totalText}`}>${formatMoney(total)}</td>
-              </tr>
-            </tbody>
-          </table>
-          <div className="flex w-full mt-4 pt-2 items-end shrink-0">
-            <div className="w-[70%] text-[12px] font-bold leading-snug pr-4">
-              <div style={{ fontFamily: CJK_FONT }}>
-                <p className="text-[12px]">请提前一天提交订单,同日送达的截止时间为下午12点前。每周日休息</p><p className="text-[10px] whitespace-nowrap text-slate-800">Please submit orders one day in advance. The cut-off time for same-day delivery is before 12 PM. Closed on Sundays.</p>
-                <div className="mt-2 flex items-center">
-                  <div className="w-[80px] h-[80px] shrink-0 mr-3 flex items-center justify-center"><img src={paynowQr} alt="PayNow QR Code" className="w-[80px] h-[80px] object-contain" /></div>
-                  <div className="flex flex-col justify-center text-[11px]"><p>UEN: 53033969B</p><p>A/C Name: Three Leaves (Singapore) Trading Enterprise</p><p>A/C Number: 535-846562-001</p><p>Bank Name: OCBC</p><p className="mt-0.5 font-normal text-[10px] text-slate-800">All payments must be made payable to Three Leaves (Singapore) Trading Enterprise.</p></div>
+                    {isLastPage ? (
+                      <>
+                        <tr className="h-[28px] border-t-2 border-black font-bold">
+                          {!isSpecialFormat ? (
+                            <td
+                              colSpan="3"
+                              className="border-r-2 border-black bg-white px-2 py-1 text-left align-middle text-[12px] font-bold text-slate-800"
+                            >
+                              Remarks:
+                            </td>
+                          ) : (
+                            <td
+                              colSpan="3"
+                              rowSpan="3"
+                              className="border-r-2 border-black bg-white p-2 text-left align-top"
+                            />
+                          )}
+                          <td
+                            className={`bg-white p-1 text-center ${density.gstText}`}
+                          >
+                            SUBTOTAL
+                          </td>
+                          <td
+                            className={`bg-white p-1 text-center ${density.subtotalText}`}
+                          >
+                            ${formatMoney(subtotal)}
+                          </td>
+                        </tr>
+
+                        <tr className="h-[28px] border-t border-black bg-white font-bold">
+                          {!isSpecialFormat && (
+                            <td
+                              colSpan="3"
+                              rowSpan="2"
+                              className="border-r-2 border-black bg-white px-2 py-1 text-left align-top"
+                            >
+                              <div
+                                className="max-h-[44px] w-full overflow-hidden whitespace-pre-wrap break-words text-[11px] font-normal leading-tight text-slate-800"
+                                style={{ fontFamily: CJK_FONT }}
+                              >
+                                {remarks}
+                              </div>
+                            </td>
+                          )}
+                          <td
+                            className={`p-1 text-center ${density.gstText}`}
+                          >
+                            9% GST
+                          </td>
+                          <td
+                            className={`p-1 text-center ${density.subtotalText}`}
+                          >
+                            ${formatMoney(gst)}
+                          </td>
+                        </tr>
+
+                        <tr className="h-[32px] border-t-2 border-black bg-white font-bold">
+                          <td className="p-1 text-center text-[16px]">TOTAL</td>
+                          <td
+                            className={`p-1 text-center ${density.totalText}`}
+                          >
+                            ${formatMoney(total)}
+                          </td>
+                        </tr>
+                      </>
+                    ) : (
+                      <tr className="h-[30px] border-t-2 border-black bg-white">
+                        <td
+                          colSpan="5"
+                          className="px-3 py-1 text-right text-[11px] font-bold uppercase tracking-wider text-slate-500"
+                        >
+                          Continued on page {pageIndex + 2}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+
+                {isLastPage && <InvoiceFooter />}
+
+                <div className="invoice-page-number">
+                  Page {pageIndex + 1} of {itemPages.length}
                 </div>
               </div>
-            </div>
-            <div className="w-[30%] shrink-0 flex flex-col justify-end pb-1 pl-2"><div className="h-12"></div><div className="border-t-2 border-black text-center pt-1.5 text-[12px] font-bold uppercase tracking-widest">Received By</div></div>
-          </div>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -278,20 +812,34 @@ export function InvoicePreview({
 
 export function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
   if (!invoice) return null;
+
   const safeCustomers = Array.isArray(sys?.customers) ? sys.customers : [];
-  const customerObj = safeCustomers.find(c => c?.id === invoice?.customerId) || {};
+  const customerObj =
+    safeCustomers.find((customer) => customer?.id === invoice?.customerId) || {};
   const customerAddress = String(customerObj?.address || '');
-  const subtotal = (invoice?.items || []).filter(Boolean).reduce((sum, item) => sum + (Number(item?.qty || item?.quantity) || 0) * (Number(item?.unitPrice) || 0), 0);
+  const safeInvoiceItems = Array.isArray(invoice?.items)
+    ? invoice.items.filter(Boolean)
+    : [];
+  const subtotal = safeInvoiceItems.reduce(
+    (sum, item) =>
+      sum +
+      (Number(item?.qty || item?.quantity) || 0) *
+        (Number(item?.unitPrice) || 0),
+    0
+  );
   const gst = subtotal * 0.09;
 
   return (
     <InvoicePreview
       mode="history"
-      customer={{ name: invoice.customer, address: customerAddress }}
+      customer={{
+        name: invoice.customer,
+        address: customerAddress,
+      }}
       gst={gst}
       invoiceNumber={invoice.number || invoice.id}
       invoiceDate={invoice.date}
-      items={invoice.items}
+      items={safeInvoiceItems}
       remarks={invoice.remarks}
       onPrint={() => window.print()}
       onEdit={() => onEdit(invoice)}
