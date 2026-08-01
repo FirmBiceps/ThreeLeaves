@@ -15,7 +15,7 @@ import paynowQr from './paynow_qr.jpg';
 const CJK_FONT =
   '"Microsoft YaHei", "微软雅黑", "PingFang SC", "Hiragino Sans GB", "SimHei", "黑体", "SimSun", "宋体", serif';
 
-const ITEMS_PER_PAGE = 40;
+const ITEMS_PER_PAGE = 30;
 
 function splitIntoPages(items, pageSize) {
   const pages = [];
@@ -28,7 +28,7 @@ function splitIntoPages(items, pageSize) {
 }
 
 function getPageDensity(itemCount, isSpecialFormat) {
-  // Keep the original appearance unchanged for invoices with up to 20 items.
+  // Preserve the original formatting for invoices with up to 20 products.
   if (itemCount <= 14) {
     return {
       tableText: isSpecialFormat ? 'text-[14px]' : 'text-[15px]',
@@ -55,12 +55,12 @@ function getPageDensity(itemCount, isSpecialFormat) {
     };
   }
 
-  if (itemCount <= 28) {
+  if (itemCount <= 24) {
     return {
       tableText: isSpecialFormat
-        ? 'text-[12px] leading-[1.18]'
-        : 'text-[14px] leading-[1.25]',
-      cellPad: isSpecialFormat ? 'py-[1.5px]' : 'py-[2px]',
+        ? 'text-[12px] leading-[1.2]'
+        : 'text-[14px] leading-[1.28]',
+      cellPad: isSpecialFormat ? 'py-[2px]' : 'py-[3px]',
       headerText: 'text-[13px]',
       headerPad: 'py-1.5',
       totalText: 'text-[16px]',
@@ -69,31 +69,17 @@ function getPageDensity(itemCount, isSpecialFormat) {
     };
   }
 
-  if (itemCount <= 34) {
-    return {
-      tableText: isSpecialFormat
-        ? 'text-[11.5px] leading-[1.12]'
-        : 'text-[13px] leading-[1.18]',
-      cellPad: isSpecialFormat ? 'py-[1px]' : 'py-[1.5px]',
-      headerText: 'text-[12px]',
-      headerPad: 'py-1.5',
-      totalText: 'text-[16px]',
-      subtotalText: 'text-[14px]',
-      gstText: 'text-[13px]',
-    };
-  }
-
-  // 35–40 items: compact enough for one A4 page, but still readable.
+  // 25–30 products: compact, but still keeps readable spacing.
   return {
     tableText: isSpecialFormat
-      ? 'text-[10.5px] leading-[1.08]'
-      : 'text-[12px] leading-[1.12]',
-    cellPad: isSpecialFormat ? 'py-[0.5px]' : 'py-[1px]',
-    headerText: 'text-[11px]',
-    headerPad: 'py-1',
-    totalText: 'text-[15px]',
-    subtotalText: 'text-[13px]',
-    gstText: 'text-[12px]',
+      ? 'text-[11.5px] leading-[1.15]'
+      : 'text-[13px] leading-[1.22]',
+    cellPad: isSpecialFormat ? 'py-[1px]' : 'py-[2px]',
+    headerText: 'text-[12px]',
+    headerPad: 'py-1.5',
+    totalText: 'text-[16px]',
+    subtotalText: 'text-[14px]',
+    gstText: 'text-[13px]',
   };
 }
 
@@ -328,7 +314,7 @@ function InvoiceHeader({
 
 function InvoiceFooter() {
   return (
-    <div className="mt-4 flex w-full shrink-0 items-end pt-2">
+    <div className="mt-3 flex w-full shrink-0 items-end pt-1">
       <div className="w-[70%] pr-4 text-[12px] font-bold leading-snug">
         <div style={{ fontFamily: CJK_FONT }}>
           <p className="text-[12px]">
@@ -339,11 +325,11 @@ function InvoiceFooter() {
           </p>
 
           <div className="mt-2 flex items-center">
-            <div className="mr-3 flex h-[80px] w-[80px] shrink-0 items-center justify-center">
+            <div className="mr-3 flex h-[72px] w-[72px] shrink-0 items-center justify-center">
               <img
                 src={paynowQr}
                 alt="PayNow QR Code"
-                className="h-[80px] w-[80px] object-contain"
+                className="h-[72px] w-[72px] object-contain"
               />
             </div>
 
@@ -418,6 +404,11 @@ export function InvoicePreview({
             box-sizing: border-box;
             background: white;
             padding: 15mm 10mm;
+          }
+
+          .invoice-footer-safe {
+            max-height: 39mm;
+            overflow: hidden;
           }
 
           .invoice-page-number {
@@ -605,7 +596,7 @@ export function InvoicePreview({
                 />
 
                 <table
-                  className={`mb-0 mt-2 h-full w-full flex-grow border-2 border-black text-center ${density.tableText}`}
+                  className={`mb-0 mt-2 w-full flex-grow border-2 border-black text-center ${density.tableText}`}
                   style={{ fontFamily: CJK_FONT }}
                 >
                   <thead className="border-b-2 border-black">
@@ -796,7 +787,7 @@ export function InvoicePreview({
                   </tbody>
                 </table>
 
-                {isLastPage && <InvoiceFooter />}
+                {isLastPage && <div className="invoice-footer-safe"><InvoiceFooter /></div>}
 
                 <div className="invoice-page-number">
                   Page {pageIndex + 1} of {itemPages.length}
