@@ -35,16 +35,21 @@ function getPageDensity(itemCount, isSpecialFormat, isLastPage) {
    * 30 products larger and more comfortable instead of leaving a large gap.
    */
   if (!isLastPage && itemCount <= ITEMS_PER_PAGE) {
+    /*
+     * Continuation pages have no payment footer, but they still need a safe
+     * bottom boundary for the continuation note and page number. Keep the
+     * rows only slightly larger than the final-page 25–30 item setting.
+     */
     return {
       tableText: isSpecialFormat
-        ? 'text-[13px] leading-[1.3]'
-        : 'text-[15px] leading-[1.35]',
-      cellPad: isSpecialFormat ? 'py-[2.5px]' : 'py-[3.5px]',
-      headerText: 'text-[14px]',
-      headerPad: 'py-2',
-      totalText: 'text-[17px]',
-      subtotalText: 'text-[15px]',
-      gstText: 'text-[14px]',
+        ? 'text-[11.5px] leading-[1.16]'
+        : 'text-[13px] leading-[1.22]',
+      cellPad: isSpecialFormat ? 'py-[1px]' : 'py-[2px]',
+      headerText: 'text-[12px]',
+      headerPad: 'py-1.5',
+      totalText: 'text-[16px]',
+      subtotalText: 'text-[14px]',
+      gstText: 'text-[13px]',
     };
   }
 
@@ -617,7 +622,9 @@ export function InvoicePreview({
                 />
 
                 <table
-                  className={`mb-0 mt-2 w-full flex-grow border-2 border-black text-center ${density.tableText}`}
+                  className={`mt-2 w-full flex-grow border-2 border-black text-center ${density.tableText} ${
+                    isLastPage ? 'mb-0' : 'mb-[9mm]'
+                  }`}
                   style={{ fontFamily: CJK_FONT }}
                 >
                   <thead className="border-b-2 border-black">
