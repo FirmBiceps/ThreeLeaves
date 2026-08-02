@@ -337,6 +337,9 @@ function SidebarContent({
   setSearchTerm,
   isSigningOut,
   logoutError,
+  isUploadingProfilePicture,
+  profilePictureError,
+  onChooseProfilePicture,
   onTabSelection,
   onLogout,
 }) {
