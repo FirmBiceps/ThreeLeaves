@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
+  Camera,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
@@ -22,6 +23,8 @@ import {
 import { supabase } from '../../lib/supabaseClient';
 
 const SIDEBAR_COLLAPSED_KEY = 'three-leaves-erp-sidebar-collapsed';
+const PROFILE_PICTURE_BUCKET = 'profile-pictures';
+const MAX_PROFILE_PICTURE_SIZE = 5 * 1024 * 1024;
 
 /**
  * Returns true when the current user is allowed to perform an action.
@@ -166,6 +169,83 @@ function getInitials(user) {
   }
 
   return `${words[0][0] || ''}${words[1][0] || ''}`.toUpperCase();
+}
+
+
+function getProfilePictureUrl(user) {
+  return String(
+    user?.avatar_url ||
+      user?.profile_picture_url ||
+      user?.photo_url ||
+      user?.image_url ||
+      ''
+  ).trim();
+}
+
+function getFileExtension(file) {
+  const extensionFromName = String(file?.name || '')
+    .split('.')
+    .pop()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+
+  if (extensionFromName) {
+    return extensionFromName;
+  }
+
+  const extensionFromType = String(file?.type || '').split('/').pop();
+  return extensionFromType || 'jpg';
+}
+
+function ProfileAvatar({
+  currentUser,
+  collapsed,
+  isUploading,
+  uploadError,
+  onChoosePicture,
+}) {
+  const profilePictureUrl = getProfilePictureUrl(currentUser);
+
+  return (
+    <div className="relative shrink-0">
+      <button
+        type="button"
+        onClick={onChoosePicture}
+        disabled={isUploading}
+        aria-label="Change profile picture"
+        title="Change profile picture"
+        className="group/avatar relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-xs font-black text-white shadow-lg shadow-blue-950/30 outline-none transition focus:ring-2 focus:ring-blue-500 disabled:cursor-wait"
+      >
+        {profilePictureUrl ? (
+          <img
+            src={profilePictureUrl}
+            alt={`${currentUser?.name || currentUser?.username || 'User'} profile`}
+            className="h-full w-full object-cover"
+            referrerPolicy="no-referrer"
+          />
+        ) : (
+          getInitials(currentUser)
+        )}
+
+        <span className="absolute inset-0 flex items-center justify-center bg-slate-950/65 opacity-0 transition group-hover/avatar:opacity-100 group-focus/avatar:opacity-100">
+          {isUploading ? (
+            <Loader2 size={15} className="animate-spin" />
+          ) : (
+            <Camera size={15} />
+          )}
+        </span>
+      </button>
+
+      <span className="pointer-events-none absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-slate-900 bg-emerald-400" />
+
+      {uploadError && collapsed && (
+        <span
+          className="absolute -right-1 -top-1 h-3 w-3 rounded-full border-2 border-slate-900 bg-red-500"
+          title={uploadError}
+        />
+      )}
+    </div>
+  );
 }
 
 function formatRole(role) {
@@ -462,10 +542,13 @@ function SidebarContent({
             collapsed ? 'justify-center p-2' : 'gap-3 p-3'
           }`}
         >
-          <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-xs font-black text-white shadow-lg shadow-blue-950/30">
-            {getInitials(currentUser)}
-            <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-slate-900 bg-emerald-400" />
-          </div>
+          <ProfileAvatar
+            currentUser={currentUser}
+            collapsed={collapsed}
+            isUploading={isUploadingProfilePicture}
+            uploadError={profilePictureError}
+            onChoosePicture={onChooseProfilePicture}
+          />
 
           {!collapsed && (
             <div className="min-w-0 flex-1">
@@ -481,6 +564,11 @@ function SidebarContent({
                   Online
                 </span>
               </div>
+              {profilePictureError && (
+                <p className="mt-1 line-clamp-2 text-[9px] font-semibold leading-tight text-red-400">
+                  {profilePictureError}
+                </p>
+              )}
             </div>
           )}
 
@@ -527,6 +615,9 @@ export function Sidebar({ sys, activeTab, setActiveTab }) {
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [logoutError, setLogoutError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [isUploadingProfilePicture, setIsUploadingProfilePicture] = useState(false);
+  const [profilePictureError, setProfilePictureError] = useState('');
+  const profilePictureInputRef = useRef(null);
   const [collapsed, setCollapsed] = useState(() => {
     try {
       return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true';
@@ -616,6 +707,97 @@ export function Sidebar({ sys, activeTab, setActiveTab }) {
     setActiveTab(tabId);
   };
 
+  const handleChooseProfilePicture = () => {
+    if (isUploadingProfilePicture) {
+      return;
+    }
+
+    setProfilePictureError('');
+    profilePictureInputRef.current?.click();
+  };
+
+  const handleProfilePictureChange = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+
+    if (!file) {
+      return;
+    }
+
+    if (!String(file.type || '').startsWith('image/')) {
+      setProfilePictureError('Please choose a JPG, PNG, WEBP or other image file.');
+      return;
+    }
+
+    if (file.size > MAX_PROFILE_PICTURE_SIZE) {
+      setProfilePictureError('Profile pictures must be 5 MB or smaller.');
+      return;
+    }
+
+    const userId = currentUser?.id || currentUser?.authUser?.id;
+
+    if (!userId) {
+      setProfilePictureError('Your user profile ID is missing. Please sign in again.');
+      return;
+    }
+
+    setIsUploadingProfilePicture(true);
+    setProfilePictureError('');
+
+    try {
+      const extension = getFileExtension(file);
+      const storagePath = `${userId}/avatar-${Date.now()}.${extension}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from(PROFILE_PICTURE_BUCKET)
+        .upload(storagePath, file, {
+          cacheControl: '3600',
+          contentType: file.type || undefined,
+          upsert: false,
+        });
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      const { data: publicUrlData } = supabase.storage
+        .from(PROFILE_PICTURE_BUCKET)
+        .getPublicUrl(storagePath);
+
+      const avatarUrl = publicUrlData?.publicUrl;
+
+      if (!avatarUrl) {
+        throw new Error('The uploaded image URL could not be created.');
+      }
+
+      const { error: profileUpdateError } = await supabase
+        .from('user_profiles')
+        .update({
+          avatar_url: avatarUrl,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', userId);
+
+      if (profileUpdateError) {
+        throw profileUpdateError;
+      }
+
+      if (typeof sys?.setCurrentUser === 'function') {
+        sys.setCurrentUser({
+          ...currentUser,
+          avatar_url: avatarUrl,
+        });
+      }
+    } catch (error) {
+      console.error('Profile picture upload failed:', error);
+      setProfilePictureError(
+        error?.message || 'Unable to upload the profile picture.'
+      );
+    } finally {
+      setIsUploadingProfilePicture(false);
+    }
+  };
+
   const handleLogout = async () => {
     if (isSigningOut) {
       return;
@@ -645,7 +827,16 @@ export function Sidebar({ sys, activeTab, setActiveTab }) {
   };
 
   return (
-    <aside
+    <>
+      <input
+        ref={profilePictureInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif"
+        className="hidden"
+        onChange={handleProfilePictureChange}
+      />
+
+      <aside
       className={`hidden h-screen shrink-0 flex-col border-r border-slate-800 bg-slate-900 text-white shadow-2xl shadow-slate-950/20 transition-[width] duration-300 print:hidden md:flex ${
         collapsed ? 'w-[76px]' : 'w-[280px]'
       }`}
@@ -663,9 +854,13 @@ export function Sidebar({ sys, activeTab, setActiveTab }) {
         setSearchTerm={setSearchTerm}
         isSigningOut={isSigningOut}
         logoutError={logoutError}
+        isUploadingProfilePicture={isUploadingProfilePicture}
+        profilePictureError={profilePictureError}
+        onChooseProfilePicture={handleChooseProfilePicture}
         onTabSelection={handleTabSelection}
         onLogout={handleLogout}
       />
-    </aside>
+      </aside>
+    </>
   );
 }
