@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { Search, Plus, Edit, Package, X, Trash2, Save, CheckCircle, Download, FileText, LoaderCircle } from 'lucide-react';
+import { Search, Plus, Edit, Package, X, Trash2, Save, CheckCircle, Download, FileText } from 'lucide-react';
 import { formatMoney } from '../../utils/format';
 import { supabase } from '../../lib/supabaseClient';
 import * as XLSX from 'xlsx';
@@ -73,96 +73,7 @@ function exportInventoryToExcel(items) {
   XLSX.writeFile(workbook, `inventory-${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
 
-async function loadChinesePdfFont(document) {
-  const fontFileName = 'NotoSansSC-Regular.ttf';
-  const fontFamily = 'NotoSansSC';
-  const baseUrl = String(import.meta.env.BASE_URL || '/');
-  const normalisedBaseUrl = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
-
-  // Try the Vite base path first, then the domain-root path as a fallback.
-  const candidateUrls = [
-    `${normalisedBaseUrl}fonts/${fontFileName}`,
-    `/fonts/${fontFileName}`,
-  ].filter((url, index, urls) => urls.indexOf(url) === index);
-
-  let lastError = null;
-
-  for (const fontUrl of candidateUrls) {
-    try {
-      const response = await fetch(fontUrl, {
-        cache: 'no-store',
-        headers: { Accept: 'font/ttf,application/octet-stream,*/*' },
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status} while loading ${fontUrl}`);
-      }
-
-      const contentType = String(response.headers.get('content-type') || '').toLowerCase();
-      const fontBuffer = await response.arrayBuffer();
-      const fontBytes = new Uint8Array(fontBuffer);
-
-      if (contentType.includes('text/html')) {
-        throw new Error(`${fontUrl} returned an HTML page instead of the font file.`);
-      }
-
-      if (fontBytes.byteLength < 1000) {
-        const smallFileText = new TextDecoder().decode(fontBytes);
-        if (smallFileText.includes('git-lfs.github.com/spec')) {
-          throw new Error(
-            `${fontUrl} is a Git LFS pointer, not the actual font. Upload the real TTF file to the repository.`
-          );
-        }
-        throw new Error(`${fontUrl} is only ${fontBytes.byteLength} bytes and is not a valid font file.`);
-      }
-
-      // jsPDF needs a TrueType font. OpenType/CFF fonts start with "OTTO"
-      // and cannot simply be renamed from .otf to .ttf.
-      const signature = String.fromCharCode(...fontBytes.slice(0, 4));
-      const isTrueType =
-        (fontBytes[0] === 0x00 && fontBytes[1] === 0x01 && fontBytes[2] === 0x00 && fontBytes[3] === 0x00) ||
-        signature === 'true' ||
-        signature === 'ttcf';
-
-      if (!isTrueType) {
-        if (signature === 'OTTO') {
-          throw new Error(
-            `${fontUrl} is an OpenType/CFF font, not a TrueType font. Use a genuine .ttf version.`
-          );
-        }
-        throw new Error(
-          `${fontUrl} has an unsupported font signature (${JSON.stringify(signature)}). Use a genuine TrueType .ttf file.`
-        );
-      }
-
-      let binaryString = '';
-      const chunkSize = 0x8000;
-      for (let index = 0; index < fontBytes.length; index += chunkSize) {
-        binaryString += String.fromCharCode(...fontBytes.subarray(index, index + chunkSize));
-      }
-
-      const fontBase64 = window.btoa(binaryString);
-      document.addFileToVFS(fontFileName, fontBase64);
-      document.addFont(fontFileName, fontFamily, 'normal');
-
-      const registeredFonts = document.getFontList?.() || {};
-      if (!registeredFonts[fontFamily]) {
-        throw new Error('jsPDF received the font but could not register it. The TTF may be incompatible or corrupted.');
-      }
-
-      document.setFont(fontFamily, 'normal');
-      return fontFamily;
-    } catch (error) {
-      lastError = error;
-      console.error(`Chinese PDF font load failed for ${fontUrl}:`, error);
-    }
-  }
-
-  throw lastError || new Error('The Chinese PDF font could not be loaded.');
-}
-
-async function exportInventoryToPDF(items, selectedColumnKeys) {
-  try {
+function exportInventoryToPDF(items, selectedColumnKeys) {
   const rows = normaliseInventoryForExport(items);
   const selectedColumns = INVENTORY_EXPORT_COLUMNS.filter((column) =>
     selectedColumnKeys.includes(column.key)
@@ -170,45 +81,21 @@ async function exportInventoryToPDF(items, selectedColumnKeys) {
 
   if (rows.length === 0) {
     window.alert('There is no inventory data to export.');
-    return false;
+    return;
   }
 
   if (selectedColumns.length === 0) {
     window.alert('Select at least one column for the PDF.');
-    return false;
+    return;
   }
 
   const orientation = selectedColumns.length <= 4 ? 'portrait' : 'landscape';
-
-  // 20% larger than the previous PDF while keeping a responsive size
-  // for exports that contain many columns.
-  const previousFontSize =
-    selectedColumns.length >= 8 ? 6.5 : selectedColumns.length >= 6 ? 7.5 : 9;
-  const fontSize = Number((previousFontSize * 1.2).toFixed(1));
-
-  // This creates a true vector PDF. Do not replace this flow with
-  // html2canvas or page screenshots, because those become blurry JPEGs.
+  const fontSize = selectedColumns.length >= 8 ? 6.5 : selectedColumns.length >= 6 ? 7.5 : 9;
   const document = new jsPDF({
     orientation,
     unit: 'pt',
     format: 'a4',
-    compress: true,
-    putOnlyUsedFonts: true,
-    precision: 2,
   });
-
-  let tableFont;
-
-  try {
-    tableFont = await loadChinesePdfFont(document);
-  } catch (error) {
-    console.error('Chinese PDF font error:', error);
-    window.alert(
-      `Chinese PDF font error:
-${error?.message || 'Unknown font-loading error.'}`
-    );
-    return false;
-  }
 
   const pageWidth = document.internal.pageSize.getWidth();
   const pageHeight = document.internal.pageSize.getHeight();
@@ -243,18 +130,15 @@ ${error?.message || 'Unknown font-loading error.'}`
         if (column.key === 'Price' || column.key === 'cost_price (SGD)') {
           return `$${Number(value || 0).toFixed(2)}`;
         }
-        return String(value ?? '');
+        return value ?? '';
       })
     ),
     theme: 'grid',
     margin: { top: 92, right: 32, bottom: 42, left: 32 },
     styles: {
-      font: tableFont,
-      fontStyle: 'normal',
+      font: 'helvetica',
       fontSize,
-      // Slightly tighter padding offsets the larger type without making
-      // the rows feel cramped or causing unnecessary horizontal overflow.
-      cellPadding: { top: 4, right: 3.5, bottom: 4, left: 3.5 },
+      cellPadding: 4,
       overflow: 'linebreak',
       valign: 'middle',
       lineColor: [226, 232, 240],
@@ -262,36 +146,18 @@ ${error?.message || 'Unknown font-loading error.'}`
       textColor: [30, 41, 59],
     },
     headStyles: {
-      font: tableFont,
-      fontStyle: 'normal',
       fillColor: [30, 64, 175],
       textColor: [255, 255, 255],
+      fontStyle: 'bold',
       halign: 'left',
     },
     alternateRowStyles: {
       fillColor: [248, 250, 252],
     },
-    pageBreak: 'auto',
-    rowPageBreak: 'avoid',
     columnStyles: selectedColumns.reduce((styles, column, index) => {
-      const nextStyle = {};
-
       if (column.key === 'Price' || column.key === 'cost_price (SGD)' || column.key === 'stock') {
-        nextStyle.halign = 'right';
+        styles[index] = { halign: 'right' };
       }
-
-      // Optimised customer-catalogue proportions for the common
-      // Product Name + Unit + Description export.
-      if (selectedColumns.length === 3) {
-        if (column.key === 'Name') nextStyle.cellWidth = 190;
-        if (column.key === 'Unit') nextStyle.cellWidth = 70;
-        if (column.key === 'Description') nextStyle.cellWidth = 'auto';
-      }
-
-      if (Object.keys(nextStyle).length > 0) {
-        styles[index] = nextStyle;
-      }
-
       return styles;
     }, {}),
     didDrawPage: () => {
@@ -307,19 +173,12 @@ ${error?.message || 'Unknown font-loading error.'}`
   });
 
   document.save(`inventory-catalogue-${new Date().toISOString().slice(0, 10)}.pdf`);
-  return true;
-  } catch (error) {
-    console.error('Inventory PDF export failed:', error);
-    window.alert(`Unable to generate the PDF: ${error?.message || 'Unknown error'}`);
-    return false;
-  }
 }
 
 // ==========================================
 // COMPONENT: PDF COLUMN SELECTOR
 // ==========================================
 function InventoryPdfColumnPicker({ onClose, onExport }) {
-  const [isExporting, setIsExporting] = useState(false);
   const [selectedColumns, setSelectedColumns] = useState(
     INVENTORY_EXPORT_COLUMNS
       .filter((column) => column.defaultVisible)
@@ -332,16 +191,6 @@ function InventoryPdfColumnPicker({ onClose, onExport }) {
         ? current.filter((key) => key !== columnKey)
         : [...current, columnKey]
     );
-  };
-
-  const handleExport = async () => {
-    if (isExporting || selectedColumns.length === 0) return;
-    setIsExporting(true);
-    try {
-      await onExport(selectedColumns);
-    } finally {
-      setIsExporting(false);
-    }
   };
 
   return (
@@ -417,15 +266,11 @@ function InventoryPdfColumnPicker({ onClose, onExport }) {
               </button>
               <button
                 type="button"
-                disabled={selectedColumns.length === 0 || isExporting}
-                onClick={handleExport}
+                disabled={selectedColumns.length === 0}
+                onClick={() => onExport(selectedColumns)}
                 className="flex items-center rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white shadow-lg transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {isExporting ? (
-                  <><LoaderCircle size={16} className="mr-2 animate-spin" /> Generating PDF...</>
-                ) : (
-                  <><FileText size={16} className="mr-2" /> Export PDF</>
-                )}
+                <FileText size={16} className="mr-2" /> Export PDF
               </button>
             </div>
           </div>
@@ -1085,10 +930,9 @@ export function InventoryModule({ sys }) {
       {isPdfColumnPickerOpen && (
         <InventoryPdfColumnPicker
           onClose={() => setIsPdfColumnPickerOpen(false)}
-          onExport={async (selectedColumns) => {
-            const success = await exportInventoryToPDF(filteredInventory, selectedColumns);
-            if (success) setIsPdfColumnPickerOpen(false);
-            return success;
+          onExport={(selectedColumns) => {
+            exportInventoryToPDF(filteredInventory, selectedColumns);
+            setIsPdfColumnPickerOpen(false);
           }}
         />
       )}
