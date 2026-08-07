@@ -5,6 +5,7 @@ import {
   AlertCircle,
   Building2,
   Clock3,
+  ExternalLink,
   MapPin,
   Navigation,
   RotateCcw,
@@ -95,8 +96,100 @@ function getCustomerAddress(customer) {
     customer?.address ||
     customer?.deliveryAddress ||
     customer?.delivery_address ||
+    customer?.shippingAddress ||
+    customer?.shipping_address ||
     ''
   );
+}
+
+function normaliseLookupValue(value) {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+}
+
+function getInvoiceCustomerName(invoice) {
+  return (
+    invoice?.customer ||
+    invoice?.customerName ||
+    invoice?.customer_name ||
+    invoice?.companyName ||
+    invoice?.company_name ||
+    ''
+  );
+}
+
+function findCustomerForInvoice(invoice, customers) {
+  const customerId =
+    invoice?.customerId ??
+    invoice?.customer_id ??
+    invoice?.customerID ??
+    null;
+
+  if (customerId !== null && customerId !== undefined && customerId !== '') {
+    const matchedById = customers.find(
+      (customer) => String(customer?.id) === String(customerId)
+    );
+
+    if (matchedById) return matchedById;
+  }
+
+  const invoiceCustomerName = normaliseLookupValue(
+    getInvoiceCustomerName(invoice)
+  );
+
+  if (!invoiceCustomerName) return null;
+
+  return (
+    customers.find(
+      (customer) =>
+        normaliseLookupValue(getCustomerName(customer)) === invoiceCustomerName
+    ) || null
+  );
+}
+
+function getDeliveryAddress(invoice, customer) {
+  return String(
+    invoice?.deliveryAddress ||
+      invoice?.delivery_address ||
+      invoice?.shippingAddress ||
+      invoice?.shipping_address ||
+      invoice?.customerAddress ||
+      invoice?.customer_address ||
+      invoice?.address ||
+      getCustomerAddress(customer) ||
+      ''
+  ).trim();
+}
+
+function buildNavigationUrl(address, customerWithCoordinates) {
+  const cleanAddress = String(address || '').trim();
+
+  // Always prefer the actual delivery address. The invoice number is never
+  // used as the navigation destination.
+  const destination = cleanAddress
+    ? cleanAddress
+    : isValidCoordinatePair(
+          customerWithCoordinates?.lat,
+          customerWithCoordinates?.lng
+        )
+      ? `${Number(customerWithCoordinates.lat)},${Number(
+          customerWithCoordinates.lng
+        )}`
+      : '';
+
+  if (!destination) return '';
+
+  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+    destination
+  )}&travelmode=driving`;
+}
+
+function openNavigation(url) {
+  if (!url || typeof window === 'undefined') return;
+
+  window.open(url, '_blank', 'noopener,noreferrer');
 }
 
 function formatDuration(totalMinutes) {
@@ -140,24 +233,31 @@ export function LogisticsModule({ sys }) {
     [safeInvoices, todayString]
   );
 
-  const todayStops = useMemo(() => {
-    return todayInvoices
-      .map((invoice) => {
-        const customerId = invoice?.customerId ?? invoice?.customer_id;
-        const rawCustomer = safeCustomers.find(
-          (customer) => String(customer?.id) === String(customerId)
-        );
-        const customer = normaliseCustomer(rawCustomer);
+  const todayDeliveryRecords = useMemo(() => {
+    return todayInvoices.map((invoice) => {
+      const rawCustomer = findCustomerForInvoice(invoice, safeCustomers);
+      const mapCustomer = normaliseCustomer(rawCustomer);
+      const deliveryAddress = getDeliveryAddress(invoice, rawCustomer);
 
-        if (!customer) return null;
+      const customerFallback = {
+        name: getInvoiceCustomerName(invoice) || 'Unknown customer',
+        region: invoice?.region || '',
+      };
 
-        return {
-          ...invoice,
-          cust: customer,
-        };
-      })
-      .filter(Boolean);
+      return {
+        ...invoice,
+        cust: rawCustomer || customerFallback,
+        mapCustomer,
+        deliveryAddress,
+        navigationUrl: buildNavigationUrl(deliveryAddress, mapCustomer),
+      };
+    });
   }, [safeCustomers, todayInvoices]);
+
+  const todayStops = useMemo(
+    () => todayDeliveryRecords.filter((stop) => Boolean(stop?.mapCustomer)),
+    [todayDeliveryRecords]
+  );
 
   const regionalGroups = useMemo(() => {
     const groups = {
@@ -168,7 +268,7 @@ export function LogisticsModule({ sys }) {
     };
 
     todayStops.forEach((stop) => {
-      const region = String(stop?.cust?.region || '').trim();
+      const region = String(stop?.cust?.region || stop?.region || '').trim();
 
       if (!region) return;
       if (!groups[region]) groups[region] = [];
@@ -201,13 +301,13 @@ export function LogisticsModule({ sys }) {
       let nearestIndex = 0;
       let minimumDistance = getDistanceKm(
         currentPosition,
-        remainingStops[0].cust
+        remainingStops[0].mapCustomer
       );
 
       for (let index = 1; index < remainingStops.length; index += 1) {
         const distance = getDistanceKm(
           currentPosition,
-          remainingStops[index].cust
+          remainingStops[index].mapCustomer
         );
 
         if (distance < minimumDistance) {
@@ -217,7 +317,7 @@ export function LogisticsModule({ sys }) {
       }
 
       totalDistance += Number(minimumDistance) || 0;
-      currentPosition = remainingStops[nearestIndex].cust;
+      currentPosition = remainingStops[nearestIndex].mapCustomer;
       sequence.push(remainingStops.splice(nearestIndex, 1)[0]);
     }
 
@@ -240,6 +340,9 @@ export function LogisticsModule({ sys }) {
   }, [regionalGroups, selectedRegion]);
 
   const totalMappedInvoices = todayStops.length;
+  const navigationReadyInvoices = todayDeliveryRecords.filter(
+    (stop) => Boolean(stop?.navigationUrl)
+  ).length;
   const unmappedInvoices = Math.max(
     todayInvoices.length - totalMappedInvoices,
     0
@@ -302,13 +405,15 @@ export function LogisticsModule({ sys }) {
 
       if (routeMetrics?.sequence?.length && headquarters) {
         routeMetrics.sequence.forEach((stop, index) => {
-          const customer = normaliseCustomer(stop?.cust);
+          const customer = normaliseCustomer(stop?.mapCustomer);
 
           if (!customer) return;
 
           deliveryMarkerCount += 1;
 
-          const customerName = escapeHtml(getCustomerName(customer));
+          const customerName = escapeHtml(getCustomerName(stop?.cust));
+          const deliveryAddress = escapeHtml(stop?.deliveryAddress || '');
+          const navigationUrl = escapeHtml(stop?.navigationUrl || '');
           const invoiceNumber = escapeHtml(
             stop?.number || stop?.invoiceNumber || stop?.id || ''
           );
@@ -321,11 +426,24 @@ export function LogisticsModule({ sys }) {
             fillOpacity: 1,
           })
             .bindPopup(
-              `<b>${index + 1}. ${customerName}</b>${
-                invoiceNumber
-                  ? `<br/><span>Invoice #${invoiceNumber}</span>`
-                  : ''
-              }`
+              `<div style="min-width:220px">
+                <b>${index + 1}. ${customerName}</b>
+                ${
+                  deliveryAddress
+                    ? `<br/><span style="display:block;margin-top:4px">${deliveryAddress}</span>`
+                    : ''
+                }
+                ${
+                  invoiceNumber
+                    ? `<br/><span style="color:#2563eb">Invoice #${invoiceNumber}</span>`
+                    : ''
+                }
+                ${
+                  navigationUrl
+                    ? `<br/><a href="${navigationUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin-top:8px;font-weight:700;color:#ffffff;background:#2563eb;padding:6px 10px;border-radius:8px;text-decoration:none">Navigate to address</a>`
+                    : ''
+                }
+              </div>`
             )
             .addTo(featureGroup);
         });
@@ -333,7 +451,7 @@ export function LogisticsModule({ sys }) {
         const routeCoordinates = [
           [headquarters.lat, headquarters.lng],
           ...routeMetrics.sequence
-            .map((stop) => normaliseCustomer(stop?.cust))
+            .map((stop) => normaliseCustomer(stop?.mapCustomer))
             .filter(Boolean)
             .map((customer) => [customer.lat, customer.lng]),
           [headquarters.lat, headquarters.lng],
@@ -349,13 +467,15 @@ export function LogisticsModule({ sys }) {
         }
       } else {
         todayStops.forEach((stop) => {
-          const customer = normaliseCustomer(stop?.cust);
+          const customer = normaliseCustomer(stop?.mapCustomer);
 
           if (!customer) return;
 
           deliveryMarkerCount += 1;
 
-          const customerName = escapeHtml(getCustomerName(customer));
+          const customerName = escapeHtml(getCustomerName(stop?.cust));
+          const deliveryAddress = escapeHtml(stop?.deliveryAddress || '');
+          const navigationUrl = escapeHtml(stop?.navigationUrl || '');
           const invoiceNumber = escapeHtml(
             stop?.number || stop?.invoiceNumber || stop?.id || ''
           );
@@ -368,11 +488,24 @@ export function LogisticsModule({ sys }) {
             fillOpacity: 1,
           })
             .bindPopup(
-              `<b>${customerName}</b>${
-                invoiceNumber
-                  ? `<br/><span>Invoice #${invoiceNumber}</span>`
-                  : ''
-              }`
+              `<div style="min-width:220px">
+                <b>${customerName}</b>
+                ${
+                  deliveryAddress
+                    ? `<br/><span style="display:block;margin-top:4px">${deliveryAddress}</span>`
+                    : ''
+                }
+                ${
+                  invoiceNumber
+                    ? `<br/><span style="color:#2563eb">Invoice #${invoiceNumber}</span>`
+                    : ''
+                }
+                ${
+                  navigationUrl
+                    ? `<br/><a href="${navigationUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin-top:8px;font-weight:700;color:#ffffff;background:#2563eb;padding:6px 10px;border-radius:8px;text-decoration:none">Navigate to address</a>`
+                    : ''
+                }
+              </div>`
             )
             .addTo(featureGroup);
         });
@@ -521,7 +654,7 @@ export function LogisticsModule({ sys }) {
               {totalMappedInvoices}
             </p>
             <p className="mt-1 text-xs text-slate-500">
-              Customers with valid coordinates
+              {navigationReadyInvoices} address-based navigation link{navigationReadyInvoices === 1 ? '' : 's'} ready
             </p>
           </div>
 
@@ -577,7 +710,8 @@ export function LogisticsModule({ sys }) {
                 {unmappedInvoices} invoice{unmappedInvoices === 1 ? '' : 's'} cannot be shown on the map
               </p>
               <p className="mt-0.5 text-xs text-amber-700">
-                Add valid latitude and longitude values to the related customer records.
+                Add valid latitude and longitude values to place these customers on the Leaflet map.
+                Where an address is available, the Navigate button still opens that delivery address.
               </p>
             </div>
           </div>
@@ -647,7 +781,7 @@ export function LogisticsModule({ sys }) {
                   <p className="mt-0.5 text-xs text-slate-500">
                     {selectedRegion && routeMetrics
                       ? `${routeMetrics.sequence.length} ordered stops`
-                      : `${todayStops.length} mapped customers`}
+                      : `${todayDeliveryRecords.length} delivery records`}
                   </p>
                 </div>
               </div>
@@ -655,12 +789,14 @@ export function LogisticsModule({ sys }) {
               <div className="max-h-[420px] space-y-2 overflow-y-auto px-4 pb-5">
                 {(selectedRegion && routeMetrics
                   ? routeMetrics.sequence
-                  : todayStops
+                  : todayDeliveryRecords
                 ).map((stop, index) => {
                   const customerName = getCustomerName(stop?.cust);
-                  const address = getCustomerAddress(stop?.cust);
+                  const address = String(stop?.deliveryAddress || '').trim();
+                  const navigationUrl = stop?.navigationUrl || '';
                   const invoiceNumber =
                     stop?.number || stop?.invoiceNumber || stop?.id || '';
+                  const hasMapCoordinates = Boolean(stop?.mapCustomer);
 
                   return (
                     <div
@@ -672,18 +808,45 @@ export function LogisticsModule({ sys }) {
                           {index + 1}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-black text-slate-900">
-                            {customerName}
-                          </p>
-                          {invoiceNumber && (
-                            <p className="mt-0.5 text-[11px] font-bold text-blue-600">
-                              Invoice #{String(invoiceNumber)}
-                            </p>
-                          )}
-                          {address && (
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-black text-slate-900">
+                                {customerName}
+                              </p>
+                              {invoiceNumber && (
+                                <p className="mt-0.5 text-[11px] font-bold text-blue-600">
+                                  Invoice #{String(invoiceNumber)}
+                                </p>
+                              )}
+                            </div>
+
+                            {!hasMapCoordinates && (
+                              <span className="shrink-0 rounded-md bg-amber-100 px-2 py-1 text-[9px] font-black uppercase tracking-wide text-amber-700">
+                                No map pin
+                              </span>
+                            )}
+                          </div>
+
+                          {address ? (
                             <p className="mt-1 line-clamp-2 text-xs leading-4 text-slate-500">
                               {address}
                             </p>
+                          ) : (
+                            <p className="mt-1 text-xs font-semibold text-red-500">
+                              Delivery address missing
+                            </p>
+                          )}
+
+                          {navigationUrl && (
+                            <button
+                              type="button"
+                              onClick={() => openNavigation(navigationUrl)}
+                              className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-[11px] font-black text-white shadow-sm transition hover:bg-blue-700"
+                            >
+                              <Navigation size={13} />
+                              Navigate to address
+                              <ExternalLink size={12} />
+                            </button>
                           )}
                         </div>
                       </div>
@@ -692,7 +855,7 @@ export function LogisticsModule({ sys }) {
                 })}
 
                 {(selectedRegion && !routeMetrics) ||
-                (!selectedRegion && todayStops.length === 0) ? (
+                (!selectedRegion && todayDeliveryRecords.length === 0) ? (
                   <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-8 text-center">
                     <MapPin className="mx-auto text-slate-300" size={24} />
                     <p className="mt-3 text-sm font-bold text-slate-500">
