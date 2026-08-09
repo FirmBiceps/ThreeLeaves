@@ -46,6 +46,16 @@ const REGION_OPTIONS = [
 const DEFAULT_MAP_CENTER = [1.3521, 103.8198];
 const DEFAULT_MAP_ZOOM = 11;
 
+// Singapore-only safety bounds. A bad customer coordinate (for example, a
+// swapped latitude/longitude or a value from another country) should never
+// cause the entire delivery map to zoom out to the Middle East or elsewhere.
+const SINGAPORE_BOUNDS = {
+  minLat: 1.13,
+  maxLat: 1.50,
+  minLng: 103.55,
+  maxLng: 104.12,
+};
+
 function isValidCoordinatePair(lat, lng) {
   const latitude = Number(lat);
   const longitude = Number(lng);
@@ -60,15 +70,54 @@ function isValidCoordinatePair(lat, lng) {
   );
 }
 
+function isWithinSingapore(lat, lng) {
+  const latitude = Number(lat);
+  const longitude = Number(lng);
+
+  return (
+    isValidCoordinatePair(latitude, longitude) &&
+    latitude >= SINGAPORE_BOUNDS.minLat &&
+    latitude <= SINGAPORE_BOUNDS.maxLat &&
+    longitude >= SINGAPORE_BOUNDS.minLng &&
+    longitude <= SINGAPORE_BOUNDS.maxLng
+  );
+}
+
+function getCustomerCoordinates(customer) {
+  if (!customer) return { lat: null, lng: null };
+
+  return {
+    lat:
+      customer?.lat ??
+      customer?.latitude ??
+      customer?.Latitude ??
+      customer?.LAT ??
+      null,
+    lng:
+      customer?.lng ??
+      customer?.lon ??
+      customer?.longitude ??
+      customer?.Longitude ??
+      customer?.LNG ??
+      null,
+  };
+}
+
 function normaliseCustomer(customer) {
-  if (!customer || !isValidCoordinatePair(customer.lat, customer.lng)) {
+  if (!customer) return null;
+
+  const { lat, lng } = getCustomerCoordinates(customer);
+
+  // This ERP logistics map is for Singapore deliveries. Reject coordinates
+  // outside Singapore so one bad record cannot distort map.fitBounds().
+  if (!isWithinSingapore(lat, lng)) {
     return null;
   }
 
   return {
     ...customer,
-    lat: Number(customer.lat),
-    lng: Number(customer.lng),
+    lat: Number(lat),
+    lng: Number(lng),
   };
 }
 
@@ -149,7 +198,7 @@ function findCustomerForInvoice(invoice, customers) {
   );
 }
 
-function getDeliveryAddress(invoice, customer) {
+function getInvoiceAddress(invoice) {
   return String(
     invoice?.deliveryAddress ||
       invoice?.delivery_address ||
@@ -158,19 +207,30 @@ function getDeliveryAddress(invoice, customer) {
       invoice?.customerAddress ||
       invoice?.customer_address ||
       invoice?.address ||
-      getCustomerAddress(customer) ||
       ''
   ).trim();
+}
+
+function getDeliveryAddress(invoice, customer) {
+  // Customer master-data address is the primary source for logistics.
+  // Invoice address fields are fallback only. Invoice number / ID is never used.
+  return getCustomerAddress(customer) || getInvoiceAddress(invoice);
 }
 
 function buildNavigationUrl(address, customerWithCoordinates) {
   const cleanAddress = String(address || '').trim();
 
-  // Always prefer the actual delivery address. The invoice number is never
-  // used as the navigation destination.
-  const destination = cleanAddress
-    ? cleanAddress
-    : isValidCoordinatePair(
+  // Append Singapore to local addresses so Google Maps cannot resolve an
+  // ambiguous street/building name to another country.
+  const singaporeAddress = cleanAddress
+    ? /\bsingapore\b/i.test(cleanAddress)
+      ? cleanAddress
+      : `${cleanAddress}, Singapore`
+    : '';
+
+  const destination = singaporeAddress
+    ? singaporeAddress
+    : isWithinSingapore(
           customerWithCoordinates?.lat,
           customerWithCoordinates?.lng
         )
@@ -343,6 +403,15 @@ export function LogisticsModule({ sys }) {
   const navigationReadyInvoices = todayDeliveryRecords.filter(
     (stop) => Boolean(stop?.navigationUrl)
   ).length;
+
+  const outsideSingaporeCoordinateCount = todayDeliveryRecords.filter((stop) => {
+    const rawCustomer = findCustomerForInvoice(stop, safeCustomers);
+    if (!rawCustomer) return false;
+
+    const { lat, lng } = getCustomerCoordinates(rawCustomer);
+    return isValidCoordinatePair(lat, lng) && !isWithinSingapore(lat, lng);
+  }).length;
+
   const unmappedInvoices = Math.max(
     todayInvoices.length - totalMappedInvoices,
     0
@@ -710,8 +779,11 @@ export function LogisticsModule({ sys }) {
                 {unmappedInvoices} invoice{unmappedInvoices === 1 ? '' : 's'} cannot be shown on the map
               </p>
               <p className="mt-0.5 text-xs text-amber-700">
-                Add valid latitude and longitude values to place these customers on the Leaflet map.
-                Where an address is available, the Navigate button still opens that delivery address.
+                Add valid Singapore latitude and longitude values to place these customers on the Leaflet map.
+                Where an address is available, the Navigate button still opens that customer address.
+                {outsideSingaporeCoordinateCount > 0
+                  ? ` ${outsideSingaporeCoordinateCount} coordinate${outsideSingaporeCoordinateCount === 1 ? ' is' : 's are'} outside Singapore and ${outsideSingaporeCoordinateCount === 1 ? 'has' : 'have'} been ignored.`
+                  : ''}
               </p>
             </div>
           </div>
