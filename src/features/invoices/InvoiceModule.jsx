@@ -26,6 +26,9 @@ const calculateInvoiceProfit = (invoice) => {
 const normaliseSearchValue = (value) =>
   String(value ?? '').trim().toLowerCase();
 
+const getProductEnglishDescription = (product) =>
+  String(product?.Description || product?.description || '').trim();
+
 // Return all useful SKU and product-description values from one invoice item.
 // Several possible property names are supported because older and newer
 // invoices may store product data under different keys.
@@ -109,6 +112,7 @@ export function InvoiceModule({ sys }) {
   const ITEMS_PER_PAGE = 30;
 
   const [previewInvoice, setPreviewInvoice] = useState(null);
+  const [previewDescriptionLanguage, setPreviewDescriptionLanguage] = useState('zh');
   const [editingInvoice, setEditingInvoice] = useState(null);
 
   const [pricingGroups, setPricingGroups] = useState([]);
@@ -129,6 +133,37 @@ export function InvoiceModule({ sys }) {
   }, [isGeneratorOpen]);
 
   const safeInvoices = Array.isArray(sys?.invoices) ? sys.invoices : [];
+
+  // History previews default to Chinese. English mode is preview-only and
+  // swaps the product display-name fields to the inventory Description field.
+  // Nothing is written back to Supabase, so changing print language cannot
+  // alter invoice history, product names, quantities or pricing.
+  const historyPreviewSys = useMemo(() => {
+    if (previewDescriptionLanguage !== 'en') return sys;
+
+    const inventory = Array.isArray(sys?.inventory) ? sys.inventory : [];
+
+    return {
+      ...sys,
+      inventory: inventory.map((product) => {
+        const englishDescription = getProductEnglishDescription(product);
+
+        if (!englishDescription) return product;
+
+        return {
+          ...product,
+          Name: englishDescription,
+          name: englishDescription,
+          Items: englishDescription,
+        };
+      }),
+    };
+  }, [previewDescriptionLanguage, sys]);
+
+  const openInvoicePreview = (invoice) => {
+    setPreviewDescriptionLanguage('zh');
+    setPreviewInvoice(invoice);
+  };
 
   const handleDeleteInvoice = async (e, invoiceId) => {
     e.stopPropagation(); 
@@ -418,7 +453,7 @@ export function InvoiceModule({ sys }) {
                   const invoiceProfit = calculateInvoiceProfit(inv);
 
                   return (
-                    <tr key={inv?.id} className="group cursor-pointer transition-all hover:bg-blue-50/70" onClick={() => setPreviewInvoice(inv)}>
+                    <tr key={inv?.id} className="group cursor-pointer transition-all hover:bg-blue-50/70" onClick={() => openInvoicePreview(inv)}>
                       <td className="p-5 pl-8 font-mono font-bold text-blue-600 whitespace-nowrap">
                         #{String(inv?.number || inv?.id || '')}
                         {inv?.isSpecialFormat && <span className="ml-2 bg-purple-100 text-purple-700 border border-purple-200 px-1.5 py-0.5 rounded text-[8px] uppercase tracking-widest font-black inline-flex items-center"><ScanBarcode size={8} className="mr-0.5" /> Spec</span>}
@@ -503,7 +538,54 @@ export function InvoiceModule({ sys }) {
         </div>
       </div>
 
-      {previewInvoice && <InvoicePreviewModal invoice={previewInvoice} onClose={() => setPreviewInvoice(null)} sys={sys} onEdit={(inv) => { setEditingInvoice(inv); setIsGeneratorOpen(true); setPreviewInvoice(null); }} />}
+      {previewInvoice && (
+        <>
+          <InvoicePreviewModal
+            invoice={previewInvoice}
+            onClose={() => {
+              setPreviewInvoice(null);
+              setPreviewDescriptionLanguage('zh');
+            }}
+            sys={historyPreviewSys}
+            onEdit={(inv) => {
+              setEditingInvoice(inv);
+              setIsGeneratorOpen(true);
+              setPreviewInvoice(null);
+              setPreviewDescriptionLanguage('zh');
+            }}
+          />
+
+          <div className="fixed bottom-6 left-6 z-[6500] rounded-2xl border border-slate-200 bg-white/95 p-2 shadow-2xl backdrop-blur print:hidden">
+            <div className="mb-1 px-2 text-[9px] font-black uppercase tracking-[0.16em] text-slate-400">
+              Print Description
+            </div>
+            <div className="flex rounded-xl bg-slate-100 p-1">
+              <button
+                type="button"
+                onClick={() => setPreviewDescriptionLanguage('zh')}
+                className={`rounded-lg px-3 py-2 text-[11px] font-black transition-all ${
+                  previewDescriptionLanguage === 'zh'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                中文 Default
+              </button>
+              <button
+                type="button"
+                onClick={() => setPreviewDescriptionLanguage('en')}
+                className={`rounded-lg px-3 py-2 text-[11px] font-black transition-all ${
+                  previewDescriptionLanguage === 'en'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                English
+              </button>
+            </div>
+          </div>
+        </>
+      )}
       {isGeneratorOpen && <InvoiceGenerator sys={sys} groups={pricingGroups} setGroups={setPricingGroups} existingInvoice={editingInvoice} onClose={() => { setIsGeneratorOpen(false); setEditingInvoice(null); }} />}
     </div>
   );
