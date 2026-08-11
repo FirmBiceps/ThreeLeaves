@@ -35,6 +35,10 @@ function getProductName(item) {
   return String(item?.Name || item?.name || item?.Items || item?.productName || '');
 }
 
+function getProductEnglishDescription(item) {
+  return String(item?.Description || item?.description || '').trim();
+}
+
 function getProductSku(item) {
   return String(item?.SKU || item?.sku || '');
 }
@@ -413,6 +417,7 @@ export function InvoiceGenerator({
   const [isDiscardConfirmOpen, setIsDiscardConfirmOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [invoiceNumberManuallyEdited, setInvoiceNumberManuallyEdited] = useState(false);
+  const [descriptionLanguage, setDescriptionLanguage] = useState('zh');
 
   const rowRefs = useRef({});
   const saveLockRef = useRef(false);
@@ -433,6 +438,30 @@ export function InvoiceGenerator({
     () => (Array.isArray(groups) ? groups : []),
     [groups]
   );
+
+  // Printing in English must never change the inventory records or the Chinese
+  // data-entry workflow. Instead, create a preview-only inventory where the
+  // product display-name fields are temporarily replaced by Description.
+  // Products without an English Description automatically fall back to Name.
+  const previewSys = useMemo(() => {
+    if (descriptionLanguage !== 'en') return sys;
+
+    return {
+      ...sys,
+      inventory: safeInventory.map((product) => {
+        const englishDescription = getProductEnglishDescription(product);
+
+        if (!englishDescription) return product;
+
+        return {
+          ...product,
+          Name: englishDescription,
+          name: englishDescription,
+          Items: englishDescription,
+        };
+      }),
+    };
+  }, [descriptionLanguage, safeInventory, sys]);
 
   const [items, setItems] = useState(() => {
     if (existingInvoice && Array.isArray(existingInvoice.items)) {
@@ -1656,26 +1685,58 @@ export function InvoiceGenerator({
 
   if (previewMode) {
     return (
-      <InvoicePreview
-        mode="generator"
-        customer={customer}
-        gst={gst}
-        invoiceNumber={invoiceNumber}
-        invoiceDate={invoiceDate}
-        items={items}
-        remarks={invoiceRemarks}
-        onBack={() => setPreviewMode(false)}
-        onRegister={handleRegister}
-        paymentTerms={paymentTerms}
-        setItems={setItems}
-        subtotal={subtotal}
-        sys={sys}
-        total={total}
-        existingInvoice={existingInvoice}
-        isSpecialFormat={isSpecialFormat}
-        poNumber={poNumber}
-        carPlateNo={carPlateNo}
-      />
+      <>
+        <InvoicePreview
+          mode="generator"
+          customer={customer}
+          gst={gst}
+          invoiceNumber={invoiceNumber}
+          invoiceDate={invoiceDate}
+          items={items}
+          remarks={invoiceRemarks}
+          onBack={() => setPreviewMode(false)}
+          onRegister={handleRegister}
+          paymentTerms={paymentTerms}
+          setItems={setItems}
+          subtotal={subtotal}
+          sys={previewSys}
+          total={total}
+          existingInvoice={existingInvoice}
+          isSpecialFormat={isSpecialFormat}
+          poNumber={poNumber}
+          carPlateNo={carPlateNo}
+        />
+
+        <div className="fixed bottom-6 left-6 z-[6500] rounded-2xl border border-slate-200 bg-white/95 p-2 shadow-2xl backdrop-blur print:hidden">
+          <div className="mb-1 px-2 text-[9px] font-black uppercase tracking-[0.16em] text-slate-400">
+            Print Description
+          </div>
+          <div className="flex rounded-xl bg-slate-100 p-1">
+            <button
+              type="button"
+              onClick={() => setDescriptionLanguage('zh')}
+              className={`rounded-lg px-3 py-2 text-[11px] font-black transition-all ${
+                descriptionLanguage === 'zh'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              中文 Default
+            </button>
+            <button
+              type="button"
+              onClick={() => setDescriptionLanguage('en')}
+              className={`rounded-lg px-3 py-2 text-[11px] font-black transition-all ${
+                descriptionLanguage === 'en'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              English
+            </button>
+          </div>
+        </div>
+      </>
     );
   }
 
@@ -1898,6 +1959,49 @@ export function InvoiceGenerator({
                   <MessageSquare size={12} className="mr-1.5" />
                   {invoiceRemarks ? 'Edit Remarks' : 'Add Remarks'}
                 </button>
+              </div>
+
+              <div className="mt-4 rounded-xl border border-slate-200 bg-white p-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                      Print Description
+                    </p>
+                    <p className="mt-0.5 text-[11px] font-medium leading-4 text-slate-400">
+                      Keep entering products in Chinese. English print uses the product_list Description field only for preview and printing.
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 rounded-xl bg-slate-100 p-1">
+                    <button
+                      type="button"
+                      onClick={() => setDescriptionLanguage('zh')}
+                      className={`rounded-lg px-3 py-2 text-[10px] font-black uppercase tracking-wide transition-all ${
+                        descriptionLanguage === 'zh'
+                          ? 'bg-white text-slate-900 shadow-sm'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      中文 Default
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDescriptionLanguage('en')}
+                      className={`rounded-lg px-3 py-2 text-[10px] font-black uppercase tracking-wide transition-all ${
+                        descriptionLanguage === 'en'
+                          ? 'bg-blue-600 text-white shadow-sm'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      English
+                    </button>
+                  </div>
+                </div>
+
+                {descriptionLanguage === 'en' && (
+                  <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-[10px] font-bold leading-4 text-blue-700">
+                    English mode affects the printed product description only. Customer pricing, quantities, units, totals, GST and your Chinese invoice-entry workflow stay unchanged.
+                  </div>
+                )}
               </div>
 
               <label className="mt-4 flex w-max cursor-pointer items-center space-x-2">
