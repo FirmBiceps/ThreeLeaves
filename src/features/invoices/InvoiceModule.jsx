@@ -22,84 +22,6 @@ const calculateInvoiceProfit = (invoice) => {
   }, 0);
 };
 
-// Convert any searchable value into a consistent lowercase string.
-const normaliseSearchValue = (value) =>
-  String(value ?? '').trim().toLowerCase();
-
-const getProductEnglishDescription = (product) =>
-  String(product?.Description || product?.description || '').trim();
-
-// Return all useful SKU and product-description values from one invoice item.
-// Several possible property names are supported because older and newer
-// invoices may store product data under different keys.
-const getInvoiceItemSearchValues = (item) => {
-  if (!item || typeof item !== 'object') return [];
-
-  return [
-    item.sku,
-    item.SKU,
-    item.productSku,
-    item.product_sku,
-    item.code,
-    item.itemCode,
-    item.item_code,
-    item.productCode,
-    item.product_code,
-
-    item.description,
-    item.Description,
-    item.productDescription,
-    item.product_description,
-    item.itemDescription,
-    item.item_description,
-
-    item.name,
-    item.Name,
-    item.productName,
-    item.product_name,
-    item.itemName,
-    item.item_name,
-
-    item.product?.sku,
-    item.product?.SKU,
-    item.product?.code,
-    item.product?.description,
-    item.product?.name,
-  ]
-    .map(normaliseSearchValue)
-    .filter(Boolean);
-};
-
-// Search customer, invoice number, SKU and product description.
-// Every typed word must appear somewhere in the invoice, while the words
-// may match different fields or different invoice items.
-const invoiceMatchesSearch = (invoice, searchTerm) => {
-  const searchTokens = normaliseSearchValue(searchTerm)
-    .split(/\s+/)
-    .filter(Boolean);
-
-  if (searchTokens.length === 0) return true;
-
-  const invoiceItems = Array.isArray(invoice?.items) ? invoice.items : [];
-
-  const searchableValues = [
-    invoice?.customer,
-    invoice?.customerName,
-    invoice?.customer_name,
-    invoice?.number,
-    invoice?.invoiceNumber,
-    invoice?.invoice_number,
-    invoice?.id,
-    ...invoiceItems.flatMap(getInvoiceItemSearchValues),
-  ]
-    .map(normaliseSearchValue)
-    .filter(Boolean);
-
-  const combinedSearchText = searchableValues.join(' ');
-
-  return searchTokens.every((token) => combinedSearchText.includes(token));
-};
-
 export function InvoiceModule({ sys }) {
   const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
   const [filter, setFilter] = useState('All');
@@ -112,7 +34,6 @@ export function InvoiceModule({ sys }) {
   const ITEMS_PER_PAGE = 30;
 
   const [previewInvoice, setPreviewInvoice] = useState(null);
-  const [previewDescriptionLanguage, setPreviewDescriptionLanguage] = useState('zh');
   const [editingInvoice, setEditingInvoice] = useState(null);
 
   const [pricingGroups, setPricingGroups] = useState([]);
@@ -133,37 +54,6 @@ export function InvoiceModule({ sys }) {
   }, [isGeneratorOpen]);
 
   const safeInvoices = Array.isArray(sys?.invoices) ? sys.invoices : [];
-
-  // History previews default to Chinese. English mode is preview-only and
-  // swaps the product display-name fields to the inventory Description field.
-  // Nothing is written back to Supabase, so changing print language cannot
-  // alter invoice history, product names, quantities or pricing.
-  const historyPreviewSys = useMemo(() => {
-    if (previewDescriptionLanguage !== 'en') return sys;
-
-    const inventory = Array.isArray(sys?.inventory) ? sys.inventory : [];
-
-    return {
-      ...sys,
-      inventory: inventory.map((product) => {
-        const englishDescription = getProductEnglishDescription(product);
-
-        if (!englishDescription) return product;
-
-        return {
-          ...product,
-          Name: englishDescription,
-          name: englishDescription,
-          Items: englishDescription,
-        };
-      }),
-    };
-  }, [previewDescriptionLanguage, sys]);
-
-  const openInvoicePreview = (invoice) => {
-    setPreviewDescriptionLanguage('zh');
-    setPreviewInvoice(invoice);
-  };
 
   const handleDeleteInvoice = async (e, invoiceId) => {
     e.stopPropagation(); 
@@ -191,10 +81,9 @@ export function InvoiceModule({ sys }) {
 
   const filteredInvoices = useMemo(() => {
     let result = [...safeInvoices];
-    if (searchTerm.trim()) {
-      result = result.filter((invoice) =>
-        invoiceMatchesSearch(invoice, searchTerm)
-      );
+    if (searchTerm) {
+      const searchLower = String(searchTerm).toLowerCase();
+      result = result.filter(inv => String(inv?.customer || '').toLowerCase().includes(searchLower) || String(inv?.number || inv?.id || '').toLowerCase().includes(searchLower));
     }
     const today = new Date(); today.setHours(0, 0, 0, 0);
     result = result.filter(inv => {
@@ -354,7 +243,7 @@ export function InvoiceModule({ sys }) {
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-bold text-slate-800">Find an invoice</p>
-                <p className="mt-0.5 text-xs text-slate-500">Search by customer, invoice number, SKU or product description.</p>
+                <p className="mt-0.5 text-xs text-slate-500">Use filters, sorting or customer and invoice number search.</p>
               </div>
 
               {hasActiveFilters && (
@@ -414,7 +303,7 @@ export function InvoiceModule({ sys }) {
                 <Search className="mr-2 shrink-0 text-slate-400" size={16} />
                 <input
                   type="text"
-                  placeholder="Customer, invoice no., SKU or product..."
+                  placeholder="Customer or invoice number..."
                   className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
@@ -453,7 +342,7 @@ export function InvoiceModule({ sys }) {
                   const invoiceProfit = calculateInvoiceProfit(inv);
 
                   return (
-                    <tr key={inv?.id} className="group cursor-pointer transition-all hover:bg-blue-50/70" onClick={() => openInvoicePreview(inv)}>
+                    <tr key={inv?.id} className="group cursor-pointer transition-all hover:bg-blue-50/70" onClick={() => setPreviewInvoice(inv)}>
                       <td className="p-5 pl-8 font-mono font-bold text-blue-600 whitespace-nowrap">
                         #{String(inv?.number || inv?.id || '')}
                         {inv?.isSpecialFormat && <span className="ml-2 bg-purple-100 text-purple-700 border border-purple-200 px-1.5 py-0.5 rounded text-[8px] uppercase tracking-widest font-black inline-flex items-center"><ScanBarcode size={8} className="mr-0.5" /> Spec</span>}
@@ -488,7 +377,7 @@ export function InvoiceModule({ sys }) {
                       </div>
                       <p className="mt-4 text-sm font-bold text-slate-700">No matching invoices</p>
                       <p className="mt-1 text-xs text-slate-500">
-                        Try a different customer, invoice number, SKU, product description, date range or payment term.
+                        Try a different customer, invoice number, date range or payment term.
                       </p>
                       {hasActiveFilters && (
                         <button
@@ -538,54 +427,7 @@ export function InvoiceModule({ sys }) {
         </div>
       </div>
 
-      {previewInvoice && (
-        <>
-          <InvoicePreviewModal
-            invoice={previewInvoice}
-            onClose={() => {
-              setPreviewInvoice(null);
-              setPreviewDescriptionLanguage('zh');
-            }}
-            sys={historyPreviewSys}
-            onEdit={(inv) => {
-              setEditingInvoice(inv);
-              setIsGeneratorOpen(true);
-              setPreviewInvoice(null);
-              setPreviewDescriptionLanguage('zh');
-            }}
-          />
-
-          <div className="fixed bottom-6 left-6 z-[6500] rounded-2xl border border-slate-200 bg-white/95 p-2 shadow-2xl backdrop-blur print:hidden">
-            <div className="mb-1 px-2 text-[9px] font-black uppercase tracking-[0.16em] text-slate-400">
-              Print Description
-            </div>
-            <div className="flex rounded-xl bg-slate-100 p-1">
-              <button
-                type="button"
-                onClick={() => setPreviewDescriptionLanguage('zh')}
-                className={`rounded-lg px-3 py-2 text-[11px] font-black transition-all ${
-                  previewDescriptionLanguage === 'zh'
-                    ? 'bg-white text-slate-900 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                中文 Default
-              </button>
-              <button
-                type="button"
-                onClick={() => setPreviewDescriptionLanguage('en')}
-                className={`rounded-lg px-3 py-2 text-[11px] font-black transition-all ${
-                  previewDescriptionLanguage === 'en'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                English
-              </button>
-            </div>
-          </div>
-        </>
-      )}
+      {previewInvoice && <InvoicePreviewModal invoice={previewInvoice} onClose={() => setPreviewInvoice(null)} sys={sys} onEdit={(inv) => { setEditingInvoice(inv); setIsGeneratorOpen(true); setPreviewInvoice(null); }} />}
       {isGeneratorOpen && <InvoiceGenerator sys={sys} groups={pricingGroups} setGroups={setPricingGroups} existingInvoice={editingInvoice} onClose={() => { setIsGeneratorOpen(false); setEditingInvoice(null); }} />}
     </div>
   );
