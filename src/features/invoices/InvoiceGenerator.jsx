@@ -1756,7 +1756,37 @@ export function InvoiceGenerator({
             </div>
           </div>
 
-          <div className="flex space-x-3">
+          <div className="flex items-center space-x-3">
+            <div className="flex items-center rounded-xl border border-slate-700 bg-slate-800/80 p-1 shadow-inner">
+              <span className="hidden px-2 text-[9px] font-black uppercase tracking-[0.16em] text-slate-400 sm:inline">
+                Print
+              </span>
+              <button
+                type="button"
+                onClick={() => setDescriptionLanguage('zh')}
+                title="Print product descriptions in Chinese"
+                className={`rounded-lg px-3 py-1.5 text-[10px] font-black uppercase tracking-wide transition-all ${
+                  descriptionLanguage === 'zh'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+                }`}
+              >
+                中文
+              </button>
+              <button
+                type="button"
+                onClick={() => setDescriptionLanguage('en')}
+                title="Print product descriptions in English"
+                className={`rounded-lg px-3 py-1.5 text-[10px] font-black uppercase tracking-wide transition-all ${
+                  descriptionLanguage === 'en'
+                    ? 'bg-blue-500 text-white shadow-sm'
+                    : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+                }`}
+              >
+                English
+              </button>
+            </div>
+
             <button
               className="flex items-center rounded-xl bg-blue-600 px-4 py-1.5 text-xs font-black shadow-lg shadow-blue-500/20 transition-all hover:bg-blue-500"
               onClick={() => setIsParsing(true)}
