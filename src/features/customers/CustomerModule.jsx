@@ -910,7 +910,14 @@ export function CustomerModule({ sys }) {
                   <div className="flex items-center">
                     <h2 className="text-2xl font-black text-slate-900">{selectedCustomer.customer.name}</h2>
                     {sys.hasPerm('manage_customers') && (
-                      <button onClick={() => { setEditingCustomer(selectedCustomer.customer); setIsOpen(true); }} className="ml-4 flex items-center rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-200 transition-colors">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingCustomer({ ...selectedCustomer.customer });
+                          setIsOpen(true);
+                        }}
+                        className="ml-4 flex items-center rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-200 transition-colors"
+                      >
                         <Edit size={14} className="mr-1" /> Edit Details
                       </button>
                     )}
@@ -1067,6 +1074,21 @@ export function CustomerModule({ sys }) {
             </div>
           </div>
         </div>
+
+        {/* Keep the customer edit modal mounted in the customer-detail view.
+            Previously this modal only existed in the customer-list return branch,
+            so clicking Edit Details changed state but rendered no modal. */}
+        {isOpen && (
+          <CustomerFormModal
+            initialValue={editingCustomer}
+            groups={pricingGroups}
+            onClose={() => {
+              setIsOpen(false);
+              setEditingCustomer(EMPTY_CUSTOMER);
+            }}
+            onSave={handleSave}
+          />
+        )}
       </div>
     );
   }
@@ -1175,7 +1197,17 @@ export function CustomerModule({ sys }) {
         </table>
       </div>
 
-      {isOpen && <CustomerFormModal initialValue={editingCustomer} groups={pricingGroups} onClose={() => setIsOpen(false)} onSave={handleSave} sys={sys} />}
+      {isOpen && (
+        <CustomerFormModal
+          initialValue={editingCustomer}
+          groups={pricingGroups}
+          onClose={() => {
+            setIsOpen(false);
+            setEditingCustomer(EMPTY_CUSTOMER);
+          }}
+          onSave={handleSave}
+        />
+      )}
       {isGroupManagerOpen && <PricingGroupManager sys={sys} groups={pricingGroups} setGroups={setPricingGroups} onClose={() => setIsGroupManagerOpen(false)} />}
     </div>
   );
