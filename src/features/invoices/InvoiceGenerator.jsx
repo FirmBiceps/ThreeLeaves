@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
   BrainCircuit,
@@ -152,18 +153,9 @@ function extractOrderQuantity(line) {
 function ProductSearchSelect({ value, inventory, onChange, isAutoFilled }) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const dropdownRef = useRef(null);
-
-  useEffect(() => {
-    function handleClickOutside(event) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setIsOpen(false);
-      }
-    }
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  const [menuPosition, setMenuPosition] = useState(null);
+  const triggerRef = useRef(null);
+  const menuRef = useRef(null);
 
   const safeInventory = Array.isArray(inventory) ? inventory : [];
   const selectedProduct = safeInventory.find(
@@ -201,14 +193,138 @@ function ProductSearchSelect({ value, inventory, onChange, isAutoFilled }) {
     return searchable.includes(searchLower);
   });
 
+  const updateMenuPosition = useCallback(() => {
+    if (!triggerRef.current) return;
+
+    const rect = triggerRef.current.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const preferredWidth = Math.min(460, Math.max(360, rect.width + 120));
+    const left = Math.min(
+      Math.max(12, rect.left),
+      Math.max(12, viewportWidth - preferredWidth - 12)
+    );
+
+    const estimatedMenuHeight = 330;
+    const spaceBelow = viewportHeight - rect.bottom;
+    const openAbove = spaceBelow < estimatedMenuHeight && rect.top > estimatedMenuHeight;
+
+    setMenuPosition({
+      left,
+      width: preferredWidth,
+      top: openAbove ? undefined : rect.bottom + 6,
+      bottom: openAbove ? viewportHeight - rect.top + 6 : undefined,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+
+    updateMenuPosition();
+
+    const handleViewportChange = () => updateMenuPosition();
+    window.addEventListener('resize', handleViewportChange);
+    window.addEventListener('scroll', handleViewportChange, true);
+
+    return () => {
+      window.removeEventListener('resize', handleViewportChange);
+      window.removeEventListener('scroll', handleViewportChange, true);
+    };
+  }, [isOpen, updateMenuPosition]);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      const clickedTrigger = triggerRef.current?.contains(event.target);
+      const clickedMenu = menuRef.current?.contains(event.target);
+
+      if (!clickedTrigger && !clickedMenu) {
+        setIsOpen(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const menu =
+    isOpen && menuPosition && typeof document !== 'undefined'
+      ? createPortal(
+          <div
+            ref={menuRef}
+            className="fixed z-[9000] overflow-hidden rounded-xl border border-slate-300 bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-100"
+            style={{
+              left: menuPosition.left,
+              width: menuPosition.width,
+              top: menuPosition.top,
+              bottom: menuPosition.bottom,
+            }}
+          >
+            <div className="flex items-center border-b border-slate-200 bg-slate-50 p-2.5">
+              <Search size={16} className="ml-1 mr-2 shrink-0 text-slate-400" />
+              <input
+                autoFocus
+                type="text"
+                className="w-full border-none bg-transparent p-1.5 text-sm font-bold text-slate-800 outline-none placeholder:text-slate-400 focus:ring-0"
+                placeholder="Name, SKU, description, packing..."
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+              />
+              <span className="ml-2 shrink-0 rounded-md bg-white px-2 py-1 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                {filteredInventory.length} found
+              </span>
+            </div>
+
+            <div className="max-h-[300px] overflow-y-auto">
+              {filteredInventory.length > 0 ? (
+                filteredInventory.slice(0, 100).map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="w-full border-b border-slate-100 px-4 py-3 text-left transition-colors last:border-0 hover:bg-blue-50"
+                    onClick={() => {
+                      onChange(item.id);
+                      setIsOpen(false);
+                    }}
+                  >
+                    <p className="text-sm font-bold leading-5 text-slate-800">
+                      {getDisplayName(item)}
+                    </p>
+                    {(item?.Description ||
+                      item?.description ||
+                      item?.Packing ||
+                      item?.packaging) && (
+                      <p className="mt-1 line-clamp-2 text-xs font-medium leading-4 text-slate-400">
+                        {[
+                          item?.Description || item?.description,
+                          item?.Packing || item?.packaging,
+                        ]
+                          .filter(Boolean)
+                          .join(' • ')}
+                      </p>
+                    )}
+                  </button>
+                ))
+              ) : (
+                <div className="p-5 text-center text-sm font-medium text-slate-400">
+                  No products found.
+                </div>
+              )}
+            </div>
+          </div>,
+          document.body
+        )
+      : null;
+
   return (
-    <div className="relative w-full text-left" ref={dropdownRef}>
-      {!isOpen ? (
+    <>
+      <div className="relative w-full text-left">
         <button
+          ref={triggerRef}
           type="button"
           onClick={() => {
             setIsOpen(true);
             setSearchTerm('');
+            window.requestAnimationFrame(updateMenuPosition);
           }}
           className={`w-full rounded-lg border border-transparent px-2 py-1.5 text-left text-sm font-bold leading-5 transition-colors hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-100 ${
             displayName
@@ -220,50 +336,9 @@ function ProductSearchSelect({ value, inventory, onChange, isAutoFilled }) {
         >
           {displayName || '- Search Product or SKU -'}
         </button>
-      ) : (
-        <div className="absolute left-0 top-0 z-[5000] w-[420px] max-w-[70vw] overflow-hidden rounded-xl border border-slate-300 bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-100">
-          <div className="flex items-center border-b border-slate-200 bg-slate-50 p-2">
-            <Search size={14} className="ml-1 mr-2 shrink-0 text-slate-400" />
-            <input
-              autoFocus
-              type="text"
-              className="w-full border-none bg-transparent p-1.5 text-sm font-bold text-slate-800 outline-none placeholder:text-slate-400 focus:ring-0"
-              placeholder="Name, SKU, description, packing..."
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-            />
-          </div>
-          <div className="max-h-64 overflow-y-auto">
-            {filteredInventory.length > 0 ? (
-              filteredInventory.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className="w-full border-b border-slate-100 px-4 py-3 text-left transition-colors last:border-0 hover:bg-blue-50"
-                  onClick={() => {
-                    onChange(item.id);
-                    setIsOpen(false);
-                  }}
-                >
-                  <p className="text-sm font-bold leading-5 text-slate-800">{getDisplayName(item)}</p>
-                  {(item?.Description || item?.description || item?.Packing || item?.packaging) && (
-                    <p className="mt-1 line-clamp-1 text-xs font-medium text-slate-400">
-                      {[item?.Description || item?.description, item?.Packing || item?.packaging]
-                        .filter(Boolean)
-                        .join(' • ')}
-                    </p>
-                  )}
-                </button>
-              ))
-            ) : (
-              <div className="p-3 text-center text-xs font-medium text-slate-400">
-                No products found.
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
+      </div>
+      {menu}
+    </>
   );
 }
 
@@ -413,6 +488,7 @@ export function InvoiceGenerator({
   const [isDiscardConfirmOpen, setIsDiscardConfirmOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [invoiceNumberManuallyEdited, setInvoiceNumberManuallyEdited] = useState(false);
+  const [isInvoiceCheckExpanded, setIsInvoiceCheckExpanded] = useState(false);
 
   const rowRefs = useRef({});
   const saveLockRef = useRef(false);
@@ -1987,7 +2063,116 @@ export function InvoiceGenerator({
               </div>
             )}
 
-            <div className="relative z-10 w-full overflow-x-auto rounded-xl border border-slate-200"><table className="w-full min-w-[1180px] text-left">
+            {/* ===== COMPACT INVOICE CHECK: ABOVE PRODUCT WORKSPACE ===== */}
+            <div className="mb-3 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+              <div className="flex flex-wrap items-center gap-3 px-4 py-2.5">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck
+                    size={16}
+                    className={
+                      invoiceIssues.errors.length > 0
+                        ? 'text-red-500'
+                        : invoiceIssues.warnings.length > 0
+                          ? 'text-amber-500'
+                          : 'text-emerald-500'
+                    }
+                  />
+                  <span className="text-xs font-black uppercase tracking-wider text-slate-700">
+                    Invoice Check
+                  </span>
+                </div>
+
+                {invoiceIssues.errors.length > 0 && (
+                  <span className="rounded-full bg-red-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-red-600">
+                    {invoiceIssues.errors.length} action{invoiceIssues.errors.length === 1 ? '' : 's'} required
+                  </span>
+                )}
+
+                {invoiceIssues.warnings.length > 0 && (
+                  <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-amber-700">
+                    {invoiceIssues.warnings.length} warning{invoiceIssues.warnings.length === 1 ? '' : 's'}
+                  </span>
+                )}
+
+                {invoiceIssues.errors.length === 0 &&
+                  invoiceIssues.warnings.length === 0 &&
+                  customerId &&
+                  cleanDraftItems.length > 0 && (
+                    <span className="flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-emerald-700">
+                      <CheckCircle2 size={12} />
+                      Ready to preview
+                    </span>
+                  )}
+
+                <p className="min-w-0 flex-1 text-xs font-medium text-slate-400">
+                  {invoiceIssues.errors.length > 0
+                    ? invoiceIssues.errors[0].message
+                    : invoiceIssues.warnings.length > 0
+                      ? invoiceIssues.warnings[0].message
+                      : customerId && cleanDraftItems.length > 0
+                        ? 'No blocking issues detected.'
+                        : 'Select a customer and add products to begin.'}
+                </p>
+
+                {(invoiceIssues.errors.length > 0 || invoiceIssues.warnings.length > 0) && (
+                  <button
+                    type="button"
+                    onClick={() => setIsInvoiceCheckExpanded((current) => !current)}
+                    className="shrink-0 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-slate-600 transition-colors hover:bg-slate-100"
+                  >
+                    {isInvoiceCheckExpanded ? 'Hide Details' : 'Review Details'}
+                  </button>
+                )}
+              </div>
+
+              {isInvoiceCheckExpanded &&
+                (invoiceIssues.errors.length > 0 || invoiceIssues.warnings.length > 0) && (
+                  <div className="grid max-h-40 grid-cols-1 gap-1 overflow-y-auto border-t border-slate-100 bg-slate-50/70 p-2 md:grid-cols-2">
+                    {invoiceIssues.errors.map((issue, issueIndex) => (
+                      <button
+                        key={`top-error-${issueIndex}-${issue.message}`}
+                        type="button"
+                        onClick={() => {
+                          if (issue.rowIndex !== undefined) {
+                            scrollToRow(issue.rowIndex);
+                          }
+                        }}
+                        className={`flex items-start gap-2 rounded-lg px-3 py-2 text-left text-xs font-bold text-red-600 ${
+                          issue.rowIndex !== undefined
+                            ? 'hover:bg-red-50'
+                            : 'cursor-default'
+                        }`}
+                      >
+                        <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+                        <span>{issue.message}</span>
+                      </button>
+                    ))}
+
+                    {invoiceIssues.warnings.map((issue, issueIndex) => (
+                      <button
+                        key={`top-warning-${issueIndex}-${issue.message}`}
+                        type="button"
+                        onClick={() => {
+                          if (issue.rowIndex !== undefined) {
+                            scrollToRow(issue.rowIndex);
+                          }
+                        }}
+                        className={`flex items-start gap-2 rounded-lg px-3 py-2 text-left text-xs font-semibold text-amber-700 ${
+                          issue.rowIndex !== undefined
+                            ? 'hover:bg-amber-50'
+                            : 'cursor-default'
+                        }`}
+                      >
+                        <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+                        <span>{issue.message}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+            </div>
+
+            {/* ===== PRODUCT ENTRY WORKSPACE ===== */}
+            <div className="relative z-10 w-full overflow-x-auto rounded-xl border border-slate-200 bg-white"><table className="w-full min-w-[1180px] text-left">
               <thead className="sticky top-0 z-20 border-y-2 border-slate-900 bg-slate-50/95 shadow-sm backdrop-blur">
                 <tr className="text-xs font-black uppercase tracking-wider text-slate-500">
                   <th className="w-14 p-3 text-center">No.</th>
@@ -2437,7 +2622,7 @@ export function InvoiceGenerator({
               </tbody>
             </table></div>
 
-            <div className="mt-5 flex flex-wrap gap-2">
+            <div className="mt-3 flex flex-wrap gap-2">
               <button
                 className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-2.5 text-xs font-black uppercase tracking-wide text-blue-700 shadow-sm transition-all hover:bg-blue-100"
                 onClick={() =>
@@ -2492,77 +2677,7 @@ export function InvoiceGenerator({
               </button>
             </div>
 
-            {invoiceIssues.errors.length > 0 || invoiceIssues.warnings.length > 0 ? (
-              <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="mb-3 flex items-center gap-2">
-                  <ShieldCheck
-                    size={17}
-                    className={
-                      invoiceIssues.errors.length > 0 ? 'text-red-500' : 'text-amber-500'
-                    }
-                  />
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-700">
-                    Invoice Check
-                  </p>
-                  <span
-                    className={`ml-auto rounded-full px-2 py-1 text-[9px] font-black uppercase ${
-                      invoiceIssues.errors.length > 0
-                        ? 'bg-red-100 text-red-600'
-                        : 'bg-amber-100 text-amber-700'
-                    }`}
-                  >
-                    {invoiceIssues.errors.length > 0
-                      ? `${invoiceIssues.errors.length} action required`
-                      : `${invoiceIssues.warnings.length} warning${
-                          invoiceIssues.warnings.length === 1 ? '' : 's'
-                        }`}
-                  </span>
-                </div>
-
-                <div className="space-y-1.5">
-                  {invoiceIssues.errors.map((issue, issueIndex) => (
-                    <button
-                      key={`error-${issueIndex}-${issue.message}`}
-                      type="button"
-                      onClick={() =>
-                        issue.rowIndex !== undefined && scrollToRow(issue.rowIndex)
-                      }
-                      className={`flex w-full items-start gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold text-red-600 ${
-                        issue.rowIndex !== undefined ? 'hover:bg-red-50' : 'cursor-default'
-                      }`}
-                    >
-                      <AlertTriangle size={13} className="mt-0.5 shrink-0" />
-                      {issue.message}
-                    </button>
-                  ))}
-
-                  {invoiceIssues.warnings.map((issue, issueIndex) => (
-                    <button
-                      key={`warning-${issueIndex}-${issue.message}`}
-                      type="button"
-                      onClick={() =>
-                        issue.rowIndex !== undefined && scrollToRow(issue.rowIndex)
-                      }
-                      className={`flex w-full items-start gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-semibold text-amber-700 ${
-                        issue.rowIndex !== undefined ? 'hover:bg-amber-50' : 'cursor-default'
-                      }`}
-                    >
-                      <AlertTriangle size={13} className="mt-0.5 shrink-0" />
-                      {issue.message}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : customerId && cleanDraftItems.length > 0 ? (
-              <div className="mt-5 flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-700">
-                <CheckCircle2 size={17} />
-                <p className="text-xs font-black uppercase tracking-wider">
-                  Ready to preview
-                </p>
-              </div>
-            ) : null}
-
-            <div className="mt-5 flex flex-col gap-4 border-t-2 border-slate-900 pt-5 lg:flex-row lg:justify-between">
+            <div className="mt-4 flex flex-col gap-4 border-t-2 border-slate-900 pt-4 lg:flex-row lg:justify-between">
               <div className="w-full lg:w-[55%]">
                 {invoiceRemarks && (
                   <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-4">
