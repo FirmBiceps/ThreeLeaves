@@ -50,6 +50,7 @@ function getPageDensity(itemCount, isSpecialFormat, isLastPage) {
       totalText: 'text-[16px]',
       subtotalText: 'text-[14px]',
       gstText: 'text-[13px]',
+      spacerRow: 'h-full',
     };
   }
 
@@ -63,6 +64,7 @@ function getPageDensity(itemCount, isSpecialFormat, isLastPage) {
       totalText: 'text-[17px]',
       subtotalText: 'text-[15px]',
       gstText: 'text-[14px]',
+      spacerRow: 'h-full',
     };
   }
 
@@ -77,34 +79,46 @@ function getPageDensity(itemCount, isSpecialFormat, isLastPage) {
       totalText: 'text-[16px]',
       subtotalText: 'text-[14px]',
       gstText: 'text-[13px]',
+      spacerRow: 'h-full',
     };
   }
 
   if (itemCount <= 24) {
+    /*
+     * 21–24 items still share the final page with remarks, totals, PayNow
+     * details and the Received By signature area. The previous layout made
+     * these rows LARGER than the 25–30 item layout (py-[3px]), which could
+     * push the footer below the A4 boundary around 22 items.
+     *
+     * Keep this range comfortably readable, but compact enough to guarantee
+     * footer space.
+     */
     return {
       tableText: isSpecialFormat
-        ? 'text-[12px] leading-[1.2]'
-        : 'text-[14px] leading-[1.28]',
-      cellPad: isSpecialFormat ? 'py-[2px]' : 'py-[3px]',
-      headerText: 'text-[13px]',
+        ? 'text-[11.5px] leading-[1.15]'
+        : 'text-[13px] leading-[1.2]',
+      cellPad: 'py-[1px]',
+      headerText: 'text-[12px]',
       headerPad: 'py-1.5',
       totalText: 'text-[16px]',
       subtotalText: 'text-[14px]',
       gstText: 'text-[13px]',
+      spacerRow: 'h-[8px]',
     };
   }
 
-  // 25–30 products: compact, but still keeps readable spacing.
+  // 25–30 products: compact, with only a minimal spacer before totals.
   return {
     tableText: isSpecialFormat
       ? 'text-[11.5px] leading-[1.15]'
-      : 'text-[13px] leading-[1.22]',
-    cellPad: isSpecialFormat ? 'py-[1px]' : 'py-[2px]',
+      : 'text-[13px] leading-[1.2]',
+    cellPad: 'py-[1px]',
     headerText: 'text-[12px]',
     headerPad: 'py-1.5',
     totalText: 'text-[16px]',
     subtotalText: 'text-[14px]',
     gstText: 'text-[13px]',
+    spacerRow: 'h-[4px]',
   };
 }
 
@@ -432,8 +446,14 @@ export function InvoicePreview({
           }
 
           .invoice-footer-safe {
-            max-height: 39mm;
-            overflow: hidden;
+            /*
+             * Do not clip the PayNow / Received By footer. The old
+             * max-height: 39mm + overflow: hidden combination could cut off
+             * the signature text when the product table became taller.
+             */
+            flex: 0 0 auto;
+            min-height: 0;
+            overflow: visible;
           }
 
           .invoice-page-number {
@@ -622,7 +642,7 @@ export function InvoicePreview({
                 />
 
                 <table
-                  className={`mt-2 w-full flex-grow border-2 border-black text-center ${density.tableText} ${
+                  className={`mt-2 min-h-0 w-full flex-grow border-2 border-black text-center ${density.tableText} ${
                     isLastPage ? 'mb-0' : 'mb-[9mm]'
                   }`}
                   style={{ fontFamily: CJK_FONT }}
@@ -718,7 +738,7 @@ export function InvoicePreview({
                       );
                     })}
 
-                    <tr className="h-full">
+                    <tr className={density.spacerRow || 'h-full'}>
                       <td />
                       <td className="py-4 text-center align-middle">
                         {isSpecialFormat && carPlateNo && isLastPage && (
