@@ -909,18 +909,17 @@ export function CustomerModule({ sys }) {
                 <div>
                   <div className="flex items-center">
                     <h2 className="text-2xl font-black text-slate-900">{selectedCustomer.customer.name}</h2>
-                    {sys.hasPerm('manage_customers') && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingCustomer({ ...selectedCustomer.customer });
-                          setIsOpen(true);
-                        }}
-                        className="ml-4 flex items-center rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-200 transition-colors"
-                      >
-                        <Edit size={14} className="mr-1" /> Edit Details
-                      </button>
-                    )}
+                    {/* Temporarily unrestricted: all signed-in users can edit customer details. */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingCustomer({ ...selectedCustomer.customer });
+                        setIsOpen(true);
+                      }}
+                      className="ml-4 flex items-center rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-200 transition-colors"
+                    >
+                      <Edit size={14} className="mr-1" /> Edit Details
+                    </button>
                   </div>
                   <p className="mt-1 text-sm font-medium text-gray-500">
                     {selectedCustomer.customer.address} ({selectedCustomer.customer.region})
@@ -1102,16 +1101,13 @@ export function CustomerModule({ sys }) {
           <p className="mt-1 text-xs font-medium text-slate-500">Revenue rankings, behavioral analytics, and account management.</p>
         </div>
         <div className="flex items-center space-x-3">
-          {sys.hasPerm('manage_customers') && (
-            <>
-              <button className="flex items-center rounded-lg bg-indigo-50 border border-indigo-200 px-4 py-2 text-xs font-black uppercase tracking-widest text-indigo-700 shadow-sm hover:bg-indigo-100 transition-colors" onClick={() => setIsGroupManagerOpen(true)} type="button">
-                <Layers className="mr-2" size={14} /> Pricing Groups
-              </button>
-              <button className="flex items-center rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-blue-700 transition-colors" onClick={() => { setEditingCustomer(EMPTY_CUSTOMER); setIsOpen(true); }} type="button">
-                <Plus className="mr-2" size={16} /> New Account
-              </button>
-            </>
-          )}
+          {/* Temporarily unrestricted: all signed-in users can manage customers and pricing groups. */}
+          <button className="flex items-center rounded-lg bg-indigo-50 border border-indigo-200 px-4 py-2 text-xs font-black uppercase tracking-widest text-indigo-700 shadow-sm hover:bg-indigo-100 transition-colors" onClick={() => setIsGroupManagerOpen(true)} type="button">
+            <Layers className="mr-2" size={14} /> Pricing Groups
+          </button>
+          <button className="flex items-center rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-blue-700 transition-colors" onClick={() => { setEditingCustomer(EMPTY_CUSTOMER); setIsOpen(true); }} type="button">
+            <Plus className="mr-2" size={16} /> New Account
+          </button>
         </div>
       </div>
 
