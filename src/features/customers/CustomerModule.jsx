@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect, useRef } from 'react';
 import {
   Activity, AlertTriangle, ArrowRight, Clock, MapPin, Phone, Plus, TrendingDown,
   TrendingUp, User, Tag, Trash2, Save, Edit, Search, Filter, Layers, X, Sparkles, UserPlus, UserMinus, Users as UsersIcon,
-  Printer, FileText
+  Printer, FileText, Percent
 } from 'lucide-react';
 import { EntityModal } from '../../components/shared/EntityModal';
 import { formatMoney, formatMoneyWhole } from '../../utils/format';
@@ -18,8 +18,17 @@ const STATUS_STYLES = {
 };
 
 const EMPTY_CUSTOMER = {
-  name: '', contactPerson: '', contactNumber: '', address: '', region: 'North',
-  payment_terms: '30_days', pricing_group_id: '', custom_prices: {}, 
+  name: '',
+  contactPerson: '',
+  contactNumber: '',
+  address: '',
+  region: 'North',
+  payment_terms: '30_days',
+  pricing_group_id: '',
+  custom_prices: {},
+  // Used as the default GST treatment when creating a Cash invoice.
+  // true = add 9% GST, false = no GST.
+  cash_gst_enabled: true,
 };
 
 // Robust CJK Font Stack matching your working invoice preview exactly
@@ -696,6 +705,68 @@ function CustomerFormModal({ initialValue, onClose, onSave, groups }) {
           </select>
         </div>
 
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4">
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <Percent size={16} className="shrink-0 text-emerald-600" />
+                <p className="text-sm font-black text-slate-800">
+                  Cash Invoice GST Default
+                </p>
+              </div>
+              <p className="mt-1 text-xs font-medium leading-5 text-slate-500">
+                Used automatically when this customer is selected in the Cash module.
+                The GST setting can still be overridden on an individual Cash invoice.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              role="switch"
+              aria-checked={form.cash_gst_enabled !== false}
+              onClick={() =>
+                setForm((current) => ({
+                  ...current,
+                  cash_gst_enabled: current.cash_gst_enabled === false,
+                }))
+              }
+              className={`relative h-8 w-14 shrink-0 rounded-full transition-colors ${
+                form.cash_gst_enabled !== false
+                  ? 'bg-emerald-500'
+                  : 'bg-slate-300'
+              }`}
+              title={
+                form.cash_gst_enabled !== false
+                  ? 'GST is applied by default'
+                  : 'GST is not applied by default'
+              }
+            >
+              <span
+                className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-transform ${
+                  form.cash_gst_enabled !== false
+                    ? 'translate-x-7'
+                    : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+
+          <div className="mt-3 flex items-center gap-2">
+            <span
+              className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wider ${
+                form.cash_gst_enabled !== false
+                  ? 'bg-emerald-100 text-emerald-700'
+                  : 'bg-slate-200 text-slate-600'
+              }`}
+            >
+              {form.cash_gst_enabled !== false ? 'GST 9% Applied' : 'No GST'}
+            </span>
+            <span className="text-[10px] font-semibold text-slate-400">
+              Cash-module default
+            </span>
+          </div>
+        </div>
+
         <textarea className="w-full rounded-xl border border-gray-200 p-3 text-sm" onChange={(event) => setForm((current) => ({ ...current, address: event.target.value }))} placeholder="Full Address" rows={3} value={form.address} />
       </div>
     </EntityModal>
@@ -806,23 +877,72 @@ export function CustomerModule({ sys }) {
 
   const handleSave = async (form) => {
     try {
+      // Existing customers created before this field was added are treated as
+      // GST-enabled unless they are explicitly set to false.
+      const cashGstEnabled = form?.cash_gst_enabled !== false;
+
       if (form.id) {
-        const { error } = await supabase.from('customers').update({ name: form.name, address: form.address, region: form.region, payment_terms: form.payment_terms, pricing_group_id: form.pricing_group_id, contactPerson: form.contactPerson, contactNumber: form.contactNumber }).eq('id', form.id);
+        const updatedForm = {
+          ...form,
+          cash_gst_enabled: cashGstEnabled,
+        };
+
+        const { error } = await supabase
+          .from('customers')
+          .update({
+            name: updatedForm.name,
+            address: updatedForm.address,
+            region: updatedForm.region,
+            payment_terms: updatedForm.payment_terms,
+            pricing_group_id: updatedForm.pricing_group_id,
+            contactPerson: updatedForm.contactPerson,
+            contactNumber: updatedForm.contactNumber,
+            cash_gst_enabled: updatedForm.cash_gst_enabled,
+          })
+          .eq('id', updatedForm.id);
+
         if (error) throw error;
-        
-        sys.setCustomers(safeCustomers.map((c) => (c.id === form.id ? { ...c, ...form } : c)));
-        if (selectedCustomer && selectedCustomer.customer.id === form.id) {
-          setSelectedCustomer({ ...selectedCustomer, customer: { ...selectedCustomer.customer, ...form }});
+
+        sys.setCustomers(
+          safeCustomers.map((c) =>
+            c.id === updatedForm.id ? { ...c, ...updatedForm } : c
+          )
+        );
+
+        if (
+          selectedCustomer &&
+          selectedCustomer.customer.id === updatedForm.id
+        ) {
+          setSelectedCustomer({
+            ...selectedCustomer,
+            customer: {
+              ...selectedCustomer.customer,
+              ...updatedForm,
+            },
+          });
         }
       } else {
         const newId = `c${Date.now()}`;
-        const newCust = { ...form, id: newId, custom_prices: {} };
-        const { error } = await supabase.from('customers').insert([newCust]);
+        const newCust = {
+          ...form,
+          id: newId,
+          custom_prices: {},
+          cash_gst_enabled: cashGstEnabled,
+        };
+
+        const { error } = await supabase
+          .from('customers')
+          .insert([newCust]);
+
         if (error) throw error;
+
         sys.setCustomers([...safeCustomers, newCust]);
       }
+
       setIsOpen(false);
-    } catch(err) { alert(`Error saving: ${err.message}`); }
+    } catch (err) {
+      alert(`Error saving: ${err.message}`);
+    }
   };
 
   const handleAddPricingRule = async () => {
@@ -929,6 +1049,19 @@ export function CustomerModule({ sys }) {
                     <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-slate-600">{selectedCustomer.trend === 'growing' ? 'Growing' : selectedCustomer.trend === 'declining' ? 'Declining' : 'Stable'}</span>
                     <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest ${selectedCustomer.customer.payment_terms === 'cod' ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'}`}>
                       {selectedCustomer.customer.payment_terms === 'cod' ? 'C.O.D' : '30 Days'}
+                    </span>
+                    <span
+                      className={`flex items-center rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest ${
+                        selectedCustomer.customer.cash_gst_enabled !== false
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : 'bg-slate-200 text-slate-600'
+                      }`}
+                      title="Default GST treatment for new Cash invoices"
+                    >
+                      <Percent size={10} className="mr-1.5" />
+                      {selectedCustomer.customer.cash_gst_enabled !== false
+                        ? 'Cash GST 9%'
+                        : 'Cash No GST'}
                     </span>
                     {assignedGroup && (
                       <span className="rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest border border-indigo-200 bg-indigo-50 text-indigo-700 flex items-center">
@@ -1164,6 +1297,16 @@ export function CustomerModule({ sys }) {
                       <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{entry.customer.region || '-'} Sector</span>
                       <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${entry.customer.payment_terms === 'cod' ? 'bg-amber-50 text-amber-600 border border-amber-200' : 'bg-indigo-50 text-indigo-500 border border-indigo-200'}`}>
                         {entry.customer.payment_terms === 'cod' ? 'C.O.D' : '30 Days'}
+                      </span>
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border ${
+                          entry.customer.cash_gst_enabled !== false
+                            ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
+                            : 'bg-slate-100 text-slate-500 border-slate-200'
+                        }`}
+                        title="Cash invoice GST default"
+                      >
+                        {entry.customer.cash_gst_enabled !== false ? 'GST' : 'NO GST'}
                       </span>
                     </div>
                   </td>
