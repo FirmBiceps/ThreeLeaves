@@ -17,6 +17,7 @@ import {
   Shield,
   Truck,
   Users,
+  WalletCards,
   X,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
@@ -75,6 +76,17 @@ const NAVIGATION_GROUPS = [
         label: 'Invoices',
         description: 'Create and manage invoices',
         icon: FileText,
+        permission: 'invoices.read',
+      },
+      {
+        id: 'cash',
+        label: 'Cash',
+        description: 'Create and manage cash invoices',
+        icon: WalletCards,
+
+        // Temporarily share the same access right as the Invoice module.
+        // This means anyone who can see Invoices can also see Cash without
+        // having to create a new Supabase permission such as "cash.read".
         permission: 'invoices.read',
       },
       {
