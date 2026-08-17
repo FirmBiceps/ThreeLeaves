@@ -67,6 +67,11 @@ function getCustomerCode(customer) {
   return String(customer?.uen || customer?.UEN || customer?.customer_code || customer?.code || '');
 }
 
+function getCustomerCashGstDefault(customer) {
+  // Existing customer records without the new field remain GST-enabled.
+  return customer?.cash_gst_enabled !== false;
+}
+
 function isUsableInvoiceHistoryRecord(invoice) {
   const status = String(invoice?.status || '').trim().toLowerCase();
   return !CANCELLED_STATUSES.has(status);
@@ -886,7 +891,12 @@ export function CashGenerator({
       return;
     }
 
+    const nextCustomer = safeCustomers.find(
+      (entry) => String(entry?.id || '') === nextId
+    );
+
     setCustomerId(nextId);
+    setIncludeGst(getCustomerCashGstDefault(nextCustomer));
   };
 
   const applyCustomerChange = (refreshPrices) => {
@@ -926,6 +936,7 @@ export function CashGenerator({
 
     setItems(nextItems);
     setCustomerId(pendingCustomerChange.toId);
+    setIncludeGst(getCustomerCashGstDefault(nextCustomer));
     setPendingCustomerChange(null);
 
     setPriceRefreshNotice(
@@ -1934,8 +1945,16 @@ export function CashGenerator({
                   <span>{includeGst ? 'Include 9% GST' : 'No GST'}</span>
                   <span className={`h-3 w-3 rounded-full ${includeGst ? 'bg-emerald-500' : 'bg-slate-300'}`} />
                 </button>
-                <p className="mt-1 text-[10px] font-semibold text-slate-400">
-                  {includeGst ? 'GST will be added to subtotal.' : 'Total equals subtotal; GST is not applied.'}
+                <p className="mt-1 text-[10px] font-semibold leading-4 text-slate-400">
+                  {customer
+                    ? `Customer default: ${
+                        getCustomerCashGstDefault(customer)
+                          ? 'GST 9% applied'
+                          : 'No GST'
+                      }. You can override it for this Cash invoice.`
+                    : includeGst
+                      ? 'GST will be added to subtotal.'
+                      : 'Total equals subtotal; GST is not applied.'}
                 </p>
               </div>
 
