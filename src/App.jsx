@@ -7,11 +7,11 @@ import { DashboardModule } from './features/dashboard/DashboardModule';
 import { GSTModule } from './features/gst/GSTModule';
 import { InventoryModule } from './features/inventory/InventoryModule';
 import { InvoiceModule } from './features/invoices/InvoiceModule';
+import { CashModule } from './features/cash/CashModule';
 import { LogisticsModule } from './features/logistics/LogisticsModule';
 import { PickingModule } from './features/picking/PickingModule';
 import { SupplierModule } from './features/suppliers/SupplierModule';
 import { TeamModule } from './features/team/TeamModule';
-// 1. IMPORT THE NEW EMPLOYEE MODULE
 import { EmployeeModule } from './features/Employee/EmployeeModule';
 import { useEnterpriseSystem } from './hooks/useEnterpriseSystem';
 
@@ -25,14 +25,16 @@ export default function App() {
     { value: 'customers', label: 'Customers' },
     { value: 'suppliers', label: 'Suppliers' },
     { value: 'invoices', label: 'Invoices' },
+    { value: 'cash', label: 'Cash' },
     { value: 'billing', label: 'Statements' },
     { value: 'inventory', label: 'Inventory' },
-    // 2. ADD TO MOBILE SELECT OPTIONS
-    { value: 'employees', label: 'Employees' }, 
+    { value: 'employees', label: 'Employees' },
     { value: 'picking', label: 'Pick List' },
     { value: 'logistics', label: 'Delivery Map' },
     { value: 'gst', label: 'GST Ledger' },
-    ...(sys.currentUser?.role === 'admin' ? [{ value: 'team', label: 'Team Access' }] : []),
+    ...(sys.currentUser?.role === 'admin'
+      ? [{ value: 'team', label: 'Team Access' }]
+      : []),
   ];
 
   if (sys.isHydrating) {
@@ -42,9 +44,12 @@ export default function App() {
           <p className="text-sm font-black uppercase tracking-[0.3em] text-slate-500">
             Loading
           </p>
-          <h1 className="mt-3 text-2xl font-black tracking-tighter">Syncing ERP Data</h1>
+          <h1 className="mt-3 text-2xl font-black tracking-tighter">
+            Syncing ERP Data
+          </h1>
           <p className="mt-2 text-sm text-slate-400">
-            Pulling your latest records from {sys.storageMode === 'supabase' ? 'Supabase' : 'local demo data'}.
+            Pulling your latest records from{' '}
+            {sys.storageMode === 'supabase' ? 'Supabase' : 'local demo data'}.
           </p>
         </div>
       </div>
@@ -52,18 +57,30 @@ export default function App() {
   }
 
   if (!sys.currentUser) {
-    return <LoginView loginError={loginError} setLoginError={setLoginError} sys={sys} />;
+    return (
+      <LoginView
+        loginError={loginError}
+        setLoginError={setLoginError}
+        sys={sys}
+      />
+    );
   }
 
   return (
     <div className="flex h-screen bg-gray-50 font-sans text-gray-800">
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} sys={sys} />
+      <Sidebar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        sys={sys}
+      />
+
       <main className="flex flex-1 flex-col overflow-hidden">
         <header className="z-10 flex h-16 shrink-0 items-center justify-between border-b border-gray-200 bg-white px-8 shadow-sm print:hidden">
           <div className="flex items-center gap-4">
             <h2 className="hidden text-2xl font-semibold capitalize md:block">
               {activeTab.replace('-', ' ')}
             </h2>
+
             <select
               className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 md:hidden"
               onChange={(event) => setActiveTab(event.target.value)}
@@ -76,31 +93,41 @@ export default function App() {
               ))}
             </select>
           </div>
+
           <div className="flex items-center gap-3">
             {sys.lastSyncError && (
               <div className="hidden rounded-full border border-red-100 bg-red-50 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-red-600 lg:block">
                 Sync issue
               </div>
             )}
+
             <div className="hidden rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-emerald-600 md:block">
-              {sys.storageMode === 'supabase' ? 'Supabase Connected' : 'Demo Mode'}
+              {sys.storageMode === 'supabase'
+                ? 'Supabase Connected'
+                : 'Demo Mode'}
             </div>
+
             <div className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-bold uppercase tracking-tighter text-blue-600 md:text-sm">
               Three Leaves ERP
             </div>
           </div>
         </header>
+
         <div className="flex-1 overflow-y-auto p-8 print:overflow-visible print:p-0">
-          {activeTab === 'dashboard' && <DashboardModule setActiveTab={setActiveTab} sys={sys} />}
+          {activeTab === 'dashboard' && (
+            <DashboardModule setActiveTab={setActiveTab} sys={sys} />
+          )}
+
           {activeTab === 'customers' && <CustomerModule sys={sys} />}
           {activeTab === 'suppliers' && <SupplierModule sys={sys} />}
           {activeTab === 'invoices' && <InvoiceModule sys={sys} />}
+
+          {/* Separate Cash ledger stored in Supabase cash_invoices */}
+          {activeTab === 'cash' && <CashModule sys={sys} />}
+
           {activeTab === 'billing' && <BillingModule sys={sys} />}
           {activeTab === 'inventory' && <InventoryModule sys={sys} />}
-          
-          {/* 3. ADD THE CONTENT RENDERER FOR EMPLOYEES */}
           {activeTab === 'employees' && <EmployeeModule sys={sys} />}
-          
           {activeTab === 'picking' && <PickingModule sys={sys} />}
           {activeTab === 'logistics' && <LogisticsModule sys={sys} />}
           {activeTab === 'gst' && <GSTModule sys={sys} />}
