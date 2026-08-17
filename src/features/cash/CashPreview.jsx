@@ -807,7 +807,7 @@ export function CashPreview({
                           <td
                             className={`p-1 text-center ${density.subtotalText}`}
                           >
-                            {includeGst ? `$${formatMoney(gst)}` : 'NOT APPLIED'}
+                            {includeGst ? `$${formatMoney(gst)}` : '$0.00'}
                           </td>
                         </tr>
 
