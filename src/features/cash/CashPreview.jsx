@@ -196,7 +196,7 @@ function CashHeader({
               <tbody>
                 <tr>
                   <td className="w-[72px] pb-2 pr-3 text-left align-baseline text-slate-500">NO:</td>
-                  <td className="pb-2 text-left align-baseline text-[14px] font-black text-red-600">
+                  <td className="pb-2 text-left align-baseline text-[13px] font-black tracking-tight text-red-600 whitespace-nowrap">
                     {invoiceNumber}
                   </td>
                 </tr>
@@ -325,18 +325,18 @@ function CashHeader({
             CASH INVOICE
           </h3>
 
-          <div className="mb-2 mt-auto grid w-full grid-cols-[64px_minmax(0,1fr)] items-baseline gap-x-3 gap-y-3">
+          <div className="mb-2 mt-auto grid w-full grid-cols-[52px_minmax(0,1fr)] items-baseline gap-x-2 gap-y-3">
             <span className="whitespace-nowrap text-[15px] font-bold leading-none text-black">
               No.
             </span>
-            <span className="whitespace-nowrap text-[17px] font-bold leading-none tracking-wider text-red-600">
+            <span className="max-w-full whitespace-nowrap text-[15px] font-bold leading-none tracking-tight text-red-600">
               {String(invoiceNumber)}
             </span>
 
             <span className="whitespace-nowrap text-[15px] font-bold leading-none text-black">
               Terms:
             </span>
-            <span className="whitespace-nowrap text-[14px] font-bold leading-none text-slate-700">
+            <span className="max-w-full whitespace-nowrap text-[14px] font-bold leading-none text-slate-700">
               {includeGst ? 'COD' : 'Cash'}
             </span>
           </div>
