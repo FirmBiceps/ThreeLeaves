@@ -201,8 +201,8 @@ function CashHeader({
                   </td>
                 </tr>
                 <tr>
-                  <td className="pb-1 text-left text-slate-500">GST:</td>
-                  <td className="pb-1">{includeGst ? '9% INCLUDED' : 'NOT APPLIED'}</td>
+                  <td className="pb-1 text-left text-slate-500">TERMS:</td>
+                  <td className="pb-1">{includeGst ? 'COD' : 'CASH'}</td>
                 </tr>
                 {poNumber && (
                   <tr>
@@ -336,10 +336,10 @@ function CashHeader({
             </div>
             <div className="flex items-baseline">
               <span className="w-[50px] shrink-0 text-[15px] font-bold text-black">
-                GST:
+                Terms:
               </span>
               <span className="text-[14px] font-bold leading-none text-slate-700">
-                {includeGst ? '9% INCLUDED' : 'NOT APPLIED'}
+                {includeGst ? 'COD' : 'Cash'}
               </span>
             </div>
           </div>
