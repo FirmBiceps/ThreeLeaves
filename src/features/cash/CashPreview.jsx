@@ -192,17 +192,17 @@ function CashHeader({
               CASH INVOICE
             </h3>
 
-            <table className="w-full max-w-[200px] text-right text-[12px] font-bold text-slate-800">
+            <table className="w-full max-w-[210px] table-fixed text-[12px] font-bold text-slate-800">
               <tbody>
                 <tr>
-                  <td className="w-[40%] pb-1 text-left text-slate-500">NO:</td>
-                  <td className="pb-1 text-[14px] font-black text-red-600">
+                  <td className="w-[72px] pb-2 pr-3 text-left align-baseline text-slate-500">NO:</td>
+                  <td className="pb-2 text-left align-baseline text-[14px] font-black text-red-600">
                     {invoiceNumber}
                   </td>
                 </tr>
                 <tr>
-                  <td className="pb-1 text-left text-slate-500">TERMS:</td>
-                  <td className="pb-1">{includeGst ? 'COD' : 'CASH'}</td>
+                  <td className="w-[72px] pb-1 pr-3 text-left align-baseline text-slate-500">TERMS:</td>
+                  <td className="pb-1 text-left align-baseline">{includeGst ? 'COD' : 'CASH'}</td>
                 </tr>
                 {poNumber && (
                   <tr>
@@ -325,23 +325,20 @@ function CashHeader({
             CASH INVOICE
           </h3>
 
-          <div className="mb-2 mt-auto flex w-full flex-col gap-3">
-            <div className="flex items-baseline">
-              <span className="w-[50px] shrink-0 text-[15px] font-bold text-black">
-                No.
-              </span>
-              <span className="text-[17px] font-bold leading-none tracking-wider text-red-600">
-                {String(invoiceNumber)}
-              </span>
-            </div>
-            <div className="flex items-baseline">
-              <span className="w-[50px] shrink-0 text-[15px] font-bold text-black">
-                Terms:
-              </span>
-              <span className="text-[14px] font-bold leading-none text-slate-700">
-                {includeGst ? 'COD' : 'Cash'}
-              </span>
-            </div>
+          <div className="mb-2 mt-auto grid w-full grid-cols-[64px_minmax(0,1fr)] items-baseline gap-x-3 gap-y-3">
+            <span className="whitespace-nowrap text-[15px] font-bold leading-none text-black">
+              No.
+            </span>
+            <span className="whitespace-nowrap text-[17px] font-bold leading-none tracking-wider text-red-600">
+              {String(invoiceNumber)}
+            </span>
+
+            <span className="whitespace-nowrap text-[15px] font-bold leading-none text-black">
+              Terms:
+            </span>
+            <span className="whitespace-nowrap text-[14px] font-bold leading-none text-slate-700">
+              {includeGst ? 'COD' : 'Cash'}
+            </span>
           </div>
         </div>
       </div>
