@@ -5,21 +5,170 @@ import { supabase } from '../../lib/supabaseClient';
 import { InvoiceGenerator } from './InvoiceGenerator';
 import { InvoicePreviewModal } from './InvoicePreview';
 
-// Helper function to calculate 1st degree profit per invoice
-const calculateInvoiceProfit = (invoice) => {
-  if (!invoice || !Array.isArray(invoice.items)) return 0;
-  return invoice.items.reduce((acc, item) => {
-    const qty = Number(item.quantity || item.qty || 0);
-    const sellPrice = Number(item.price || item.Price || 0);
-    // Checks for standard cost price keys, including your updated SGD format
-    const costPrice = Number(item['cost_price (SGD)'] || item.cost_price || item.costPrice || 0);
-    
-    // Use the explicit line amount if available, otherwise fallback to qty * sellPrice
-    const lineRevenue = Number(item.amount) || (qty * sellPrice);
-    const lineCost = qty * costPrice;
-    
-    return acc + (lineRevenue - lineCost);
-  }, 0);
+// ============================================================================
+// PROFIT REPORTING
+// ============================================================================
+// Prefer the immutable values stored on the invoice. For legacy invoices that
+// have not been backfilled yet, a current-cost estimate is shown so the module
+// remains useful during the transition. Once the migration/backfill is run,
+// future inventory price changes no longer affect historical invoice profit.
+
+const getInventoryCost = (product) => {
+  const rawValue =
+    product?.['cost_price (SGD)'] ??
+    product?.cost_price ??
+    product?.costPrice ??
+    null;
+
+  if (rawValue === null || rawValue === undefined || rawValue === '') {
+    return null;
+  }
+
+  const value = Number(rawValue);
+  return Number.isFinite(value) && value > 0 ? value : null;
+};
+
+const getInvoiceProfitInfo = (invoice, inventory = []) => {
+  if (!invoice) {
+    return {
+      profit: null,
+      costTotal: null,
+      marginPct: null,
+      source: 'missing',
+      isEstimated: false,
+      needsReview: true,
+      missingCostCount: 0,
+    };
+  }
+
+  const missingCostCount = Number(invoice?.profit_missing_cost_count || 0);
+
+  // 1. Authoritative invoice-level snapshot.
+  if (
+    invoice?.gross_profit !== null &&
+    invoice?.gross_profit !== undefined &&
+    invoice?.gross_profit !== '' &&
+    Number.isFinite(Number(invoice.gross_profit)) &&
+    missingCostCount === 0
+  ) {
+    return {
+      profit: Number(invoice.gross_profit),
+      costTotal:
+        invoice?.cost_total === null || invoice?.cost_total === undefined
+          ? null
+          : Number(invoice.cost_total),
+      marginPct:
+        invoice?.gross_margin_pct === null ||
+        invoice?.gross_margin_pct === undefined
+          ? null
+          : Number(invoice.gross_margin_pct),
+      source: String(invoice?.profit_basis || 'locked_snapshot'),
+      isEstimated: invoice?.profit_is_estimated === true,
+      needsReview: false,
+      missingCostCount: 0,
+    };
+  }
+
+  const items = Array.isArray(invoice?.items) ? invoice.items : [];
+
+  // 2. If item-level snapshots exist but invoice summary fields have not yet
+  //    been populated, derive from the locked item snapshots.
+  if (items.length > 0) {
+    const itemSnapshotComplete = items.every((item) => {
+      if (item?.costNeedsReview === true) return false;
+      return (
+        item?.lineCostSnapshot !== null &&
+        item?.lineCostSnapshot !== undefined &&
+        Number.isFinite(Number(item.lineCostSnapshot))
+      );
+    });
+
+    if (itemSnapshotComplete) {
+      const revenue = items.reduce(
+        (sum, item) =>
+          sum +
+          (Number(item?.lineRevenueSnapshot) ||
+            (Number(item?.qty ?? item?.quantity ?? 0) || 0) *
+              (Number(item?.unitPrice ?? item?.price ?? item?.Price ?? 0) || 0)),
+        0
+      );
+
+      const costTotal = items.reduce(
+        (sum, item) => sum + (Number(item?.lineCostSnapshot) || 0),
+        0
+      );
+
+      const profit = revenue - costTotal;
+
+      return {
+        profit,
+        costTotal,
+        marginPct: revenue > 0 ? (profit / revenue) * 100 : null,
+        source: 'item_locked_snapshot',
+        isEstimated: invoice?.profit_is_estimated === true,
+        needsReview: false,
+        missingCostCount: 0,
+      };
+    }
+  }
+
+  // 3. Transitional fallback for invoices created before cost snapshots.
+  //    This uses TODAY'S inventory cost and is deliberately labelled as an
+  //    estimate. Run the supplied SQL backfill to freeze this value.
+  let liveRevenue = 0;
+  let liveCost = 0;
+  let liveMissingCostCount = 0;
+
+  items.forEach((item) => {
+    const qty = Number(item?.quantity ?? item?.qty ?? 0) || 0;
+    const sellPrice =
+      Number(item?.unitPrice ?? item?.price ?? item?.Price ?? 0) || 0;
+
+    liveRevenue += qty * sellPrice;
+
+    const product = (Array.isArray(inventory) ? inventory : []).find(
+      (entry) =>
+        String(entry?.id || '') === String(item?.itemId || '')
+    );
+
+    const cost = getInventoryCost(product);
+
+    if (cost === null) {
+      liveMissingCostCount += 1;
+      return;
+    }
+
+    liveCost += qty * cost;
+  });
+
+  if (items.length === 0 || liveMissingCostCount > 0) {
+    return {
+      profit: null,
+      costTotal: null,
+      marginPct: null,
+      source: 'needs_cost_review',
+      isEstimated: true,
+      needsReview: true,
+      missingCostCount: liveMissingCostCount,
+    };
+  }
+
+  const liveProfit = liveRevenue - liveCost;
+
+  return {
+    profit: liveProfit,
+    costTotal: liveCost,
+    marginPct: liveRevenue > 0 ? (liveProfit / liveRevenue) * 100 : null,
+    source: 'live_current_cost_estimate',
+    isEstimated: true,
+    needsReview: false,
+    missingCostCount: 0,
+  };
+};
+
+const calculateInvoiceProfit = (invoice, inventory = []) => {
+  const info = getInvoiceProfitInfo(invoice, inventory);
+  return info.profit === null ? null : info.profit;
 };
 
 // Convert any searchable value into a consistent lowercase string.
@@ -129,6 +278,7 @@ export function InvoiceModule({ sys }) {
   }, [isGeneratorOpen]);
 
   const safeInvoices = Array.isArray(sys?.invoices) ? sys.invoices : [];
+  const safeInventory = Array.isArray(sys?.inventory) ? sys.inventory : [];
 
   const handleDeleteInvoice = async (e, invoiceId) => {
     e.stopPropagation(); 
@@ -180,7 +330,7 @@ export function InvoiceModule({ sys }) {
       const dateA = new Date(a?.date || 0).getTime() || 0; const dateB = new Date(b?.date || 0).getTime() || 0;
       const numA = String(a?.number || a?.id || ''); const numB = String(b?.number || b?.id || '');
       const totA = Number(a?.total) || 0; const totB = Number(b?.total) || 0;
-      const profA = calculateInvoiceProfit(a); const profB = calculateInvoiceProfit(b);
+      const profA = calculateInvoiceProfit(a, safeInventory); const profB = calculateInvoiceProfit(b, safeInventory);
       const custA = String(a?.customer || ''); const custB = String(b?.customer || '');
       
       switch (sortOption) {
@@ -189,35 +339,60 @@ export function InvoiceModule({ sys }) {
         case 'number_asc': return numA.localeCompare(numB, undefined, { numeric: true }); 
         case 'total_desc': return totB - totA;
         case 'total_asc': return totA - totB; 
-        case 'profit_desc': return profB - profA;
-        case 'profit_asc': return profA - profB;
+        case 'profit_desc':
+          return (profB ?? Number.NEGATIVE_INFINITY) - (profA ?? Number.NEGATIVE_INFINITY);
+        case 'profit_asc':
+          return (profA ?? Number.POSITIVE_INFINITY) - (profB ?? Number.POSITIVE_INFINITY);
         case 'customer_asc': return custA.localeCompare(custB);
         case 'customer_desc': return custB.localeCompare(custA); 
         case 'date_desc': default: return dateB - dateA;
       }
     });
     return result;
-  }, [safeInvoices, filter, termFilter, searchTerm, sortOption]);
+  }, [safeInvoices, safeInventory, filter, termFilter, searchTerm, sortOption]);
 
   const totalPages = Math.ceil(filteredInvoices.length / ITEMS_PER_PAGE) || 1;
   const paginatedInvoices = filteredInvoices.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
-  // Dashboard-style summary for the currently filtered invoice list
+  // Dashboard-style summary for the currently filtered invoice list.
+  // Profit totals include only invoices with a complete profit figure. We also
+  // surface how many are legacy estimates / need cost review.
   const invoiceSummary = useMemo(() => {
     return filteredInvoices.reduce(
       (summary, invoice) => {
         summary.totalAmount += Number(invoice?.total) || 0;
-        summary.totalProfit += calculateInvoiceProfit(invoice);
-        if ((invoice?.status || 'Unpaid') === 'Unpaid') summary.unpaidCount += 1;
+
+        const profitInfo = getInvoiceProfitInfo(invoice, safeInventory);
+
+        if (profitInfo.profit !== null) {
+          summary.totalProfit += profitInfo.profit;
+          summary.profitInvoiceCount += 1;
+        }
+
+        if (profitInfo.isEstimated) {
+          summary.estimatedProfitCount += 1;
+        }
+
+        if (profitInfo.needsReview) {
+          summary.profitReviewCount += 1;
+        }
+
+        if ((invoice?.status || 'Unpaid') === 'Unpaid') {
+          summary.unpaidCount += 1;
+        }
+
         return summary;
       },
       {
         totalAmount: 0,
         totalProfit: 0,
+        profitInvoiceCount: 0,
+        estimatedProfitCount: 0,
+        profitReviewCount: 0,
         unpaidCount: 0,
       }
     );
-  }, [filteredInvoices]);
+  }, [filteredInvoices, safeInventory]);
 
   const hasActiveFilters =
     searchTerm.trim() !== '' ||
@@ -290,14 +465,20 @@ export function InvoiceModule({ sys }) {
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Estimated Profit</p>
+                <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Gross Profit</p>
                 <p className="mt-2 text-2xl font-black text-emerald-600">${formatMoney(invoiceSummary.totalProfit)}</p>
               </div>
               <div className="rounded-xl bg-emerald-50 p-3 text-emerald-600">
                 <TrendingUp size={20} />
               </div>
             </div>
-            <p className="mt-3 text-xs text-slate-500">Calculated from invoice line items</p>
+            <p className="mt-3 text-xs leading-5 text-slate-500">
+              {invoiceSummary.profitReviewCount > 0
+                ? `${invoiceSummary.profitReviewCount} invoice${invoiceSummary.profitReviewCount === 1 ? '' : 's'} need cost review.`
+                : invoiceSummary.estimatedProfitCount > 0
+                  ? `${invoiceSummary.estimatedProfitCount} legacy/current-cost estimate${invoiceSummary.estimatedProfitCount === 1 ? '' : 's'} included.`
+                  : 'Uses locked historical cost snapshots.'}
+            </p>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -355,7 +536,7 @@ export function InvoiceModule({ sys }) {
               <div className="relative flex items-center bg-white border rounded-xl shadow-sm px-3 py-2 w-full sm:w-36 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
                 <Filter className="text-slate-400 mr-2 shrink-0" size={16} />
                 <select className="w-full bg-transparent outline-none text-xs font-bold text-slate-700 cursor-pointer appearance-none" value={termFilter} onChange={(e) => setTermFilter(e.target.value)}>
-                  <option value="All">All Terms</option><option value="cod">C.O.D</option><option value="30_days">30 Days</option>
+                  <option value="All">All Terms</option><option value="cod">C.O.D</option><option value="30_days">30 Days</option><option value="paynow">PayNow</option>
                 </select>
               </div>
 
@@ -415,7 +596,8 @@ export function InvoiceModule({ sys }) {
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
                 {paginatedInvoices.map((inv) => {
-                  const invoiceProfit = calculateInvoiceProfit(inv);
+                  const profitInfo = getInvoiceProfitInfo(inv, safeInventory);
+                  const invoiceProfit = profitInfo.profit;
 
                   return (
                     <tr key={inv?.id} className="group cursor-pointer transition-all hover:bg-blue-50/70" onClick={() => setPreviewInvoice(inv)}>
@@ -427,11 +609,46 @@ export function InvoiceModule({ sys }) {
                       <td className="p-5 text-slate-800 font-medium whitespace-nowrap">{String(inv?.customer || '')}</td>
                       <td className="p-5 text-center">
                         <span className="text-xs font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-1 rounded-md whitespace-nowrap">
-                          {inv?.paymentTerms === 'cod' ? 'C.O.D' : '30 Days'}
+                          {inv?.paymentTerms === 'cod' ? 'C.O.D' : inv?.paymentTerms === 'paynow' ? 'PayNow' : '30 Days'}
                         </span>
                       </td>
                       <td className="p-5 text-right font-black text-slate-900 whitespace-nowrap">${formatMoney(inv?.total)}</td>
-                      <td className="p-5 text-right font-black text-emerald-600 whitespace-nowrap">${formatMoney(invoiceProfit)}</td>
+                      <td className="p-5 text-right whitespace-nowrap">
+                        {invoiceProfit === null ? (
+                          <div>
+                            <p className="text-xs font-black text-amber-600">NEEDS COST</p>
+                            <p className="mt-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                              Review
+                            </p>
+                          </div>
+                        ) : (
+                          <div>
+                            <p className="font-black text-emerald-600">
+                              ${formatMoney(invoiceProfit)}
+                            </p>
+                            <p
+                              className={`mt-0.5 text-[9px] font-black uppercase tracking-wider ${
+                                profitInfo.isEstimated
+                                  ? 'text-amber-500'
+                                  : 'text-slate-400'
+                              }`}
+                              title={
+                                profitInfo.source === 'live_current_cost_estimate'
+                                  ? "Temporary estimate using today's inventory cost. Run the legacy backfill to lock it."
+                                  : profitInfo.isEstimated
+                                    ? 'Legacy invoice profit was backfilled using the cost available at migration time.'
+                                    : 'Profit uses the historical cost snapshot saved with this invoice.'
+                              }
+                            >
+                              {profitInfo.source === 'live_current_cost_estimate'
+                                ? 'Live estimate'
+                                : profitInfo.isEstimated
+                                  ? 'Legacy estimate'
+                                  : 'Locked'}
+                            </p>
+                          </div>
+                        )}
+                      </td>
                       <td className="p-5 text-center">
                         <div className="relative inline-flex items-center" onClick={(e) => e.stopPropagation()}>
                           <select value={inv?.status || 'Unpaid'} onChange={(e) => handleStatusChange(inv.id, e.target.value)} className={`appearance-none cursor-pointer pl-8 pr-8 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest outline-none transition-all ${(inv?.status || 'Unpaid') === 'Paid' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200 hover:bg-emerald-200' : 'bg-orange-100 text-orange-700 border border-orange-200 hover:bg-orange-200'}`}>
