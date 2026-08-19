@@ -132,6 +132,26 @@ function formatInvoiceDate(invoiceDate) {
   return new Date().toLocaleDateString('en-GB').replace(/\//g, '-');
 }
 
+function getCustomerPaymentTerms(customer, existingInvoice) {
+  const rawTerms = String(
+    customer?.payment_terms ??
+      customer?.paymentTerms ??
+      existingInvoice?.payment_terms ??
+      existingInvoice?.paymentTerms ??
+      ''
+  )
+    .trim()
+    .toLowerCase();
+
+  if (rawTerms === 'cod') return 'COD';
+  if (rawTerms === 'paynow') return 'PayNow';
+  if (rawTerms === '30_days') return '30 Days';
+
+  // Existing/legacy Cash records may not have payment terms stored.
+  // Default to 30 Days only when no customer term can be resolved.
+  return '30 Days';
+}
+
 function CashHeader({
   isSpecialFormat,
   invoiceNumber,
@@ -202,7 +222,9 @@ function CashHeader({
                 </tr>
                 <tr>
                   <td className="w-[72px] pb-1 pr-3 text-left align-baseline text-slate-500">TERMS:</td>
-                  <td className="pb-1 text-left align-baseline">{includeGst ? 'COD' : 'CASH'}</td>
+                  <td className="pb-1 text-left align-baseline">
+                    {getCustomerPaymentTerms(customer, existingInvoice)}
+                  </td>
                 </tr>
                 {poNumber && (
                   <tr>
@@ -337,7 +359,7 @@ function CashHeader({
               Terms:
             </span>
             <span className="max-w-full whitespace-nowrap text-[14px] font-bold leading-none text-slate-700">
-              {includeGst ? 'COD' : 'Cash'}
+              {getCustomerPaymentTerms(customer, existingInvoice)}
             </span>
           </div>
         </div>
@@ -868,7 +890,8 @@ export function CashPreviewModal({ invoice, onClose, onEdit, sys }) {
     <CashPreview
       mode="history"
       customer={{
-        name: invoice.customer,
+        ...customerObj,
+        name: invoice.customer || customerObj?.name || '',
         address: customerAddress,
       }}
       gst={gst}
