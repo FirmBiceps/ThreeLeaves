@@ -1,50 +1,97 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useEffect, useMemo, useState } from 'react';
 import {
-  AlertTriangle,
-  BrainCircuit,
-  Check,
-  CheckCircle2,
-  Eye,
+  AlertCircle,
+  ArrowUpDown,
+  CheckCircle,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  DollarSign,
   FileText,
-  History,
-  Layers,
-  MessageSquare,
-  RefreshCcw,
-  Save,
-  ScanBarcode,
+  Plus,
+  RotateCcw,
   Search,
-  Settings,
-  ShieldCheck,
-  ShoppingCart,
-  Sparkles,
+  ScanBarcode,
   Trash2,
-  User,
+  TrendingUp,
+  WalletCards,
   X,
+  Calculator,
+  Eye,
+  Lock,
 } from 'lucide-react';
-import { CompanyHeader } from '../../components/shared/CompanyHeader';
-import { UNIT_OPTIONS } from '../../data/company';
 import { formatMoney } from '../../utils/format';
-import { getTodayString } from '../../utils/date';
 import { supabase } from '../../lib/supabaseClient';
-import { CashPreview } from './CashPreview';
+import { CashGenerator } from './CashGenerator';
+import { CashPreviewModal } from './CashPreview';
 
-const DEFAULT_UNIT = '箱';
-const CANCELLED_STATUSES = new Set(['cancelled', 'canceled', 'void', 'voided']);
+const ITEMS_PER_PAGE = 30;
 
-function getProductName(item) {
-  return String(item?.Name || item?.name || item?.Items || item?.productName || '');
-}
+const normaliseSearchValue = (value) => String(value ?? '').trim().toLowerCase();
 
-function getProductSku(item) {
-  return String(item?.SKU || item?.sku || '');
-}
+const getInvoiceItemSearchValues = (item) => {
+  if (!item || typeof item !== 'object') return [];
 
-function getProductCost(item) {
+  return [
+    item.sku,
+    item.SKU,
+    item.productSku,
+    item.product_sku,
+    item.code,
+    item.itemCode,
+    item.item_code,
+    item.productCode,
+    item.product_code,
+    item.description,
+    item.Description,
+    item.productDescription,
+    item.product_description,
+    item.itemDescription,
+    item.item_description,
+    item.name,
+    item.Name,
+    item.productName,
+    item.product_name,
+    item.itemName,
+    item.item_name,
+    item.product?.sku,
+    item.product?.SKU,
+    item.product?.code,
+    item.product?.description,
+    item.product?.name,
+  ]
+    .map(normaliseSearchValue)
+    .filter(Boolean);
+};
+
+const cashInvoiceMatchesSearch = (invoice, searchTerm) => {
+  const searchTokens = normaliseSearchValue(searchTerm)
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (searchTokens.length === 0) return true;
+
+  const invoiceItems = Array.isArray(invoice?.items) ? invoice.items : [];
+  const searchableValues = [
+    invoice?.customer,
+    invoice?.customerName,
+    invoice?.customer_name,
+    invoice?.number,
+    invoice?.id,
+    ...invoiceItems.flatMap(getInvoiceItemSearchValues),
+  ]
+    .map(normaliseSearchValue)
+    .filter(Boolean);
+
+  const combinedSearchText = searchableValues.join(' ');
+  return searchTokens.every((token) => combinedSearchText.includes(token));
+};
+
+function getProductCost(product) {
   const rawValue =
-    item?.['cost_price (SGD)'] ??
-    item?.cost_price ??
-    item?.costPrice ??
+    product?.['cost_price (SGD)'] ??
+    product?.cost_price ??
+    product?.costPrice ??
     null;
 
   if (rawValue === null || rawValue === undefined || rawValue === '') {
@@ -53,7 +100,7 @@ function getProductCost(item) {
 
   const value = Number(rawValue);
 
-  // A missing/zero cost must not be treated as free stock.
+  // Never silently treat a blank/zero cost as "free".
   return Number.isFinite(value) && value > 0 ? value : null;
 }
 
@@ -71,3309 +118,1525 @@ function getSnapshotCost(item) {
   return Number.isFinite(value) && value >= 0 ? value : null;
 }
 
-function getItemSellingPrice(item) {
-  const value = Number(
-    item?.unitPrice ??
-    item?.price ??
-    item?.Price ??
-    0
-  );
-
-  return Number.isFinite(value) ? value : 0;
+function getLineQty(item) {
+  return Number(item?.qty ?? item?.quantity ?? 0) || 0;
 }
 
-function getItemUnit(item) {
-  return String(item?.unit || item?.Unit || DEFAULT_UNIT);
+function getLineSellPrice(item) {
+  return Number(item?.unitPrice ?? item?.price ?? item?.Price ?? 0) || 0;
 }
 
-function getCustomerName(customer) {
-  return String(customer?.name || customer?.companyName || customer?.company_name || '');
+function getLineUnit(item) {
+  return String(item?.unit ?? item?.Unit ?? '').trim();
 }
 
-function getCustomerAddress(customer) {
+function getInventoryUnit(product) {
+  return String(product?.Unit ?? product?.unit ?? '').trim();
+}
+
+function getLineProductName(item, product) {
   return String(
-    customer?.address ||
-      customer?.deliveryAddress ||
-      customer?.delivery_address ||
-      customer?.shippingAddress ||
-      customer?.shipping_address ||
+    item?.name ??
+      item?.Name ??
+      item?.description ??
+      item?.Description ??
+      product?.Name ??
+      product?.name ??
+      product?.Items ??
+      'Unnamed item'
+  );
+}
+
+function getLineProductSku(item, product) {
+  return String(
+    item?.sku ??
+      item?.SKU ??
+      item?.productSku ??
+      item?.product_sku ??
+      product?.SKU ??
+      product?.sku ??
       ''
   );
 }
 
-function getCustomerPhone(customer) {
-  return String(customer?.phone || customer?.mobile || customer?.contact_number || '');
-}
-
-function getCustomerCode(customer) {
-  return String(customer?.uen || customer?.UEN || customer?.customer_code || customer?.code || '');
-}
-
-function getCustomerCashGstDefault(customer) {
-  // Existing customer records without the new field remain GST-enabled.
-  return customer?.cash_gst_enabled !== false;
-}
-
-function isUsableInvoiceHistoryRecord(invoice) {
-  const status = String(invoice?.status || '').trim().toLowerCase();
-  return !CANCELLED_STATUSES.has(status);
-}
-
-function getInvoiceTimestamp(invoice) {
-  const value = new Date(String(invoice?.date || ''));
-  return Number.isNaN(value.getTime()) ? 0 : value.getTime();
-}
-
-function formatShortDate(value) {
-  if (!value) return '—';
-  const date = new Date(String(value));
-  if (Number.isNaN(date.getTime())) return String(value);
-
-  return date.toLocaleDateString('en-SG', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-}
-
-function normalisePhrase(value) {
-  return String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, ' ');
-}
-
-/**
- * Extract a likely order quantity without treating packaging measurements
- * such as "500g", "3kg" or "400g x 20" as the order quantity.
- */
-function extractOrderQuantity(line) {
-  const original = String(line || '').trim();
-  if (!original) return { qty: 1, searchText: '' };
-
-  const explicitEndPatterns = [
-    /(?:^|\s)(?:qty|quantity)\s*[:x-]?\s*(\d+(?:\.\d+)?)\s*$/i,
-    /(\d+(?:\.\d+)?)\s*(箱|包|袋|瓶|桶|罐|板|个|盒|条|支|pcs?|pieces?|ctns?|cartons?|bags?|packs?|packets?|bottles?|tins?|boxes?)\s*$/i,
-  ];
-
-  for (const pattern of explicitEndPatterns) {
-    const match = original.match(pattern);
-    if (match) {
-      const qty = Number(match[1]);
-      const searchText = original.slice(0, match.index).trim();
-      return {
-        qty: Number.isFinite(qty) && qty > 0 ? qty : 1,
-        searchText: searchText || original,
-      };
-    }
-  }
-
-  // A leading x quantity is safe to interpret because it cannot be confused
-  // with a packaging expression later in the product name, e.g.
-  // "x2 番薯粉 500g x 20".
-  const leadingXMatch = original.match(/^\s*[x×]\s*(\d+(?:\.\d+)?)\s+(?=\S)/i);
-  if (leadingXMatch) {
-    const qty = Number(leadingXMatch[1]);
-    const searchText = original.slice(leadingXMatch[0].length).trim();
-    return {
-      qty: Number.isFinite(qty) && qty > 0 ? qty : 1,
-      searchText: searchText || original,
-    };
-  }
-
-  // A leading standalone number is also commonly used as quantity:
-  // "2 番薯粉 500g x 20". The required whitespace prevents "500g" from
-  // being interpreted as 500 units.
-  const leadingMatch = original.match(/^\s*(\d+(?:\.\d+)?)\s+(?=\S)/);
-  if (leadingMatch) {
-    const qty = Number(leadingMatch[1]);
-    const searchText = original.slice(leadingMatch[0].length).trim();
-    return {
-      qty: Number.isFinite(qty) && qty > 0 ? qty : 1,
-      searchText: searchText || original,
-    };
-  }
-
-  return { qty: 1, searchText: original };
-}
-
-function ProductSearchSelect({ value, inventory, onChange, isAutoFilled }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [menuPosition, setMenuPosition] = useState(null);
-  const triggerRef = useRef(null);
-  const menuRef = useRef(null);
-
-  const safeInventory = Array.isArray(inventory) ? inventory : [];
-  const selectedProduct = safeInventory.find(
-    (entry) => String(entry?.id || '') === String(value || '')
+function getCashProfitLineDetail(item, itemIndex, inventory = []) {
+  const itemId = String(item?.itemId || '');
+  const product = (Array.isArray(inventory) ? inventory : []).find(
+    (entry) => String(entry?.id || '') === itemId
   );
 
-  const getDisplayName = (item) => {
-    if (!item) return '';
-    const name = getProductName(item) || 'Unnamed Product';
-    const sku = getProductSku(item);
-    return sku ? `[${sku}] ${name}` : name;
+  const qty = getLineQty(item);
+  const sellPrice = getLineSellPrice(item);
+
+  const explicitRevenue =
+    item?.lineRevenueSnapshot !== null &&
+    item?.lineRevenueSnapshot !== undefined &&
+    Number.isFinite(Number(item.lineRevenueSnapshot))
+      ? Number(item.lineRevenueSnapshot)
+      : null;
+
+  const revenue = explicitRevenue ?? qty * sellPrice;
+
+  const invoiceUnit = getLineUnit(item);
+  const inventoryUnit = getInventoryUnit(product);
+
+  const snapshotCost = getSnapshotCost(item);
+  const snapshotItemId = String(
+    item?.costSnapshotItemId ??
+      item?.cost_snapshot_item_id ??
+      ''
+  );
+
+  const snapshotMatchesProduct =
+    snapshotCost !== null &&
+    (!snapshotItemId || !itemId || snapshotItemId === itemId);
+
+  let costPrice = null;
+  let source = 'missing_cost';
+  let sourceLabel = 'Missing cost';
+  let needsReview = false;
+  let reviewReason = null;
+  let canLockCurrentCost = false;
+
+  if (snapshotMatchesProduct && item?.costNeedsReview !== true) {
+    costPrice = snapshotCost;
+    source = 'locked_snapshot';
+    sourceLabel = 'Locked cost';
+  } else if (!product) {
+    needsReview = true;
+    source = 'product_missing';
+    sourceLabel = 'Product not found';
+    reviewReason =
+      'This cash-invoice item cannot be matched to the current product list.';
+  } else {
+    const currentCost = getProductCost(product);
+
+    if (
+      invoiceUnit &&
+      inventoryUnit &&
+      invoiceUnit !== inventoryUnit
+    ) {
+      needsReview = true;
+      source = 'unit_mismatch';
+      sourceLabel = 'Unit mismatch';
+      reviewReason = `Invoice unit "${invoiceUnit}" differs from inventory cost unit "${inventoryUnit}".`;
+    } else if (currentCost === null) {
+      needsReview = true;
+      source = 'missing_cost';
+      sourceLabel = 'Missing cost';
+      reviewReason =
+        'No valid cost_price (SGD) is available for this product.';
+    } else {
+      // Existing Cash invoices without a historical snapshot may temporarily
+      // use today's inventory cost. This is an estimate until explicitly locked.
+      costPrice = currentCost;
+      source = 'current_inventory';
+      sourceLabel = 'Current cost';
+      canLockCurrentCost = true;
+    }
+  }
+
+  const lineCost =
+    costPrice === null || needsReview ? null : qty * costPrice;
+
+  const lineProfit =
+    lineCost === null ? null : revenue - lineCost;
+
+  const marginPct =
+    lineProfit === null || revenue <= 0
+      ? null
+      : (lineProfit / revenue) * 100;
+
+  return {
+    item,
+    itemIndex,
+    itemId,
+    product,
+    name: getLineProductName(item, product),
+    sku: getLineProductSku(item, product),
+    qty,
+    invoiceUnit,
+    inventoryUnit,
+    sellPrice,
+    revenue,
+    costPrice,
+    lineCost,
+    lineProfit,
+    marginPct,
+    source,
+    sourceLabel,
+    needsReview,
+    reviewReason,
+    canLockCurrentCost,
   };
+}
 
-  const displayName = getDisplayName(selectedProduct);
-  const searchLower = String(searchTerm).trim().toLowerCase();
+function buildCashProfitBreakdown(invoice, inventory = []) {
+  const items = Array.isArray(invoice?.items) ? invoice.items : [];
 
-  const filteredInventory = safeInventory.filter((item) => {
-    if (!item) return false;
-    if (!searchLower) return true;
+  const rows = items.map((item, itemIndex) =>
+    getCashProfitLineDetail(item, itemIndex, inventory)
+  );
 
-    const searchable = [
-      getProductName(item),
-      getProductSku(item),
-      item?.Description,
-      item?.description,
-      item?.Packing,
-      item?.packaging,
-      item?.Supplier,
-      item?.supplier,
-    ]
-      .filter(Boolean)
-      .join(' ')
-      .toLowerCase();
+  const subtotal = rows.reduce(
+    (sum, row) => sum + (Number(row.revenue) || 0),
+    0
+  );
 
-    return searchable.includes(searchLower);
-  });
+  const knownCostTotal = rows.reduce(
+    (sum, row) =>
+      sum + (row.lineCost === null ? 0 : Number(row.lineCost) || 0),
+    0
+  );
 
-  const updateMenuPosition = useCallback(() => {
-    if (!triggerRef.current) return;
+  const unresolvedRows = rows.filter((row) => row.needsReview);
+  const currentCostRows = rows.filter(
+    (row) => row.canLockCurrentCost && !row.needsReview
+  );
 
-    const rect = triggerRef.current.getBoundingClientRect();
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    const preferredWidth = Math.min(460, Math.max(360, rect.width + 120));
-    const left = Math.min(
-      Math.max(12, rect.left),
-      Math.max(12, viewportWidth - preferredWidth - 12)
-    );
+  const isComplete = rows.length > 0 && unresolvedRows.length === 0;
 
-    const estimatedMenuHeight = 330;
-    const spaceBelow = viewportHeight - rect.bottom;
-    const openAbove = spaceBelow < estimatedMenuHeight && rect.top > estimatedMenuHeight;
+  const calculatedProfit = isComplete
+    ? subtotal - knownCostTotal
+    : null;
 
-    setMenuPosition({
-      left,
-      width: preferredWidth,
-      top: openAbove ? undefined : rect.bottom + 6,
-      bottom: openAbove ? viewportHeight - rect.top + 6 : undefined,
-    });
-  }, []);
+  const calculatedMarginPct =
+    calculatedProfit === null || subtotal <= 0
+      ? null
+      : (calculatedProfit / subtotal) * 100;
 
-  useEffect(() => {
-    if (!isOpen) return undefined;
+  const storedProfit =
+    invoice?.gross_profit !== null &&
+    invoice?.gross_profit !== undefined &&
+    invoice?.gross_profit !== '' &&
+    Number.isFinite(Number(invoice.gross_profit))
+      ? Number(invoice.gross_profit)
+      : null;
 
-    updateMenuPosition();
+  const storedCost =
+    invoice?.cost_total !== null &&
+    invoice?.cost_total !== undefined &&
+    invoice?.cost_total !== '' &&
+    Number.isFinite(Number(invoice.cost_total))
+      ? Number(invoice.cost_total)
+      : null;
 
-    const handleViewportChange = () => updateMenuPosition();
-    window.addEventListener('resize', handleViewportChange);
-    window.addEventListener('scroll', handleViewportChange, true);
+  const storedMargin =
+    invoice?.gross_margin_pct !== null &&
+    invoice?.gross_margin_pct !== undefined &&
+    invoice?.gross_margin_pct !== '' &&
+    Number.isFinite(Number(invoice.gross_margin_pct))
+      ? Number(invoice.gross_margin_pct)
+      : null;
 
-    return () => {
-      window.removeEventListener('resize', handleViewportChange);
-      window.removeEventListener('scroll', handleViewportChange, true);
+  const storedMissingCount = Number(
+    invoice?.profit_missing_cost_count || 0
+  );
+
+  const hasAuthoritativeStoredProfit =
+    storedProfit !== null && storedMissingCount === 0;
+
+  const finalProfit = hasAuthoritativeStoredProfit
+    ? storedProfit
+    : calculatedProfit;
+
+  const finalCost = hasAuthoritativeStoredProfit
+    ? storedCost ?? knownCostTotal
+    : isComplete
+      ? knownCostTotal
+      : null;
+
+  const finalMargin = hasAuthoritativeStoredProfit
+    ? storedMargin ??
+      (subtotal > 0 && finalProfit !== null
+        ? (finalProfit / subtotal) * 100
+        : null)
+    : calculatedMarginPct;
+
+  const storedVariance =
+    hasAuthoritativeStoredProfit && calculatedProfit !== null
+      ? storedProfit - calculatedProfit
+      : 0;
+
+  return {
+    rows,
+    subtotal,
+    knownCostTotal,
+    unresolvedRows,
+    currentCostRows,
+    isComplete,
+    calculatedProfit,
+    calculatedMarginPct,
+    storedProfit,
+    storedCost,
+    storedMargin,
+    hasAuthoritativeStoredProfit,
+    finalProfit,
+    finalCost,
+    finalMargin,
+    storedVariance,
+  };
+}
+
+function getCashProfitInfo(invoice, inventory = []) {
+  if (!invoice) {
+    return {
+      profit: null,
+      costTotal: null,
+      marginPct: null,
+      source: 'missing',
+      isEstimated: false,
+      needsReview: true,
+      missingCostCount: 0,
+      readyToLockCount: 0,
     };
-  }, [isOpen, updateMenuPosition]);
+  }
 
-  useEffect(() => {
-    function handleClickOutside(event) {
-      const clickedTrigger = triggerRef.current?.contains(event.target);
-      const clickedMenu = menuRef.current?.contains(event.target);
+  const breakdown = buildCashProfitBreakdown(invoice, inventory);
 
-      if (!clickedTrigger && !clickedMenu) {
-        setIsOpen(false);
-      }
+  if (breakdown.hasAuthoritativeStoredProfit) {
+    return {
+      profit: breakdown.finalProfit,
+      costTotal: breakdown.finalCost,
+      marginPct: breakdown.finalMargin,
+      source: String(invoice?.profit_basis || 'locked_snapshot'),
+      isEstimated: invoice?.profit_is_estimated === true,
+      needsReview: false,
+      missingCostCount: 0,
+      readyToLockCount: 0,
+    };
+  }
+
+  if (breakdown.unresolvedRows.length > 0 || breakdown.rows.length === 0) {
+    return {
+      profit: null,
+      costTotal: null,
+      marginPct: null,
+      source: 'needs_cost_review',
+      isEstimated: true,
+      needsReview: true,
+      missingCostCount: breakdown.unresolvedRows.length,
+      readyToLockCount: breakdown.currentCostRows.length,
+    };
+  }
+
+  if (breakdown.currentCostRows.length > 0) {
+    return {
+      profit: breakdown.calculatedProfit,
+      costTotal: breakdown.knownCostTotal,
+      marginPct: breakdown.calculatedMarginPct,
+      source: 'current_cost_estimate',
+      isEstimated: true,
+      needsReview: false,
+      missingCostCount: 0,
+      readyToLockCount: breakdown.currentCostRows.length,
+    };
+  }
+
+  return {
+    profit: breakdown.calculatedProfit,
+    costTotal: breakdown.knownCostTotal,
+    marginPct: breakdown.calculatedMarginPct,
+    source: 'item_locked_snapshot',
+    isEstimated: invoice?.profit_is_estimated === true,
+    needsReview: false,
+    missingCostCount: 0,
+    readyToLockCount: 0,
+  };
+}
+
+function calculateCashProfit(invoice, inventory = []) {
+  const info = getCashProfitInfo(invoice, inventory);
+  return info.profit;
+}
+
+// ============================================================================
+// CASH PROFIT BREAKDOWN MODAL
+// ============================================================================
+function CashProfitBreakdownModal({
+  invoice,
+  inventory,
+  onClose,
+  onViewInvoice,
+  onLockResolvedCosts,
+}) {
+  const [itemFilter, setItemFilter] = useState('all');
+  const [itemSearch, setItemSearch] = useState('');
+  const [isLocking, setIsLocking] = useState(false);
+  const [actionMessage, setActionMessage] = useState('');
+
+  const breakdown = useMemo(
+    () => buildCashProfitBreakdown(invoice, inventory),
+    [invoice, inventory]
+  );
+
+  const profitInfo = useMemo(
+    () => getCashProfitInfo(invoice, inventory),
+    [invoice, inventory]
+  );
+
+  const visibleRows = useMemo(() => {
+    const search = itemSearch.trim().toLowerCase();
+
+    return breakdown.rows.filter((row) => {
+      const matchesFilter =
+        itemFilter === 'all'
+          ? true
+          : itemFilter === 'attention'
+            ? row.needsReview
+            : itemFilter === 'ready'
+              ? row.canLockCurrentCost && !row.needsReview
+              : itemFilter === 'locked'
+                ? row.source === 'locked_snapshot'
+                : true;
+
+      if (!matchesFilter) return false;
+      if (!search) return true;
+
+      return [
+        row.name,
+        row.sku,
+        row.itemId,
+        row.invoiceUnit,
+        row.sourceLabel,
+        row.reviewReason,
+      ]
+        .map((value) => String(value || '').toLowerCase())
+        .some((value) => value.includes(search));
+    });
+  }, [breakdown.rows, itemFilter, itemSearch]);
+
+  const handleLock = async () => {
+    if (!onLockResolvedCosts || breakdown.currentCostRows.length === 0) {
+      return;
     }
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    setIsLocking(true);
+    setActionMessage('');
 
-  const menu =
-    isOpen && menuPosition && typeof document !== 'undefined'
-      ? createPortal(
-          <div
-            ref={menuRef}
-            className="fixed z-[9000] overflow-hidden rounded-xl border border-slate-300 bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-100"
-            style={{
-              left: menuPosition.left,
-              width: menuPosition.width,
-              top: menuPosition.top,
-              bottom: menuPosition.bottom,
-            }}
-          >
-            <div className="flex items-center border-b border-slate-200 bg-slate-50 p-2.5">
-              <Search size={16} className="ml-1 mr-2 shrink-0 text-slate-400" />
-              <input
-                autoFocus
-                type="text"
-                className="w-full border-none bg-transparent p-1.5 text-sm font-bold text-slate-800 outline-none placeholder:text-slate-400 focus:ring-0"
-                placeholder="Name, SKU, description, packing..."
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-              />
-              <span className="ml-2 shrink-0 rounded-md bg-white px-2 py-1 text-[10px] font-black uppercase tracking-wider text-slate-400">
-                {filteredInventory.length} found
+    try {
+      const result = await onLockResolvedCosts(invoice);
+
+      if (result?.lockedCount > 0) {
+        setActionMessage(
+          result.remainingCount > 0
+            ? `${result.lockedCount} available cost${result.lockedCount === 1 ? '' : 's'} locked. ${result.remainingCount} item${result.remainingCount === 1 ? '' : 's'} still need attention.`
+            : `${result.lockedCount} available cost${result.lockedCount === 1 ? '' : 's'} locked. Profit is now fully calculated.`
+        );
+      }
+    } catch (error) {
+      setActionMessage(`Unable to lock costs: ${error.message}`);
+    } finally {
+      setIsLocking(false);
+    }
+  };
+
+  const isLegacy =
+    invoice?.profit_is_estimated === true ||
+    String(invoice?.profit_basis || '').startsWith('legacy');
+
+  const statusText = profitInfo.needsReview
+    ? 'Needs cost review'
+    : profitInfo.source === 'current_cost_estimate'
+      ? 'Current-cost estimate'
+      : isLegacy
+        ? 'Legacy estimate • locked'
+        : 'Locked profit';
+
+  const statusClasses = profitInfo.needsReview
+    ? 'bg-amber-100 text-amber-700 border-amber-200'
+    : profitInfo.source === 'current_cost_estimate'
+      ? 'bg-blue-100 text-blue-700 border-blue-200'
+      : isLegacy
+        ? 'bg-violet-100 text-violet-700 border-violet-200'
+        : 'bg-emerald-100 text-emerald-700 border-emerald-200';
+
+  const hasVariance =
+    breakdown.hasAuthoritativeStoredProfit &&
+    Math.abs(Number(breakdown.storedVariance) || 0) > 0.01;
+
+  return (
+    <div
+      className="fixed inset-0 z-[7500] flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div className="flex max-h-[92vh] w-full max-w-[1450px] flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
+        <div className="flex shrink-0 items-start justify-between gap-6 border-b border-slate-200 bg-slate-50 px-6 py-5 sm:px-8">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+                <Calculator size={20} />
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                  Cash Profit Breakdown
+                </p>
+                <h2 className="mt-0.5 text-xl font-black text-slate-900">
+                  {String(invoice?.number || invoice?.id || '')}
+                </h2>
+              </div>
+              <span className={`ml-1 rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-wider ${statusClasses}`}>
+                {statusText}
               </span>
             </div>
 
-            <div className="max-h-[300px] overflow-y-auto">
-              {filteredInventory.length > 0 ? (
-                filteredInventory.slice(0, 100).map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className="w-full border-b border-slate-100 px-4 py-3 text-left transition-colors last:border-0 hover:bg-blue-50"
-                    onClick={() => {
-                      onChange(item.id);
-                      setIsOpen(false);
-                    }}
-                  >
-                    <p className="text-sm font-bold leading-5 text-slate-800">
-                      {getDisplayName(item)}
-                    </p>
-                    {(item?.Description ||
-                      item?.description ||
-                      item?.Packing ||
-                      item?.packaging) && (
-                      <p className="mt-1 line-clamp-2 text-xs font-medium leading-4 text-slate-400">
-                        {[
-                          item?.Description || item?.description,
-                          item?.Packing || item?.packaging,
-                        ]
-                          .filter(Boolean)
-                          .join(' • ')}
-                      </p>
-                    )}
-                  </button>
-                ))
-              ) : (
-                <div className="p-5 text-center text-sm font-medium text-slate-400">
-                  No products found.
+            <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs font-semibold text-slate-500">
+              <span>{String(invoice?.customer || 'Unknown customer')}</span>
+              <span>{String(invoice?.date || '')}</span>
+              <span>
+                Cash total incl. GST: ${formatMoney(Number(invoice?.total) || 0)}
+              </span>
+              <span className="font-black text-slate-400">
+                Profit excludes GST
+              </span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="shrink-0 rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-700"
+            aria-label="Close cash profit breakdown"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="shrink-0 border-b border-slate-200 bg-white px-6 py-5 sm:px-8">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400">
+                Sales excl. GST
+              </p>
+              <p className="mt-2 text-xl font-black text-slate-900">
+                ${formatMoney(breakdown.subtotal)}
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400">
+                Product Cost
+              </p>
+              <p className="mt-2 text-xl font-black text-slate-900">
+                {profitInfo.costTotal === null
+                  ? `$${formatMoney(breakdown.knownCostTotal)} known`
+                  : `$${formatMoney(profitInfo.costTotal)}`}
+              </p>
+            </div>
+
+            <div className={`rounded-2xl border p-4 ${
+              profitInfo.profit === null
+                ? 'border-amber-200 bg-amber-50'
+                : 'border-emerald-200 bg-emerald-50'
+            }`}>
+              <p className={`text-[9px] font-black uppercase tracking-[0.16em] ${
+                profitInfo.profit === null ? 'text-amber-600' : 'text-emerald-600'
+              }`}>
+                Gross Profit
+              </p>
+              <p className={`mt-2 text-xl font-black ${
+                profitInfo.profit === null ? 'text-amber-700' : 'text-emerald-700'
+              }`}>
+                {profitInfo.profit === null
+                  ? 'Needs review'
+                  : `$${formatMoney(profitInfo.profit)}`}
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400">
+                Gross Margin
+              </p>
+              <p className="mt-2 text-xl font-black text-slate-900">
+                {profitInfo.marginPct === null
+                  ? '—'
+                  : `${Number(profitInfo.marginPct).toFixed(2)}%`}
+              </p>
+            </div>
+
+            <div className={`rounded-2xl border p-4 ${
+              breakdown.unresolvedRows.length > 0
+                ? 'border-amber-200 bg-amber-50'
+                : breakdown.currentCostRows.length > 0
+                  ? 'border-blue-200 bg-blue-50'
+                  : 'border-emerald-200 bg-emerald-50'
+            }`}>
+              <p className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-500">
+                Cost Status
+              </p>
+              <p className="mt-2 text-xl font-black text-slate-900">
+                {breakdown.unresolvedRows.length > 0
+                  ? `${breakdown.unresolvedRows.length} issue${breakdown.unresolvedRows.length === 1 ? '' : 's'}`
+                  : breakdown.currentCostRows.length > 0
+                    ? `${breakdown.currentCostRows.length} ready`
+                    : 'Complete'}
+              </p>
+            </div>
+          </div>
+
+          {breakdown.unresolvedRows.length > 0 && (
+            <div className="mt-4 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+              <AlertCircle size={18} className="mt-0.5 shrink-0 text-amber-600" />
+              <div>
+                <p className="text-xs font-black text-amber-800">
+                  Final profit is intentionally withheld.
+                </p>
+                <p className="mt-1 text-xs leading-5 text-amber-700">
+                  At least one item has no safe cost. Missing cost is never treated as $0, because that would make profit equal sales and overstate profitability.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {breakdown.currentCostRows.length > 0 && (
+            <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <AlertCircle size={18} className="mt-0.5 shrink-0 text-blue-600" />
+                <div>
+                  <p className="text-xs font-black text-blue-800">
+                    {breakdown.currentCostRows.length} historical item{breakdown.currentCostRows.length === 1 ? '' : 's'} currently use today's inventory cost.
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-blue-700">
+                    The estimate is usable now, but lock these available costs to stop future inventory price changes from moving this cash invoice's profit.
+                  </p>
                 </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleLock}
+                disabled={isLocking}
+                className="inline-flex shrink-0 items-center justify-center rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Lock size={14} className="mr-2" />
+                {isLocking ? 'Locking…' : 'Lock Available Costs'}
+              </button>
+            </div>
+          )}
+
+          {hasVariance && (
+            <div className="mt-4 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
+              <AlertCircle size={18} className="mt-0.5 shrink-0 text-red-600" />
+              <div>
+                <p className="text-xs font-black text-red-800">
+                  Stored profit does not match the current line breakdown.
+                </p>
+                <p className="mt-1 text-xs leading-5 text-red-700">
+                  Difference: ${formatMoney(Math.abs(breakdown.storedVariance))}. Review the cash invoice before using it in a formal report.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {actionMessage && (
+            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-bold text-slate-600">
+              {actionMessage}
+            </div>
+          )}
+        </div>
+
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="flex shrink-0 flex-col gap-3 border-b border-slate-200 bg-slate-50/70 px-6 py-4 sm:px-8 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-wrap gap-2">
+              {[
+                ['all', `All (${breakdown.rows.length})`],
+                ['attention', `Needs attention (${breakdown.unresolvedRows.length})`],
+                ['ready', `Ready to lock (${breakdown.currentCostRows.length})`],
+                ['locked', `Locked (${breakdown.rows.filter((row) => row.source === 'locked_snapshot').length})`],
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setItemFilter(value)}
+                  className={`rounded-lg px-3 py-2 text-[10px] font-black uppercase tracking-wider transition-colors ${
+                    itemFilter === value
+                      ? 'bg-slate-900 text-white'
+                      : 'border border-slate-200 bg-white text-slate-500 hover:bg-slate-100'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex w-full items-center rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm lg:w-72">
+              <Search size={14} className="mr-2 shrink-0 text-slate-400" />
+              <input
+                type="text"
+                value={itemSearch}
+                onChange={(event) => setItemSearch(event.target.value)}
+                placeholder="Search product / SKU..."
+                className="w-full bg-transparent text-xs font-semibold text-slate-700 outline-none placeholder:text-slate-400"
+              />
+              {itemSearch && (
+                <button
+                  type="button"
+                  onClick={() => setItemSearch('')}
+                  className="rounded p-1 text-slate-400 hover:bg-slate-100"
+                >
+                  <X size={12} />
+                </button>
               )}
             </div>
-          </div>,
-          document.body
-        )
-      : null;
+          </div>
 
-  return (
-    <>
-      <div className="relative w-full text-left">
-        <button
-          ref={triggerRef}
-          type="button"
-          onClick={() => {
-            setIsOpen(true);
-            setSearchTerm('');
-            window.requestAnimationFrame(updateMenuPosition);
-          }}
-          className={`w-full rounded-lg border border-transparent px-2 py-1.5 text-left text-sm font-bold leading-5 transition-colors hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-100 ${
-            displayName
-              ? isAutoFilled
-                ? 'text-indigo-600'
-                : 'text-slate-900'
-              : 'text-slate-400'
-          }`}
-        >
-          {displayName || '- Search Product or SKU -'}
-        </button>
+          <div className="min-h-0 flex-1 overflow-auto">
+            <table className="w-full min-w-[1180px] border-collapse text-left">
+              <thead className="sticky top-0 z-10 bg-white shadow-sm">
+                <tr className="border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                  <th className="px-5 py-3 pl-8">Item</th>
+                  <th className="px-4 py-3 text-center">Qty / Unit</th>
+                  <th className="px-4 py-3 text-right">Sell / Unit</th>
+                  <th className="px-4 py-3 text-right">Sales</th>
+                  <th className="px-4 py-3 text-right">Cost / Unit</th>
+                  <th className="px-4 py-3 text-right">Cost</th>
+                  <th className="px-4 py-3 text-right">Profit</th>
+                  <th className="px-4 py-3 text-right">Margin</th>
+                  <th className="px-5 py-3 pr-8">Cost Source</th>
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-slate-100 text-xs">
+                {visibleRows.map((row) => (
+                  <tr
+                    key={`${row.itemIndex}-${row.itemId}-${row.name}`}
+                    className={
+                      row.needsReview
+                        ? 'bg-amber-50/60'
+                        : row.canLockCurrentCost
+                          ? 'bg-blue-50/40'
+                          : 'bg-white'
+                    }
+                  >
+                    <td className="px-5 py-4 pl-8">
+                      <p className="max-w-[340px] font-black text-slate-800">
+                        {row.name}
+                      </p>
+                      <div className="mt-1 flex flex-wrap gap-2 text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                        {row.sku && <span>SKU: {row.sku}</span>}
+                        {row.itemId && <span>ID: {row.itemId}</span>}
+                      </div>
+                      {row.reviewReason && (
+                        <p className="mt-2 max-w-[420px] text-[10px] font-semibold leading-4 text-amber-700">
+                          {row.reviewReason}
+                        </p>
+                      )}
+                    </td>
+
+                    <td className="px-4 py-4 text-center font-bold text-slate-700">
+                      {row.qty} {row.invoiceUnit || ''}
+                    </td>
+
+                    <td className="px-4 py-4 text-right font-mono font-bold text-slate-700">
+                      ${formatMoney(row.sellPrice)}
+                    </td>
+
+                    <td className="px-4 py-4 text-right font-mono font-black text-slate-900">
+                      ${formatMoney(row.revenue)}
+                    </td>
+
+                    <td className="px-4 py-4 text-right font-mono font-bold">
+                      {row.costPrice === null ? (
+                        <span className="text-amber-600">—</span>
+                      ) : (
+                        <span className="text-slate-700">
+                          ${formatMoney(row.costPrice)}
+                        </span>
+                      )}
+                    </td>
+
+                    <td className="px-4 py-4 text-right font-mono font-bold">
+                      {row.lineCost === null ? (
+                        <span className="text-amber-600">—</span>
+                      ) : (
+                        <span className="text-slate-700">
+                          ${formatMoney(row.lineCost)}
+                        </span>
+                      )}
+                    </td>
+
+                    <td className="px-4 py-4 text-right font-mono font-black">
+                      {row.lineProfit === null ? (
+                        <span className="text-amber-600">—</span>
+                      ) : (
+                        <span className={row.lineProfit < 0 ? 'text-red-600' : 'text-emerald-600'}>
+                          ${formatMoney(row.lineProfit)}
+                        </span>
+                      )}
+                    </td>
+
+                    <td className="px-4 py-4 text-right font-black text-slate-600">
+                      {row.marginPct === null
+                        ? '—'
+                        : `${Number(row.marginPct).toFixed(1)}%`}
+                    </td>
+
+                    <td className="px-5 py-4 pr-8">
+                      <span
+                        className={`inline-flex rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wider ${
+                          row.needsReview
+                            ? 'border-amber-200 bg-amber-100 text-amber-700'
+                            : row.canLockCurrentCost
+                              ? 'border-blue-200 bg-blue-100 text-blue-700'
+                              : 'border-emerald-200 bg-emerald-100 text-emerald-700'
+                        }`}
+                      >
+                        {row.sourceLabel}
+                      </span>
+
+                      {row.canLockCurrentCost && (
+                        <p className="mt-1.5 text-[9px] font-semibold text-blue-600">
+                          Ready to lock
+                        </p>
+                      )}
+
+                      {row.source === 'locked_snapshot' && row.inventoryUnit && (
+                        <p className="mt-1.5 text-[9px] font-semibold text-slate-400">
+                          Cost unit: {row.inventoryUnit}
+                        </p>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+
+                {visibleRows.length === 0 && (
+                  <tr>
+                    <td colSpan="9" className="px-8 py-14 text-center">
+                      <p className="text-sm font-black text-slate-600">
+                        No items match this view
+                      </p>
+                      <p className="mt-1 text-xs text-slate-400">
+                        Try a different profit-status filter or search term.
+                      </p>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="flex shrink-0 flex-col gap-3 border-t border-slate-200 bg-white px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+          <div className="max-w-3xl text-[10px] font-semibold leading-5 text-slate-400">
+            Profit = sales excluding GST − product cost. Missing cost never becomes $0. Locked line costs are not replaced by later inventory cost changes.
+          </div>
+
+          <div className="flex shrink-0 gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-black text-slate-600 transition-colors hover:bg-slate-50"
+            >
+              Close
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onViewInvoice?.(invoice)}
+              className="inline-flex items-center rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-black text-white transition-colors hover:bg-slate-800"
+            >
+              <Eye size={14} className="mr-2" />
+              View Cash Invoice
+            </button>
+          </div>
+        </div>
       </div>
-      {menu}
-    </>
+    </div>
   );
 }
 
-function CustomerSearchSelect({ value, customers, onChange, disabled }) {
-  const [isOpen, setIsOpen] = useState(false);
+export function CashModule({ sys }) {
+  const [cashInvoices, setCashInvoices] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
+  const [filter, setFilter] = useState('All');
+  const [gstFilter, setGstFilter] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
-  const dropdownRef = useRef(null);
+  const [sortOption, setSortOption] = useState('number_desc');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [previewInvoice, setPreviewInvoice] = useState(null);
+  const [profitBreakdownInvoice, setProfitBreakdownInvoice] = useState(null);
+  const [editingInvoice, setEditingInvoice] = useState(null);
+  const [pricingGroups, setPricingGroups] = useState([]);
+
+  const safeInventory = Array.isArray(sys?.inventory) ? sys.inventory : [];
+
+  const fetchCashInvoices = async () => {
+    setIsLoading(true);
+    setLoadError('');
+    try {
+      const { data, error } = await supabase
+        .from('cash_invoices')
+        .select('*')
+        .order('date', { ascending: false })
+        .order('number', { ascending: false });
+      if (error) throw error;
+      setCashInvoices(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Failed to load cash invoices:', error);
+      setLoadError(error?.message || 'Unable to load cash invoices.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    function handleClickOutside(event) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setIsOpen(false);
-      }
-    }
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    void fetchCashInvoices();
   }, []);
 
-  const safeCustomers = Array.isArray(customers) ? customers : [];
-  const selectedCustomer = safeCustomers.find(
-    (customer) => String(customer?.id || '') === String(value || '')
+  useEffect(() => {
+    const fetchGroups = async () => {
+      try {
+        const { data, error } = await supabase.from('pricing_groups').select('*');
+        if (!error && data) setPricingGroups(data);
+      } catch (error) {
+        console.error('Error fetching pricing groups:', error);
+      }
+    };
+    void fetchGroups();
+  }, [isGeneratorOpen]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filter, gstFilter, sortOption]);
+
+  const handleDeleteInvoice = async (event, invoiceId) => {
+    event.stopPropagation();
+    if (!window.confirm('Are you sure you want to permanently delete this cash invoice? This cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('cash_invoices')
+        .delete()
+        .eq('id', invoiceId);
+      if (error) throw error;
+      setCashInvoices((current) => current.filter((invoice) => invoice?.id !== invoiceId));
+      if (previewInvoice?.id === invoiceId) setPreviewInvoice(null);
+    } catch (error) {
+      window.alert(`Failed to delete cash invoice: ${error?.message || 'Unknown error'}`);
+    }
+  };
+
+  const handleStatusChange = async (invoiceId, newStatus) => {
+    try {
+      const { error } = await supabase
+        .from('cash_invoices')
+        .update({ status: newStatus })
+        .eq('id', invoiceId);
+      if (error) throw error;
+
+      setCashInvoices((current) =>
+        current.map((invoice) =>
+          invoice?.id === invoiceId ? { ...invoice, status: newStatus } : invoice
+        )
+      );
+    } catch (error) {
+      window.alert(`Failed to update status: ${error?.message || 'Unknown error'}`);
+    }
+  };
+
+  const handleLockResolvedCosts = async (invoice) => {
+    if (!invoice?.id) {
+      throw new Error('Cash invoice ID is missing.');
+    }
+
+    const items = Array.isArray(invoice?.items) ? invoice.items : [];
+    const currentBreakdown = buildCashProfitBreakdown(
+      invoice,
+      safeInventory
+    );
+
+    const rowsByIndex = new Map(
+      currentBreakdown.rows.map((row) => [row.itemIndex, row])
+    );
+
+    const capturedAt = new Date().toISOString();
+    let lockedCount = 0;
+
+    const nextItems = items.map((item, itemIndex) => {
+      const row = rowsByIndex.get(itemIndex);
+
+      if (
+        !row ||
+        !row.canLockCurrentCost ||
+        row.needsReview ||
+        row.costPrice === null
+      ) {
+        return item;
+      }
+
+      lockedCount += 1;
+
+      return {
+        ...item,
+        sellingPriceSnapshot: row.sellPrice,
+        lineRevenueSnapshot: row.revenue,
+        costPriceSnapshot: row.costPrice,
+        costSnapshotItemId: row.itemId || null,
+        inventoryUnitSnapshot: row.inventoryUnit || null,
+        lineCostSnapshot: row.lineCost,
+        lineProfitSnapshot: row.lineProfit,
+        costNeedsReview: false,
+        costReviewReason: null,
+        costSnapshotBasis: 'review_locked_current_cost',
+        costCapturedAt: capturedAt,
+      };
+    });
+
+    if (lockedCount === 0) {
+      return {
+        updatedInvoice: invoice,
+        lockedCount: 0,
+        remainingCount: currentBreakdown.unresolvedRows.length,
+      };
+    }
+
+    const recalculationInvoice = {
+      ...invoice,
+      items: nextItems,
+      gross_profit: null,
+      cost_total: null,
+      gross_margin_pct: null,
+      profit_missing_cost_count: 0,
+    };
+
+    const nextBreakdown = buildCashProfitBreakdown(
+      recalculationInvoice,
+      safeInventory
+    );
+
+    const remainingCount = nextBreakdown.unresolvedRows.length;
+
+    const payload = {
+      items: nextItems,
+      cost_total:
+        remainingCount === 0
+          ? nextBreakdown.knownCostTotal
+          : null,
+      gross_profit:
+        remainingCount === 0
+          ? nextBreakdown.calculatedProfit
+          : null,
+      gross_margin_pct:
+        remainingCount === 0
+          ? nextBreakdown.calculatedMarginPct
+          : null,
+      profit_basis: String(invoice?.profit_basis || '').startsWith('legacy')
+        ? 'legacy_backfill_resolved_current_cost'
+        : 'post_cash_invoice_cost_resolution',
+
+      // Post-hoc historical reconstruction remains marked estimated for audit.
+      profit_is_estimated: true,
+      profit_missing_cost_count: remainingCount,
+      profit_locked_at: remainingCount === 0 ? capturedAt : null,
+    };
+
+    const { error } = await supabase
+      .from('cash_invoices')
+      .update(payload)
+      .eq('id', invoice.id);
+
+    if (error) throw error;
+
+    const updatedInvoice = {
+      ...invoice,
+      ...payload,
+    };
+
+    setCashInvoices((current) =>
+      current.map((entry) =>
+        entry?.id === invoice.id ? updatedInvoice : entry
+      )
+    );
+
+    setProfitBreakdownInvoice(updatedInvoice);
+
+    return {
+      updatedInvoice,
+      lockedCount,
+      remainingCount,
+    };
+  };
+
+  const filteredInvoices = useMemo(() => {
+    let result = [...cashInvoices];
+
+    if (searchTerm.trim()) {
+      result = result.filter((invoice) => cashInvoiceMatchesSearch(invoice, searchTerm));
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    result = result.filter((invoice) => {
+      if (gstFilter === 'With GST' && invoice?.includeGst === false) return false;
+      if (gstFilter === 'No GST' && invoice?.includeGst !== false) return false;
+      if (filter === 'All') return true;
+
+      const [year, month, day] = String(invoice?.date || '').split('-').map(Number);
+      if (!year || !month || !day) return false;
+      const invoiceDate = new Date(year, month - 1, day);
+      if (Number.isNaN(invoiceDate.getTime())) return false;
+      invoiceDate.setHours(0, 0, 0, 0);
+
+      if (filter === 'Today') return invoiceDate.getTime() === today.getTime();
+      if (filter === 'This Week') {
+        const diffDays = Math.ceil(
+          Math.abs(today - invoiceDate) / (1000 * 60 * 60 * 24)
+        );
+        return diffDays <= 7;
+      }
+      if (filter === 'This Month') {
+        return (
+          invoiceDate.getMonth() === today.getMonth() &&
+          invoiceDate.getFullYear() === today.getFullYear()
+        );
+      }
+      return true;
+    });
+
+    result.sort((left, right) => {
+      const dateA = new Date(left?.date || 0).getTime() || 0;
+      const dateB = new Date(right?.date || 0).getTime() || 0;
+      const numberA = String(left?.number || left?.id || '');
+      const numberB = String(right?.number || right?.id || '');
+      const totalA = Number(left?.total) || 0;
+      const totalB = Number(right?.total) || 0;
+      const profitA = calculateCashProfit(left, safeInventory);
+      const profitB = calculateCashProfit(right, safeInventory);
+      const customerA = String(left?.customer || '');
+      const customerB = String(right?.customer || '');
+
+      switch (sortOption) {
+        case 'date_asc':
+          return dateA - dateB;
+        case 'number_desc':
+          return numberB.localeCompare(numberA, undefined, { numeric: true });
+        case 'number_asc':
+          return numberA.localeCompare(numberB, undefined, { numeric: true });
+        case 'total_desc':
+          return totalB - totalA;
+        case 'total_asc':
+          return totalA - totalB;
+        case 'profit_desc':
+          return (
+            (profitB ?? Number.NEGATIVE_INFINITY) -
+            (profitA ?? Number.NEGATIVE_INFINITY)
+          );
+        case 'profit_asc':
+          return (
+            (profitA ?? Number.POSITIVE_INFINITY) -
+            (profitB ?? Number.POSITIVE_INFINITY)
+          );
+        case 'customer_asc':
+          return customerA.localeCompare(customerB);
+        case 'customer_desc':
+          return customerB.localeCompare(customerA);
+        case 'date_desc':
+        default:
+          return dateB - dateA;
+      }
+    });
+
+    return result;
+  }, [cashInvoices, filter, gstFilter, safeInventory, searchTerm, sortOption]);
+
+  const totalPages = Math.ceil(filteredInvoices.length / ITEMS_PER_PAGE) || 1;
+  const paginatedInvoices = filteredInvoices.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
   );
-  const displayName = selectedCustomer ? getCustomerName(selectedCustomer) : '';
-  const searchLower = String(searchTerm).trim().toLowerCase();
 
-  const filteredCustomers = safeCustomers.filter((customer) => {
-    if (!customer) return false;
-    if (!searchLower) return true;
+  const cashSummary = useMemo(() => {
+    return filteredInvoices.reduce(
+      (summary, invoice) => {
+        summary.totalAmount += Number(invoice?.total) || 0;
 
-    const searchable = [
-      getCustomerName(customer),
-      getCustomerAddress(customer),
-      getCustomerPhone(customer),
-      getCustomerCode(customer),
-    ]
-      .filter(Boolean)
-      .join(' ')
-      .toLowerCase();
+        const profitInfo = getCashProfitInfo(invoice, safeInventory);
 
-    return searchable.includes(searchLower);
-  });
+        if (profitInfo.profit !== null) {
+          summary.totalProfit += profitInfo.profit;
+          summary.profitInvoiceCount += 1;
+        }
+
+        if (profitInfo.needsReview) {
+          summary.profitReviewCount += 1;
+        }
+
+        if (profitInfo.isEstimated) {
+          summary.estimatedProfitCount += 1;
+        }
+
+        if ((invoice?.status || 'Unpaid') === 'Unpaid') {
+          summary.unpaidCount += 1;
+        }
+
+        if (invoice?.includeGst !== false) {
+          summary.gstCount += 1;
+        }
+
+        return summary;
+      },
+      {
+        totalAmount: 0,
+        totalProfit: 0,
+        profitInvoiceCount: 0,
+        profitReviewCount: 0,
+        estimatedProfitCount: 0,
+        unpaidCount: 0,
+        gstCount: 0,
+      }
+    );
+  }, [filteredInvoices, safeInventory]);
+
+  const hasActiveFilters =
+    searchTerm.trim() !== '' ||
+    filter !== 'All' ||
+    gstFilter !== 'All' ||
+    sortOption !== 'number_desc';
+
+  const clearAllFilters = () => {
+    setSearchTerm('');
+    setFilter('All');
+    setGstFilter('All');
+    setSortOption('number_desc');
+    setCurrentPage(1);
+  };
+
+  const closeGenerator = () => {
+    setIsGeneratorOpen(false);
+    setEditingInvoice(null);
+  };
 
   return (
-    <div className="relative w-full text-left" ref={dropdownRef}>
-      {!isOpen ? (
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => {
-            setIsOpen(true);
-            setSearchTerm('');
-          }}
-          className={`mt-1 w-full border border-transparent bg-transparent p-0 text-left text-lg font-black leading-6 transition-colors focus:outline-none ${
-            displayName ? 'text-slate-900' : 'text-slate-400'
-          } ${
-            disabled
-              ? 'cursor-not-allowed opacity-70'
-              : 'cursor-pointer hover:text-blue-600'
-          }`}
-        >
-          {displayName || 'Select Entity...'}
-        </button>
-      ) : (
-        <div className="absolute left-0 top-8 z-[5000] w-[390px] max-w-[80vw] overflow-hidden rounded-xl border border-slate-300 bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-100">
-          <div className="flex items-center border-b border-slate-200 bg-slate-50 p-3">
-            <Search size={16} className="ml-1 mr-2 shrink-0 text-slate-400" />
-            <input
-              autoFocus
-              type="text"
-              className="w-full border-none bg-transparent p-1 text-sm font-bold text-slate-800 outline-none placeholder:text-slate-400 focus:ring-0"
-              placeholder="Name, address, phone or customer code..."
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-            />
+    <div className="relative h-full overflow-y-auto p-8 print:overflow-visible print:p-0">
+      <div className={previewInvoice || isGeneratorOpen ? 'print:hidden' : 'block'}>
+        <div className="mb-8 flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+          <div className="flex items-center">
+            <div className="mr-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 ring-1 ring-emerald-100">
+              <WalletCards className="text-emerald-600" size={24} />
+            </div>
+            <div>
+              <h1 className="text-2xl font-semibold text-slate-900">Cash History</h1>
+              <p className="mt-1 text-sm text-slate-500">
+                Create, review, edit and manage cash invoices separately from your normal invoice ledger.
+              </p>
+            </div>
           </div>
-          <div className="max-h-72 overflow-y-auto">
-            {filteredCustomers.length > 0 ? (
-              filteredCustomers.map((customer) => {
-                const name = getCustomerName(customer) || 'Unnamed customer';
-                const address = getCustomerAddress(customer);
-                const phone = getCustomerPhone(customer);
 
-                return (
-                  <button
-                    key={customer.id}
-                    type="button"
-                    className="w-full border-b border-slate-100 px-4 py-3 text-left transition-colors last:border-0 hover:bg-blue-50"
-                    onClick={() => {
-                      onChange(customer.id);
-                      setIsOpen(false);
-                    }}
-                  >
-                    <p className="text-sm font-bold text-slate-800">{name}</p>
-                    {(address || phone) && (
-                      <p className="mt-1 line-clamp-2 text-[11px] font-medium leading-4 text-slate-400">
-                        {[address, phone].filter(Boolean).join(' • ')}
-                      </p>
-                    )}
-                  </button>
-                );
-              })
-            ) : (
-              <div className="p-4 text-center text-sm font-medium text-slate-400">
-                No customers found.
-              </div>
-            )}
-          </div>
+          <button
+            className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-6 py-3 font-medium text-white shadow-lg shadow-emerald-600/20 transition-all hover:-translate-y-0.5 hover:bg-emerald-700 hover:shadow-xl active:translate-y-0"
+            onClick={() => {
+              setEditingInvoice(null);
+              setIsGeneratorOpen(true);
+            }}
+            type="button"
+          >
+            <Plus className="mr-2" size={18} />
+            New Cash Invoice
+          </button>
         </div>
+
+        {loadError && (
+          <div className="mb-5 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+            <AlertCircle size={18} className="mt-0.5 shrink-0" />
+            <div className="flex-1">
+              <p>Unable to load Cash records.</p>
+              <p className="mt-1 text-xs font-medium text-red-500">{loadError}</p>
+            </div>
+            <button type="button" onClick={fetchCashInvoices} className="rounded-lg bg-white px-3 py-1.5 text-xs font-black uppercase shadow-sm">
+              Retry
+            </button>
+          </div>
+        )}
+
+        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <SummaryCard label="Cash Invoices" value={filteredInvoices.length} icon={<FileText size={20} />} />
+          <SummaryCard label="Cash Value" value={`$${formatMoney(cashSummary.totalAmount)}`} icon={<DollarSign size={20} />} tone="indigo" />
+          <SummaryCard
+            label="Gross Profit"
+            value={`$${formatMoney(cashSummary.totalProfit)}`}
+            icon={<TrendingUp size={20} />}
+            tone="emerald"
+            subtext={
+              cashSummary.profitReviewCount > 0
+                ? `${cashSummary.profitReviewCount} cash invoice${cashSummary.profitReviewCount === 1 ? '' : 's'} need cost review`
+                : cashSummary.estimatedProfitCount > 0
+                  ? `${cashSummary.estimatedProfitCount} estimate${cashSummary.estimatedProfitCount === 1 ? '' : 's'} included`
+                  : 'Uses locked historical cost snapshots'
+            }
+          />
+          <SummaryCard label="GST Applied" value={cashSummary.gstCount} subtext={`${cashSummary.unpaidCount} unpaid in current view`} icon={<WalletCards size={20} />} tone="amber" />
+        </div>
+
+        <div className="flex flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <div className="shrink-0 border-b border-slate-200 bg-slate-50/80 p-4 sm:p-5">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-bold text-slate-800">Find a cash invoice</p>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Search by customer, cash number, SKU or product description.
+                </p>
+              </div>
+
+              {hasActiveFilters && (
+                <button type="button" onClick={clearAllFilters} className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 shadow-sm hover:bg-slate-100">
+                  <RotateCcw size={14} className="mr-1.5" /> Reset filters
+                </button>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex w-full overflow-x-auto rounded-xl border border-slate-200 bg-white p-1 shadow-sm xl:w-auto">
+                {['All', 'Today', 'This Week', 'This Month'].map((option) => (
+                  <button key={option} type="button" onClick={() => setFilter(option)} className={`whitespace-nowrap rounded-lg px-4 py-2 text-[11px] font-black uppercase tracking-wide transition-all ${filter === option ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'}`}>
+                    {option}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex w-full flex-wrap items-center gap-3 xl:w-auto">
+                <div className="relative flex w-full items-center rounded-xl border bg-white px-3 py-2 shadow-sm sm:w-40">
+                  <WalletCards className="mr-2 shrink-0 text-slate-400" size={16} />
+                  <select className="w-full cursor-pointer appearance-none bg-transparent text-xs font-bold text-slate-700 outline-none" value={gstFilter} onChange={(event) => setGstFilter(event.target.value)}>
+                    <option value="All">All GST</option>
+                    <option value="With GST">With GST</option>
+                    <option value="No GST">No GST</option>
+                  </select>
+                </div>
+
+                <div className="relative flex w-full items-center rounded-xl border bg-white px-3 py-2 shadow-sm sm:w-52">
+                  <ArrowUpDown className="mr-2 shrink-0 text-slate-400" size={16} />
+                  <select className="w-full cursor-pointer appearance-none bg-transparent text-xs font-bold text-slate-700 outline-none" value={sortOption} onChange={(event) => setSortOption(event.target.value)}>
+                    <option value="number_desc">Cash No. (Highest)</option>
+                    <option value="number_asc">Cash No. (Lowest)</option>
+                    <option value="date_desc">Date (Newest First)</option>
+                    <option value="date_asc">Date (Oldest First)</option>
+                    <option value="total_desc">Amount (Highest)</option>
+                    <option value="total_asc">Amount (Lowest)</option>
+                    <option value="profit_desc">Profit (Highest)</option>
+                    <option value="profit_asc">Profit (Lowest)</option>
+                    <option value="customer_asc">Customer (A-Z)</option>
+                    <option value="customer_desc">Customer (Z-A)</option>
+                  </select>
+                </div>
+
+                <div className="flex w-full items-center rounded-xl border border-slate-200 bg-white px-4 py-2 shadow-sm focus-within:border-emerald-300 focus-within:ring-4 focus-within:ring-emerald-100 sm:w-80">
+                  <Search className="mr-2 shrink-0 text-slate-400" size={16} />
+                  <input type="text" placeholder="Customer, C-number, SKU or product..." className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400" value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} />
+                  {searchTerm && (
+                    <button type="button" onClick={() => setSearchTerm('')} className="ml-2 rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Clear search">
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-x-auto">
+            <table className="min-w-[980px] w-full border-collapse text-left">
+              <thead className="sticky top-0 z-10 bg-white/95 backdrop-blur">
+                <tr className="border-b border-slate-200 text-xs font-semibold uppercase tracking-widest text-slate-500">
+                  <th className="p-5 pl-8">Cash No.</th>
+                  <th className="p-5">Date</th>
+                  <th className="p-5">Customer</th>
+                  <th className="p-5 text-center">GST</th>
+                  <th className="p-5 text-right">Total</th>
+                  <th className="p-5 text-right">Profit</th>
+                  <th className="p-5 text-center">Status</th>
+                  <th className="w-20 p-5 text-center">Delete</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-sm">
+                {isLoading ? (
+                  <tr><td colSpan="8" className="px-6 py-16 text-center text-sm font-bold text-slate-400">Loading cash invoices…</td></tr>
+                ) : paginatedInvoices.length > 0 ? (
+                  paginatedInvoices.map((invoice) => {
+                    const profitInfo = getCashProfitInfo(invoice, safeInventory);
+                    const profit = profitInfo.profit;
+                    const hasGst = invoice?.includeGst !== false;
+                    return (
+                      <tr key={invoice?.id} className="group cursor-pointer transition-all hover:bg-emerald-50/60" onClick={() => setPreviewInvoice(invoice)}>
+                        <td className="whitespace-nowrap p-5 pl-8 font-mono font-bold text-emerald-700">
+                          {String(invoice?.number || invoice?.id || '')}
+                          {invoice?.isSpecialFormat && <span className="ml-2 inline-flex items-center rounded border border-purple-200 bg-purple-100 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-purple-700"><ScanBarcode size={8} className="mr-0.5" /> Spec</span>}
+                        </td>
+                        <td className="whitespace-nowrap p-5 text-slate-500">{String(invoice?.date || '')}</td>
+                        <td className="whitespace-nowrap p-5 font-medium text-slate-800">{String(invoice?.customer || '')}</td>
+                        <td className="p-5 text-center">
+                          <span className={`whitespace-nowrap rounded-md border px-2 py-1 text-xs font-bold ${hasGst ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-100 text-slate-500'}`}>
+                            {hasGst ? 'GST 9%' : 'No GST'}
+                          </span>
+                        </td>
+                        <td className="whitespace-nowrap p-5 text-right font-black text-slate-900">${formatMoney(invoice?.total)}</td>
+                        <td
+                          className="whitespace-nowrap p-3 text-right"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => setProfitBreakdownInvoice(invoice)}
+                            className={`group/profit inline-flex min-w-[118px] flex-col items-end rounded-xl border px-3 py-2 text-right transition-all ${
+                              profit === null
+                                ? 'border-amber-200 bg-amber-50 hover:border-amber-300 hover:bg-amber-100'
+                                : profitInfo.source === 'current_cost_estimate'
+                                  ? 'border-blue-200 bg-blue-50 hover:border-blue-300 hover:bg-blue-100'
+                                  : 'border-transparent hover:border-emerald-200 hover:bg-emerald-50'
+                            }`}
+                            title="Click to view item-by-item cash profit breakdown"
+                          >
+                            {profit === null ? (
+                              <>
+                                <span className="flex items-center text-xs font-black text-amber-700">
+                                  <AlertCircle size={12} className="mr-1.5" />
+                                  NEEDS COST
+                                </span>
+                                <span className="mt-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-600">
+                                  {profitInfo.missingCostCount > 0
+                                    ? `${profitInfo.missingCostCount} item${profitInfo.missingCostCount === 1 ? '' : 's'}`
+                                    : 'Review'}
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="flex items-center font-black text-emerald-600">
+                                  ${formatMoney(profit)}
+                                  <Calculator
+                                    size={12}
+                                    className="ml-1.5 opacity-40 transition-opacity group-hover/profit:opacity-100"
+                                  />
+                                </span>
+                                <span
+                                  className={`mt-0.5 text-[9px] font-black uppercase tracking-wider ${
+                                    profitInfo.source === 'current_cost_estimate'
+                                      ? 'text-blue-600'
+                                      : profitInfo.isEstimated
+                                        ? 'text-amber-500'
+                                        : 'text-slate-400'
+                                  }`}
+                                >
+                                  {profitInfo.source === 'current_cost_estimate'
+                                    ? 'Current estimate'
+                                    : profitInfo.isEstimated
+                                      ? 'Legacy estimate'
+                                      : 'Locked'}
+                                </span>
+                              </>
+                            )}
+                          </button>
+                        </td>
+                        <td className="p-5 text-center">
+                          <div className="relative inline-flex items-center" onClick={(event) => event.stopPropagation()}>
+                            <select value={invoice?.status || 'Unpaid'} onChange={(event) => handleStatusChange(invoice.id, event.target.value)} className={`appearance-none cursor-pointer rounded-lg py-1.5 pl-8 pr-8 text-[10px] font-black uppercase tracking-widest outline-none ${(invoice?.status || 'Unpaid') === 'Paid' ? 'border border-emerald-200 bg-emerald-100 text-emerald-700' : 'border border-orange-200 bg-orange-100 text-orange-700'}`}>
+                              <option value="Paid">PAID</option>
+                              <option value="Unpaid">UNPAID</option>
+                            </select>
+                            <div className="pointer-events-none absolute left-2.5">{(invoice?.status || 'Unpaid') === 'Paid' ? <CheckCircle size={12} className="text-emerald-600" /> : <AlertCircle size={12} className="text-orange-600" />}</div>
+                            <ChevronDown size={12} className="pointer-events-none absolute right-2.5 text-slate-500" />
+                          </div>
+                        </td>
+                        <td className="p-5 text-center">
+                          <button type="button" onClick={(event) => handleDeleteInvoice(event, invoice?.id)} className="rounded-lg p-2 text-slate-300 transition-all hover:bg-red-50 hover:text-red-600" aria-label={`Delete ${invoice?.number || 'cash invoice'}`}>
+                            <Trash2 size={18} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan="8" className="px-6 py-16 text-center">
+                      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-400"><Search size={24} /></div>
+                      <p className="mt-4 text-sm font-bold text-slate-700">No matching cash invoices</p>
+                      <p className="mt-1 text-xs text-slate-500">Try a different customer, cash number, SKU, product description, date range or GST filter.</p>
+                      {hasActiveFilters && <button type="button" onClick={clearAllFilters} className="mt-4 inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 shadow-sm hover:bg-slate-50"><RotateCcw size={14} className="mr-1.5" /> Clear filters</button>}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {totalPages > 1 && (
+            <div className="flex shrink-0 flex-col gap-4 border-t border-slate-100 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+              <span className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1} to {Math.min(currentPage * ITEMS_PER_PAGE, filteredInvoices.length)} of {filteredInvoices.length} cash invoices
+              </span>
+              <div className="flex items-center space-x-2">
+                <button type="button" onClick={() => setCurrentPage((page) => Math.max(page - 1, 1))} disabled={currentPage === 1} className="flex items-center rounded-lg border border-slate-200 px-4 py-2 text-xs font-bold text-slate-600 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"><ChevronLeft size={16} className="mr-1" /> Prev</button>
+                <div className="px-4 text-xs font-black uppercase tracking-widest text-slate-700">Page {currentPage} of {totalPages}</div>
+                <button type="button" onClick={() => setCurrentPage((page) => Math.min(page + 1, totalPages))} disabled={currentPage === totalPages} className="flex items-center rounded-lg border border-slate-200 px-4 py-2 text-xs font-bold text-slate-600 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next <ChevronRight size={16} className="ml-1" /></button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {profitBreakdownInvoice && (
+        <CashProfitBreakdownModal
+          invoice={profitBreakdownInvoice}
+          inventory={safeInventory}
+          onClose={() => setProfitBreakdownInvoice(null)}
+          onLockResolvedCosts={handleLockResolvedCosts}
+          onViewInvoice={(invoice) => {
+            setProfitBreakdownInvoice(null);
+            setPreviewInvoice(invoice);
+          }}
+        />
+      )}
+
+      {previewInvoice && (
+        <CashPreviewModal
+          invoice={previewInvoice}
+          onClose={() => setPreviewInvoice(null)}
+          sys={sys}
+          onEdit={(invoice) => {
+            setEditingInvoice(invoice);
+            setIsGeneratorOpen(true);
+            setPreviewInvoice(null);
+          }}
+        />
+      )}
+
+      {isGeneratorOpen && (
+        <CashGenerator
+          sys={sys}
+          groups={pricingGroups}
+          setGroups={setPricingGroups}
+          cashInvoices={cashInvoices}
+          setCashInvoices={setCashInvoices}
+          existingInvoice={editingInvoice}
+          onClose={closeGenerator}
+        />
       )}
     </div>
   );
 }
 
-export function CashGenerator({
-  sys,
-  groups,
-  setGroups,
-  cashInvoices,
-  setCashInvoices,
-  existingInvoice = null,
-  onClose,
-}) {
-  const todayString = getTodayString();
-
-  const [invoiceDate, setInvoiceDate] = useState(
-    existingInvoice ? String(existingInvoice.date || '') : todayString
-  );
-  const [customerId, setCustomerId] = useState(existingInvoice?.customerId || '');
-  const [isAutofillEnabled, setIsAutofillEnabled] = useState(false);
-  const [invoiceStatus] = useState(existingInvoice?.status || 'Unpaid');
-  const [isSpecialFormat, setIsSpecialFormat] = useState(
-    existingInvoice?.isSpecialFormat || false
-  );
-  const [poNumber, setPoNumber] = useState(existingInvoice?.poNumber || '');
-  const [carPlateNo, setCarPlateNo] = useState(existingInvoice?.carPlateNo || '');
-  const [invoiceRemarks, setInvoiceRemarks] = useState(existingInvoice?.remarks || '');
-  const [isRemarkModalOpen, setIsRemarkModalOpen] = useState(false);
-  const [isParsing, setIsParsing] = useState(false);
-  const [parseText, setParseText] = useState('');
-  const [previewMode, setPreviewMode] = useState(false);
-  const [autoFillNotif, setAutoFillNotif] = useState(false);
-  const [priceModal, setPriceModal] = useState(null);
-  const [pendingCustomerChange, setPendingCustomerChange] = useState(null);
-  const [priceRefreshNotice, setPriceRefreshNotice] = useState(null);
-  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
-  const [historySearch, setHistorySearch] = useState('');
-  const [selectedHistoryKeys, setSelectedHistoryKeys] = useState([]);
-  const [isDiscardConfirmOpen, setIsDiscardConfirmOpen] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [invoiceNumberManuallyEdited, setInvoiceNumberManuallyEdited] = useState(false);
-  const [isInvoiceCheckExpanded, setIsInvoiceCheckExpanded] = useState(false);
-
-  const rowRefs = useRef({});
-  const saveLockRef = useRef(false);
-
-  const safeInventory = useMemo(
-    () => (Array.isArray(sys?.inventory) ? sys.inventory : []),
-    [sys?.inventory]
-  );
-  const safeCustomers = useMemo(
-    () => (Array.isArray(sys?.customers) ? sys.customers : []),
-    [sys?.customers]
-  );
-  const safeCashInvoices = useMemo(
-    () => (Array.isArray(cashInvoices) ? cashInvoices : []),
-    [cashInvoices]
-  );
-  const safeGroups = useMemo(
-    () => (Array.isArray(groups) ? groups : []),
-    [groups]
-  );
-
-  const [items, setItems] = useState(() => {
-    if (existingInvoice && Array.isArray(existingInvoice.items)) {
-      return JSON.parse(
-        JSON.stringify(
-          existingInvoice.items.filter(Boolean).map((item) => ({
-            ...item,
-            manualPriceOverride: false,
-          }))
-        )
-      );
-    }
-    return [];
-  });
-
-  const [includeGst, setIncludeGst] = useState(
-    existingInvoice ? existingInvoice?.includeGst !== false : true
-  );
-
-  const customer = safeCustomers.find(
-    (entry) => String(entry?.id || '') === String(customerId || '')
-  );
-
-  const assignedCustomerGroup = customer?.pricing_group_id
-    ? safeGroups.find(
-        (group) => String(group?.id || '') === String(customer.pricing_group_id)
-      )
-    : null;
-
-  const resolvePriceInfo = useCallback(
-    (product, unit = DEFAULT_UNIT, targetCustomer = customer) => {
-      if (!product) {
-        return { price: 0, source: 'missing', label: 'No product' };
-      }
-
-      const resolvedUnit = String(unit || DEFAULT_UNIT);
-      const ruleKey = `${product.id}|${resolvedUnit}`;
-
-      if (
-        targetCustomer?.custom_prices &&
-        typeof targetCustomer.custom_prices === 'object' &&
-        targetCustomer.custom_prices[ruleKey] !== undefined
-      ) {
-        return {
-          price: Number(targetCustomer.custom_prices[ruleKey]) || 0,
-          source: 'customer',
-          label: 'Customer price',
-        };
-      }
-
-      if (targetCustomer?.pricing_group_id) {
-        const group = safeGroups.find(
-          (entry) =>
-            String(entry?.id || '') === String(targetCustomer.pricing_group_id)
-        );
-
-        if (
-          group?.prices &&
-          typeof group.prices === 'object' &&
-          group.prices[ruleKey] !== undefined
-        ) {
-          return {
-            price: Number(group.prices[ruleKey]) || 0,
-            source: 'group',
-            label: `${group.name || 'Group'} price`,
-          };
-        }
-      }
-
-      const price =
-        product.Price || product.unitPrice || product['Unit Price (SG)'] || 0;
-
-      return {
-        price: Number(price) || 0,
-        source: 'global',
-        label: 'Default price',
-      };
-    },
-    [customer, safeGroups]
-  );
-
-  const getSafePrice = useCallback(
-    (product, unit = DEFAULT_UNIT, targetCustomer = customer) =>
-      resolvePriceInfo(product, unit, targetCustomer).price,
-    [customer, resolvePriceInfo]
-  );
-
-
-  const autoInvoiceNumber = useMemo(() => {
-    if (existingInvoice) return String(existingInvoice.number || '');
-
-    const dateMatch = String(invoiceDate || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (!dateMatch) return '';
-
-    const yy = dateMatch[1].slice(-2);
-    const mm = dateMatch[2];
-    const prefix = `C-${yy}${mm}`;
-
-    const monthlyCashInvoices = safeCashInvoices.filter((invoice) =>
-      String(invoice?.number || '').startsWith(prefix)
-    );
-    let maxSequence = 0;
-
-    monthlyCashInvoices.forEach((invoice) => {
-      const seqStr = String(invoice?.number || '').slice(prefix.length);
-      const seqNum = parseInt(seqStr, 10);
-      if (!Number.isNaN(seqNum) && seqNum > maxSequence) {
-        maxSequence = seqNum;
-      }
-    });
-
-    return `${prefix}${String(maxSequence + 1).padStart(3, '0')}`;
-  }, [safeCashInvoices, existingInvoice, invoiceDate]);
-
-  const [invoiceNumber, setInvoiceNumber] = useState(autoInvoiceNumber);
-
-  useEffect(() => {
-    if (existingInvoice || !invoiceNumberManuallyEdited) {
-      setInvoiceNumber(autoInvoiceNumber);
-    }
-  }, [autoInvoiceNumber, existingInvoice, invoiceNumberManuallyEdited]);
-
-  const isDuplicateNumber = useMemo(() => {
-    return safeCashInvoices.some(
-      (invoice) =>
-        String(invoice?.number || '') === String(invoiceNumber) &&
-        invoice?.id !== (existingInvoice ? existingInvoice.id : null)
-    );
-  }, [invoiceNumber, safeCashInvoices, existingInvoice]);
-
-  const cleanDraftItems = useMemo(
-    () => (Array.isArray(items) ? items.filter(Boolean) : []),
-    [items]
-  );
-
-  const subtotal = cleanDraftItems.reduce(
-    (sum, item) =>
-      sum +
-      (Number(item?.qty || item?.quantity) || 0) *
-        (Number(item?.unitPrice) || 0),
-    0
-  );
-  const gst = includeGst ? subtotal * 0.09 : 0;
-  const total = subtotal + gst;
-
-  /**
-   * Snapshot cost at Cash-invoice save time.
-   *
-   * New Cash invoices:
-   *   current inventory cost -> locked item snapshot
-   *
-   * Editing an existing Cash invoice:
-   *   preserve an existing valid snapshot for the same product
-   *   so future inventory price changes cannot rewrite history.
-   */
-  const buildProfitSnapshot = useCallback(
-    (sourceItems) => {
-      const capturedAt = new Date().toISOString();
-
-      const snapshottedItems = (Array.isArray(sourceItems) ? sourceItems : []).map(
-        (item) => {
-          const itemId = String(item?.itemId || '');
-          const product = safeInventory.find(
-            (entry) => String(entry?.id || '') === itemId
-          );
-
-          const qty = Number(item?.qty ?? item?.quantity ?? 0) || 0;
-          const sellingPrice = getItemSellingPrice(item);
-          const lineRevenueSnapshot = qty * sellingPrice;
-
-          const itemUnit = String(getItemUnit(item) || '');
-          const inventoryUnit = product
-            ? String(product?.Unit || product?.unit || DEFAULT_UNIT)
-            : '';
-
-          const previousSnapshotItemId = String(
-            item?.costSnapshotItemId ??
-            item?.cost_snapshot_item_id ??
-            ''
-          );
-
-          const previousSnapshotCost = getSnapshotCost(item);
-
-          const previousSnapshotMatchesProduct =
-            itemId !== '' &&
-            previousSnapshotItemId === itemId &&
-            previousSnapshotCost !== null;
-
-          const inventoryCost = getProductCost(product);
-
-          const costPriceSnapshot = previousSnapshotMatchesProduct
-            ? previousSnapshotCost
-            : inventoryCost;
-
-          const unitMismatch =
-            Boolean(product) &&
-            Boolean(itemUnit) &&
-            Boolean(inventoryUnit) &&
-            itemUnit !== inventoryUnit;
-
-          const missingCost = costPriceSnapshot === null;
-          const costNeedsReview = missingCost || unitMismatch;
-
-          const lineCostSnapshot = costNeedsReview
-            ? null
-            : qty * costPriceSnapshot;
-
-          const lineProfitSnapshot =
-            lineCostSnapshot === null
-              ? null
-              : lineRevenueSnapshot - lineCostSnapshot;
-
-          return {
-            ...item,
-            sellingPriceSnapshot: sellingPrice,
-            lineRevenueSnapshot,
-            costPriceSnapshot,
-            costSnapshotItemId: itemId || null,
-            inventoryUnitSnapshot: inventoryUnit || null,
-            lineCostSnapshot,
-            lineProfitSnapshot,
-            costNeedsReview,
-            costReviewReason: missingCost
-              ? 'Missing inventory cost'
-              : unitMismatch
-                ? `Invoice unit ${itemUnit} differs from inventory unit ${inventoryUnit}`
-                : null,
-            costSnapshotBasis: previousSnapshotMatchesProduct
-              ? String(item?.costSnapshotBasis || 'existing_locked_snapshot')
-              : existingInvoice
-                ? 'cash_invoice_edit_current_cost'
-                : 'cash_invoice_cost_snapshot',
-            costCapturedAt: previousSnapshotMatchesProduct
-              ? item?.costCapturedAt || capturedAt
-              : capturedAt,
-          };
-        }
-      );
-
-      const missingCostCount = snapshottedItems.filter(
-        (item) => item?.costNeedsReview
-      ).length;
-
-      const costTotal =
-        missingCostCount === 0
-          ? snapshottedItems.reduce(
-              (sum, item) => sum + (Number(item?.lineCostSnapshot) || 0),
-              0
-            )
-          : null;
-
-      const grossProfit =
-        costTotal === null ? null : subtotal - costTotal;
-
-      const grossMarginPct =
-        grossProfit === null || subtotal <= 0
-          ? null
-          : (grossProfit / subtotal) * 100;
-
-      return {
-        items: snapshottedItems,
-        costTotal,
-        grossProfit,
-        grossMarginPct,
-        missingCostCount,
-        capturedAt,
-      };
-    },
-    [existingInvoice, safeInventory, subtotal]
-  );
-
-  const customerInvoiceHistory = useMemo(() => {
-    if (!customerId) return [];
-
-    return safeCashInvoices
-      .filter(
-        (invoice) =>
-          String(invoice?.customerId ?? invoice?.customer_id ?? '') ===
-            String(customerId) && isUsableInvoiceHistoryRecord(invoice)
-      )
-      .sort((a, b) => getInvoiceTimestamp(b) - getInvoiceTimestamp(a));
-  }, [customerId, safeCashInvoices]);
-
-  const duplicateRowMap = useMemo(() => {
-    const map = new Map();
-
-    cleanDraftItems.forEach((item, index) => {
-      if (!item?.itemId) return;
-      const key = `${item.itemId}|${getItemUnit(item)}`;
-      const indexes = map.get(key) || [];
-      indexes.push(index);
-      map.set(key, indexes);
-    });
-
-    return map;
-  }, [cleanDraftItems]);
-
-  const invoiceIssues = useMemo(() => {
-    const errors = [];
-    const warnings = [];
-
-    if (!customerId) {
-      errors.push({ message: 'Select a customer before previewing the invoice.' });
-    }
-
-    if (!invoiceDate) {
-      errors.push({ message: 'Invoice date is required.' });
-    }
-
-    if (!String(invoiceNumber || '').trim()) {
-      errors.push({ message: 'Cash invoice number is required.' });
-    } else {
-      const dateMatch = String(invoiceDate || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
-      const expectedPrefix = dateMatch ? `C-${dateMatch[1].slice(-2)}${dateMatch[2]}` : 'C-YYMM';
-      const expectedPattern = /^C-\d{7}$/;
-      if (!expectedPattern.test(String(invoiceNumber))) {
-        errors.push({ message: 'Cash invoice number must follow C-YYMMXXX, for example C-2608001.' });
-      } else if (dateMatch && !String(invoiceNumber).startsWith(expectedPrefix)) {
-        errors.push({ message: `Cash invoice number must start with ${expectedPrefix} for the selected date.` });
-      }
-    }
-
-    if (isDuplicateNumber) {
-      errors.push({ message: 'The cash invoice number already exists.' });
-    }
-
-    if (cleanDraftItems.length === 0) {
-      errors.push({ message: 'Add at least one cash invoice item.' });
-    }
-
-    cleanDraftItems.forEach((item, index) => {
-      const rowNumber = index + 1;
-      const qty = Number(item?.qty || item?.quantity || 0);
-      const unitPrice = Number(item?.unitPrice);
-
-      if (!item?.itemId) {
-        errors.push({
-          rowIndex: index,
-          message: `Row ${rowNumber} does not have a confirmed product.`,
-        });
-      }
-
-      if (!Number.isFinite(qty) || qty <= 0) {
-        errors.push({
-          rowIndex: index,
-          message: `Row ${rowNumber} must have a quantity greater than 0.`,
-        });
-      }
-
-      if (!Number.isFinite(unitPrice) || unitPrice < 0) {
-        errors.push({
-          rowIndex: index,
-          message: `Row ${rowNumber} has an invalid unit price.`,
-        });
-      } else if (unitPrice === 0 && item?.itemId) {
-        warnings.push({
-          rowIndex: index,
-          message: `Row ${rowNumber} has a $0.00 unit price. Confirm this is intentional.`,
-        });
-      }
-    });
-
-    duplicateRowMap.forEach((indexes) => {
-      if (indexes.length > 1) {
-        warnings.push({
-          rowIndex: indexes[1],
-          message: `Rows ${indexes.map((index) => index + 1).join(', ')} contain the same product and unit.`,
-        });
-      }
-    });
-
-    if (isSpecialFormat && !String(poNumber || '').trim()) {
-      warnings.push({ message: 'Special format is enabled but PO Number is blank.' });
-    }
-
-    if (isSpecialFormat && !String(carPlateNo || '').trim()) {
-      warnings.push({ message: 'Special format is enabled but Car Plate No. is blank.' });
-    }
-
-    return { errors, warnings };
-  }, [
-    carPlateNo,
-    cleanDraftItems,
-    customerId,
-    duplicateRowMap,
-    invoiceDate,
-    invoiceNumber,
-    isDuplicateNumber,
-    isSpecialFormat,
-    poNumber,
-  ]);
-
-  const hasUnsavedChanges = useMemo(() => {
-    if (!existingInvoice) {
-      return Boolean(
-        customerId ||
-          cleanDraftItems.length > 0 ||
-          invoiceRemarks ||
-          isSpecialFormat ||
-          poNumber ||
-          carPlateNo ||
-          includeGst !== true ||
-          invoiceDate !== todayString ||
-          (invoiceNumberManuallyEdited && invoiceNumber !== autoInvoiceNumber)
-      );
-    }
-
-    const currentComparable = {
-      date: String(invoiceDate || ''),
-      customerId: String(customerId || ''),
-      includeGst: Boolean(includeGst),
-      isSpecialFormat: Boolean(isSpecialFormat),
-      poNumber: String(poNumber || ''),
-      carPlateNo: String(carPlateNo || ''),
-      remarks: String(invoiceRemarks || ''),
-      number: String(invoiceNumber || ''),
-      items: cleanDraftItems.map((item) => ({
-        itemId: item?.itemId || '',
-        name: item?.name || '',
-        unit: getItemUnit(item),
-        qty: Number(item?.qty || item?.quantity || 0),
-        unitPrice: Number(item?.unitPrice || 0),
-        picked: Boolean(item?.picked),
-      })),
-    };
-
-    const originalComparable = {
-      date: String(existingInvoice?.date || ''),
-      customerId: String(existingInvoice?.customerId || ''),
-      includeGst: existingInvoice?.includeGst !== false,
-      isSpecialFormat: Boolean(existingInvoice?.isSpecialFormat),
-      poNumber: String(existingInvoice?.poNumber || ''),
-      carPlateNo: String(existingInvoice?.carPlateNo || ''),
-      remarks: String(existingInvoice?.remarks || ''),
-      number: String(existingInvoice?.number || ''),
-      items: (Array.isArray(existingInvoice?.items)
-        ? existingInvoice.items.filter(Boolean)
-        : []
-      ).map((item) => ({
-        itemId: item?.itemId || '',
-        name: item?.name || '',
-        unit: getItemUnit(item),
-        qty: Number(item?.qty || item?.quantity || 0),
-        unitPrice: Number(item?.unitPrice || 0),
-        picked: Boolean(item?.picked),
-      })),
-    };
-
-    return JSON.stringify(currentComparable) !== JSON.stringify(originalComparable);
-  }, [
-    autoInvoiceNumber,
-    carPlateNo,
-    cleanDraftItems,
-    customerId,
-    existingInvoice,
-    invoiceDate,
-    invoiceNumber,
-    invoiceNumberManuallyEdited,
-    invoiceRemarks,
-    isSpecialFormat,
-    includeGst,
-    poNumber,
-    todayString,
-  ]);
-
-  useEffect(() => {
-    if (!hasUnsavedChanges) return undefined;
-
-    const handleBeforeUnload = (event) => {
-      event.preventDefault();
-      event.returnValue = '';
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [hasUnsavedChanges]);
-
-  const requestClose = () => {
-    if (hasUnsavedChanges) {
-      setIsDiscardConfirmOpen(true);
-      return;
-    }
-    onClose();
+function SummaryCard({ label, value, icon, tone = 'blue', subtext = 'Matching the current view' }) {
+  const tones = {
+    blue: 'bg-blue-50 text-blue-600',
+    indigo: 'bg-indigo-50 text-indigo-600',
+    emerald: 'bg-emerald-50 text-emerald-600',
+    amber: 'bg-amber-50 text-amber-600',
   };
-
-  const requestCustomerChange = (nextCustomerId) => {
-    if (existingInvoice) return;
-
-    const nextId = String(nextCustomerId || '');
-    if (nextId === String(customerId || '')) return;
-
-    const hasExistingProductRows = cleanDraftItems.some((item) => item?.itemId);
-
-    if (hasExistingProductRows) {
-      setPendingCustomerChange({
-        fromId: customerId,
-        toId: nextId,
-      });
-      return;
-    }
-
-    const nextCustomer = safeCustomers.find(
-      (entry) => String(entry?.id || '') === nextId
-    );
-
-    setCustomerId(nextId);
-    setIncludeGst(getCustomerCashGstDefault(nextCustomer));
-  };
-
-  const applyCustomerChange = (refreshPrices) => {
-    if (!pendingCustomerChange) return;
-
-    const nextCustomer = safeCustomers.find(
-      (entry) =>
-        String(entry?.id || '') === String(pendingCustomerChange.toId || '')
-    );
-
-    let refreshedCount = 0;
-    let preservedManualCount = 0;
-
-    const manualRows = cleanDraftItems.filter((item) => item && !item.isAutoFilled);
-    const nextItems = refreshPrices
-      ? manualRows.map((item) => {
-          if (!item?.itemId) return item;
-
-          if (item.manualPriceOverride) {
-            preservedManualCount += 1;
-            return item;
-          }
-
-          const product = safeInventory.find(
-            (entry) => String(entry?.id || '') === String(item.itemId)
-          );
-          if (!product) return item;
-
-          refreshedCount += 1;
-          return {
-            ...item,
-            unitPrice: getSafePrice(product, getItemUnit(item), nextCustomer),
-            manualPriceOverride: false,
-          };
-        })
-      : manualRows;
-
-    setItems(nextItems);
-    setCustomerId(pendingCustomerChange.toId);
-    setIncludeGst(getCustomerCashGstDefault(nextCustomer));
-    setPendingCustomerChange(null);
-
-    setPriceRefreshNotice(
-      refreshPrices
-        ? `${refreshedCount} price${refreshedCount === 1 ? '' : 's'} refreshed for ${
-            getCustomerName(nextCustomer) || 'the selected customer'
-          }${
-            preservedManualCount > 0
-              ? `; ${preservedManualCount} invoice-only price${
-                  preservedManualCount === 1 ? '' : 's'
-                } kept.`
-              : '.'
-          }`
-        : `Customer changed to ${
-            getCustomerName(nextCustomer) || 'the selected customer'
-          }. Existing manual rows kept their current prices.`
-    );
-  };
-
-  useEffect(() => {
-    if (!priceRefreshNotice) return undefined;
-    const timer = window.setTimeout(() => setPriceRefreshNotice(null), 5000);
-    return () => window.clearTimeout(timer);
-  }, [priceRefreshNotice]);
-
-  // AUTO-PREDICT: preserve manual rows at all times. Only rows added by
-  // Auto-Predict are replaced when the customer or prediction state changes.
-  useEffect(() => {
-    if (existingInvoice) return;
-
-    if (!customerId || !isAutofillEnabled) {
-      setItems((currentItems) =>
-        (Array.isArray(currentItems) ? currentItems : []).filter(
-          (item) => item && !item.isAutoFilled
-        )
-      );
-      setAutoFillNotif(false);
-      return;
-    }
-
-    const history = customerInvoiceHistory;
-
-    if (history.length === 0) {
-      setItems((currentItems) =>
-        (Array.isArray(currentItems) ? currentItems : []).filter(
-          (item) => item && !item.isAutoFilled
-        )
-      );
-      setAutoFillNotif(false);
-      return;
-    }
-
-    const itemStats = {};
-
-    history.forEach((invoice) => {
-      const perInvoice = new Map();
-
-      (Array.isArray(invoice?.items) ? invoice.items.filter(Boolean) : []).forEach(
-        (item) => {
-          const itemId = item?.itemId;
-          if (!itemId) return;
-
-          const unit = getItemUnit(item);
-          const key = `${itemId}|${unit}`;
-          const currentQty = perInvoice.get(key) || 0;
-          perInvoice.set(key, currentQty + (Number(item?.qty || item?.quantity) || 0));
-        }
-      );
-
-      perInvoice.forEach((invoiceQty, key) => {
-        const separatorIndex = key.indexOf('|');
-        const itemId = key.slice(0, separatorIndex);
-        const unit = key.slice(separatorIndex + 1);
-
-        if (!itemStats[key]) {
-          itemStats[key] = {
-            itemId,
-            unit,
-            invoiceCount: 0,
-            totalQty: 0,
-          };
-        }
-
-        itemStats[key].invoiceCount += 1;
-        itemStats[key].totalQty += invoiceQty;
-      });
-    });
-
-    setItems((currentItems) => {
-      const manualRows = (Array.isArray(currentItems) ? currentItems : []).filter(
-        (item) => item && !item.isAutoFilled
-      );
-      const manualKeys = new Set(
-        manualRows
-          .filter((item) => item?.itemId)
-          .map((item) => `${item.itemId}|${getItemUnit(item)}`)
-      );
-
-      const autoFilled = [];
-
-      Object.entries(itemStats).forEach(([key, stats]) => {
-        if (stats.invoiceCount / history.length < 0.9 || manualKeys.has(key)) {
-          return;
-        }
-
-        const product = safeInventory.find(
-          (entry) => String(entry?.id || '') === String(stats.itemId)
-        );
-        if (!product) return;
-
-        autoFilled.push({
-          itemId: stats.itemId,
-          name: getProductName(product),
-          unit: stats.unit || getItemUnit(product),
-          qty: Math.max(1, Math.round(stats.totalQty / stats.invoiceCount)),
-          unitPrice: getSafePrice(product, stats.unit || getItemUnit(product)),
-          picked: false,
-          isAutoFilled: true,
-          suggestions: [],
-          manualPriceOverride: false,
-        });
-      });
-
-      if (autoFilled.length > 0) {
-        setAutoFillNotif(true);
-        return [...manualRows, ...autoFilled];
-      }
-
-      setAutoFillNotif(false);
-      return manualRows;
-    });
-  }, [
-    customerId,
-    customerInvoiceHistory,
-    existingInvoice,
-    getSafePrice,
-    isAutofillEnabled,
-    safeInventory,
-  ]);
-
-  useEffect(() => {
-    if (!autoFillNotif) return undefined;
-    const timer = window.setTimeout(() => setAutoFillNotif(false), 4000);
-    return () => window.clearTimeout(timer);
-  }, [autoFillNotif]);
-
-  const suggestions = useMemo(() => {
-    if (!customerId || customerInvoiceHistory.length === 0) return [];
-
-    const counts = {};
-
-    customerInvoiceHistory.forEach((invoice) => {
-      const invoiceKeys = new Set();
-
-      (Array.isArray(invoice?.items) ? invoice.items.filter(Boolean) : []).forEach(
-        (item) => {
-          if (!item?.itemId) return;
-          invoiceKeys.add(`${item.itemId}|${getItemUnit(item)}`);
-        }
-      );
-
-      invoiceKeys.forEach((key) => {
-        counts[key] = (counts[key] || 0) + 1;
-      });
-    });
-
-    const existingKeys = new Set(
-      cleanDraftItems
-        .filter((item) => item?.itemId)
-        .map((item) => `${item.itemId}|${getItemUnit(item)}`)
-    );
-
-    return Object.entries(counts)
-      .filter(([, count]) => {
-        const confidence = count / customerInvoiceHistory.length;
-        return confidence >= 0.3 && confidence < 0.9;
-      })
-      .map(([key]) => {
-        const separatorIndex = key.indexOf('|');
-        const itemId = key.slice(0, separatorIndex);
-        const unit = key.slice(separatorIndex + 1);
-        const product = safeInventory.find(
-          (entry) => String(entry?.id || '') === String(itemId)
-        );
-        return product ? { product, unit, key } : null;
-      })
-      .filter((entry) => entry && !existingKeys.has(entry.key));
-  }, [
-    cleanDraftItems,
-    customerId,
-    customerInvoiceHistory,
-    safeInventory,
-  ]);
-
-  const persistLearnedPhrase = useCallback(
-    async (product, phrase, delta) => {
-      if (!product || !phrase || !delta) return;
-
-      const normalised = normalisePhrase(phrase);
-      if (!normalised) return;
-
-      const currentMap =
-        product.learned_phrases && typeof product.learned_phrases === 'object'
-          ? { ...product.learned_phrases }
-          : {};
-      const nextValue = Math.max(0, (Number(currentMap[normalised]) || 0) + delta);
-
-      if (nextValue === 0) delete currentMap[normalised];
-      else currentMap[normalised] = nextValue;
-
-      try {
-        const productId = String(product?.id || '');
-        const isUUID = productId.length === 36 && productId.includes('-');
-        let error;
-
-        if (isUUID) {
-          ({ error } = await supabase
-            .from('product_list')
-            .update({ learned_phrases: currentMap })
-            .eq('id', productId));
-        } else {
-          ({ error } = await supabase
-            .from('product_list')
-            .update({ learned_phrases: currentMap })
-            .eq('Name', getProductName(product)));
-        }
-
-        if (error) throw error;
-
-        if (typeof sys?.setInventory === 'function') {
-          sys.setInventory(
-            safeInventory.map((entry) =>
-              String(entry?.id || '') === String(product?.id || '')
-                ? { ...entry, learned_phrases: currentMap }
-                : entry
-            )
-          );
-        }
-      } catch (error) {
-        // Learning is deliberately non-blocking. A failure here should never
-        // prevent invoice entry or saving.
-        console.warn('Unable to update learned product phrase:', error);
-      }
-    },
-    [safeInventory, sys]
-  );
-
-  const learnFromCorrection = useCallback(
-    (rawPhrase, selectedId, previousPredictedId) => {
-      const phrase = normalisePhrase(rawPhrase);
-      if (!phrase || !selectedId) return;
-
-      const selectedProduct = safeInventory.find(
-        (entry) => String(entry?.id || '') === String(selectedId)
-      );
-      const previousProduct = previousPredictedId
-        ? safeInventory.find(
-            (entry) => String(entry?.id || '') === String(previousPredictedId)
-          )
-        : null;
-
-      if (
-        previousProduct &&
-        String(previousProduct.id) !== String(selectedProduct?.id || '')
-      ) {
-        void persistLearnedPhrase(previousProduct, phrase, -1);
-      }
-
-      if (selectedProduct) {
-        void persistLearnedPhrase(selectedProduct, phrase, 1);
-      }
-    },
-    [persistLearnedPhrase, safeInventory]
-  );
-
-  const handleSmartExtract = () => {
-    const lines = String(parseText || '')
-      .split('\n')
-      .map((line) => line.trim())
-      .filter(Boolean);
-    const nextDraftItems = [...cleanDraftItems];
-
-    lines.forEach((line) => {
-      const { qty, searchText } = extractOrderQuantity(line);
-      const searchString = normalisePhrase(searchText);
-      if (!searchString) return;
-
-      const scoredItems = safeInventory
-        .map((inventoryItem) => {
-          if (!inventoryItem) return { item: null, score: 0 };
-
-          const itemName = getProductName(inventoryItem).toLowerCase();
-          const itemSku = getProductSku(inventoryItem).toLowerCase();
-          const itemDescription = String(
-            inventoryItem?.Description || inventoryItem?.description || ''
-          ).toLowerCase();
-          let score = 0;
-
-          if (itemName === searchString || itemSku === searchString) {
-            score += 50;
-          } else if (
-            itemName.includes(searchString) ||
-            searchString.includes(itemName) ||
-            (itemSku && searchString.includes(itemSku))
-          ) {
-            score += 10;
-          } else if (itemDescription && itemDescription.includes(searchString)) {
-            score += 6;
-          } else {
-            const searchChars = new Set(searchString.replace(/\s/g, '').split(''));
-            if (searchChars.size > 0) {
-              let matchCount = 0;
-              searchChars.forEach((character) => {
-                if (itemName.includes(character)) matchCount += 1;
-              });
-              if (matchCount / searchChars.size >= 0.5) {
-                score += (matchCount / searchChars.size) * 5;
-              }
-            }
-          }
-
-          if (
-            inventoryItem.learned_phrases &&
-            typeof inventoryItem.learned_phrases === 'object' &&
-            inventoryItem.learned_phrases[searchString]
-          ) {
-            score +=
-              (Number(inventoryItem.learned_phrases[searchString]) || 0) * 20;
-          }
-
-          return { item: inventoryItem, score };
-        })
-        .filter((entry) => entry.item !== null)
-        .sort((a, b) => b.score - a.score);
-
-      const bestMatch = scoredItems[0];
-
-      if (bestMatch && bestMatch.score >= 10) {
-        const determinedUnit = getItemUnit(bestMatch.item);
-        nextDraftItems.push({
-          itemId: bestMatch.item.id,
-          name: getProductName(bestMatch.item),
-          unit: determinedUnit,
-          qty,
-          unitPrice: getSafePrice(bestMatch.item, determinedUnit),
-          picked: false,
-          rawSearchString: searchString,
-          originalPredictedId: bestMatch.item.id,
-          suggestions: [],
-          isAutoFilled: true,
-          manualPriceOverride: false,
-        });
-      } else {
-        const topSuggestions = scoredItems
-          .filter((entry) => entry.score > 0)
-          .slice(0, 3)
-          .map((entry) => entry.item);
-
-        nextDraftItems.push({
-          itemId: '',
-          name: '',
-          unit: DEFAULT_UNIT,
-          qty,
-          unitPrice: 0,
-          picked: false,
-          rawSearchString: searchString,
-          originalPredictedId: null,
-          suggestions: topSuggestions,
-          isAutoFilled: true,
-          manualPriceOverride: false,
-        });
-      }
-    });
-
-    setItems(nextDraftItems);
-    setIsParsing(false);
-    setParseText('');
-  };
-
-  const customerHistoryRows = useMemo(() => {
-    const aggregate = new Map();
-
-    customerInvoiceHistory.forEach((invoice) => {
-      const invoiceSeen = new Set();
-      const invoiceTimestamp = getInvoiceTimestamp(invoice);
-
-      (Array.isArray(invoice?.items) ? invoice.items.filter(Boolean) : []).forEach(
-        (item) => {
-          const itemId = item?.itemId;
-          if (!itemId) return;
-
-          const unit = getItemUnit(item);
-          const key = `${itemId}|${unit}`;
-          const product = safeInventory.find(
-            (entry) => String(entry?.id || '') === String(itemId)
-          );
-
-          if (!aggregate.has(key)) {
-            aggregate.set(key, {
-              key,
-              itemId,
-              unit,
-              product,
-              name: product ? getProductName(product) : String(item?.name || itemId),
-              sku: product ? getProductSku(product) : '',
-              orderCount: 0,
-              totalQty: 0,
-              lastDate: '',
-              lastTimestamp: 0,
-              lastInvoice: '',
-              lastQty: 1,
-              lastPrice: Number(item?.unitPrice || 0),
-            });
-          }
-
-          const entry = aggregate.get(key);
-          entry.totalQty += Number(item?.qty || item?.quantity || 0);
-
-          if (!invoiceSeen.has(key)) {
-            entry.orderCount += 1;
-            invoiceSeen.add(key);
-          }
-
-          if (invoiceTimestamp >= entry.lastTimestamp) {
-            entry.lastTimestamp = invoiceTimestamp;
-            entry.lastDate = String(invoice?.date || '');
-            entry.lastInvoice = String(invoice?.number || '');
-            entry.lastQty = Number(item?.qty || item?.quantity || 1) || 1;
-            entry.lastPrice = Number(item?.unitPrice || 0);
-          }
-        }
-      );
-    });
-
-    return Array.from(aggregate.values())
-      .map((entry) => ({
-        ...entry,
-        currentPrice: entry.product
-          ? getSafePrice(entry.product, entry.unit)
-          : entry.lastPrice,
-      }))
-      .sort((a, b) => b.lastTimestamp - a.lastTimestamp);
-  }, [customerInvoiceHistory, getSafePrice, safeInventory]);
-
-  const filteredCustomerHistoryRows = useMemo(() => {
-    const search = String(historySearch || '').trim().toLowerCase();
-    if (!search) return customerHistoryRows;
-
-    return customerHistoryRows.filter((entry) =>
-      [entry.name, entry.sku, entry.unit, entry.lastInvoice]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-        .includes(search)
-    );
-  }, [customerHistoryRows, historySearch]);
-
-  const latestCustomerInvoice = customerInvoiceHistory[0] || null;
-
-  const toggleHistorySelection = (key) => {
-    setSelectedHistoryKeys((current) =>
-      current.includes(key)
-        ? current.filter((entry) => entry !== key)
-        : [...current, key]
-    );
-  };
-
-  const addSelectedHistoryItems = () => {
-    const selectedRows = customerHistoryRows.filter((entry) =>
-      selectedHistoryKeys.includes(entry.key)
-    );
-
-    if (selectedRows.length === 0) return;
-
-    const rowsToAdd = selectedRows.map((entry) => ({
-      itemId: entry.itemId,
-      name: entry.name,
-      unit: entry.unit,
-      qty: 1,
-      unitPrice: entry.currentPrice,
-      picked: false,
-      suggestions: [],
-      isAutoFilled: false,
-      manualPriceOverride: false,
-    }));
-
-    setItems((current) => [
-      ...(Array.isArray(current) ? current.filter(Boolean) : []),
-      ...rowsToAdd,
-    ]);
-    setSelectedHistoryKeys([]);
-    setIsHistoryModalOpen(false);
-  };
-
-  const addLastOrderItems = () => {
-    if (!latestCustomerInvoice) return;
-
-    const rowsToAdd = (Array.isArray(latestCustomerInvoice.items)
-      ? latestCustomerInvoice.items.filter(Boolean)
-      : []
-    ).map((historyItem) => {
-      const product = safeInventory.find(
-        (entry) => String(entry?.id || '') === String(historyItem?.itemId || '')
-      );
-      const unit = getItemUnit(historyItem);
-
-      return {
-        itemId: historyItem?.itemId || '',
-        name: product ? getProductName(product) : String(historyItem?.name || ''),
-        unit,
-        qty: Number(historyItem?.qty || historyItem?.quantity || 1) || 1,
-        unitPrice: product
-          ? getSafePrice(product, unit)
-          : Number(historyItem?.unitPrice || 0),
-        picked: false,
-        suggestions: [],
-        isAutoFilled: false,
-        manualPriceOverride: false,
-      };
-    });
-
-    setItems((current) => [
-      ...(Array.isArray(current) ? current.filter(Boolean) : []),
-      ...rowsToAdd,
-    ]);
-    setIsHistoryModalOpen(false);
-  };
-
-  const mergeDuplicateRow = (rowIndex) => {
-    const row = cleanDraftItems[rowIndex];
-    if (!row?.itemId) return;
-
-    const key = `${row.itemId}|${getItemUnit(row)}`;
-    const indexes = duplicateRowMap.get(key) || [];
-    const targetIndex = indexes.find((index) => index !== rowIndex);
-    if (targetIndex === undefined) return;
-
-    const target = cleanDraftItems[targetIndex];
-    if (Number(target?.unitPrice || 0) !== Number(row?.unitPrice || 0)) {
-      window.alert(
-        'These duplicate rows have different unit prices, so they were not merged automatically.'
-      );
-      return;
-    }
-
-    setItems((current) => {
-      const next = [...(Array.isArray(current) ? current.filter(Boolean) : [])];
-      if (!next[targetIndex] || !next[rowIndex]) return next;
-
-      next[targetIndex] = {
-        ...next[targetIndex],
-        qty:
-          (Number(next[targetIndex].qty || next[targetIndex].quantity) || 0) +
-          (Number(next[rowIndex].qty || next[rowIndex].quantity) || 0),
-      };
-      next.splice(rowIndex, 1);
-      return next;
-    });
-  };
-
-  const scrollToRow = (rowIndex) => {
-    const row = rowRefs.current[rowIndex];
-    if (row?.scrollIntoView) {
-      row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  };
-
-  const handleRegister = async (printAfter = false) => {
-    if (saveLockRef.current) return;
-
-    if (invoiceIssues.errors.length > 0) {
-      window.alert(
-        `Please fix the following before saving:\n\n${invoiceIssues.errors
-          .map((issue) => `• ${issue.message}`)
-          .join('\n')}`
-      );
-      return;
-    }
-
-    saveLockRef.current = true;
-    setIsSaving(true);
-
-    const cleanItems = cleanDraftItems.map((item) => {
-      const {
-        suggestions,
-        originalPredictedId,
-        manualPriceOverride,
-        ...rest
-      } = item;
-      return rest;
-    });
-
-    const finalItems = cleanItems.filter(
-      (item) => item.itemId || item.rawSearchString || item.name
-    );
-
-    const profitSnapshot = buildProfitSnapshot(finalItems);
-
-    const existingProfitBasis = String(existingInvoice?.profit_basis || '');
-    const existingIsEstimated =
-      existingInvoice?.profit_is_estimated === true ||
-      existingProfitBasis.startsWith('legacy');
-
-    const invoice = {
-      id: existingInvoice ? existingInvoice.id : `CASH-${invoiceNumber}`,
-      number: String(invoiceNumber),
-      customerId,
-      customer: String(
-        getCustomerName(customer) || existingInvoice?.customer || 'Unknown Customer'
-      ),
-      region: String(customer?.region || existingInvoice?.region || ''),
-      date: String(invoiceDate),
-
-      // Each line now contains the historical cost snapshot used for profit.
-      items: profitSnapshot.items,
-
-      subtotal,
-      includeGst: Boolean(includeGst),
-      gstAmount: gst,
-      total,
-
-      // Profit excludes GST.
-      cost_total: profitSnapshot.costTotal,
-      gross_profit: profitSnapshot.grossProfit,
-      gross_margin_pct: profitSnapshot.grossMarginPct,
-      profit_basis: existingInvoice
-        ? existingProfitBasis || 'cash_invoice_edit_snapshot'
-        : 'cash_invoice_cost_snapshot',
-      profit_locked_at:
-        profitSnapshot.missingCostCount === 0
-          ? existingInvoice?.profit_locked_at || profitSnapshot.capturedAt
-          : null,
-      profit_is_estimated:
-        existingIsEstimated || profitSnapshot.missingCostCount > 0,
-      profit_missing_cost_count: profitSnapshot.missingCostCount,
-
-      status: invoiceStatus,
-      isSpecialFormat: Boolean(isSpecialFormat),
-      poNumber: poNumber || null,
-      carPlateNo: carPlateNo || null,
-      remarks: invoiceRemarks,
-    };
-
-    try {
-      // Final database-side duplicate check. The in-browser check remains for
-      // immediate feedback, while this reduces the chance of two users saving
-      // the same number at nearly the same time.
-      const { data: duplicateRows, error: duplicateCheckError } = await supabase
-        .from('cash_invoices')
-        .select('id, number')
-        .eq('number', String(invoiceNumber))
-        .limit(5);
-
-      if (duplicateCheckError) {
-        console.warn('Final cash-invoice-number duplicate check failed:', duplicateCheckError);
-      } else {
-        const conflictingInvoice = (Array.isArray(duplicateRows) ? duplicateRows : []).find(
-          (entry) =>
-            String(entry?.id || '') !== String(existingInvoice?.id || '')
-        );
-
-        if (conflictingInvoice) {
-          throw new Error(
-            `Cash invoice number ${invoiceNumber} was just used by another cash invoice. Choose a different number and try again.`
-          );
-        }
-      }
-
-      const { error } = await supabase.from('cash_invoices').upsert([invoice]);
-      if (error) throw error;
-
-      if (existingInvoice) {
-        setCashInvoices(
-          safeCashInvoices.map((entry) =>
-            entry?.id === existingInvoice.id ? invoice : entry
-          )
-        );
-      } else {
-        setCashInvoices([...safeCashInvoices, invoice]);
-      }
-
-      if (printAfter) {
-        window.setTimeout(() => {
-          window.print();
-          onClose();
-        }, 500);
-      } else {
-        onClose();
-      }
-    } catch (error) {
-      window.alert(
-        `CRITICAL ERROR: Failed to save cash invoice to database.\n\n${
-          error?.message || 'Unknown error'
-        }`
-      );
-    } finally {
-      saveLockRef.current = false;
-      setIsSaving(false);
-    }
-  };
-
-  const executePriceSave = async (type, newPriceStr) => {
-    if (!priceModal) return;
-
-    const { index, item, product, assignedGroup } = priceModal;
-    const newPrice = Number(newPriceStr) || 0;
-    const ruleKey = `${product.id}|${item.unit}`;
-
-    try {
-      if (type === 'CUSTOMER') {
-        const updatedCustomPrices = {
-          ...(customer?.custom_prices || {}),
-          [ruleKey]: newPrice,
-        };
-        const { error } = await supabase
-          .from('customers')
-          .update({ custom_prices: updatedCustomPrices })
-          .eq('id', customer.id);
-        if (error) throw error;
-
-        sys.setCustomers(
-          safeCustomers.map((entry) =>
-            entry?.id === customer.id
-              ? { ...entry, custom_prices: updatedCustomPrices }
-              : entry
-          )
-        );
-      } else if (type === 'GROUP' && assignedGroup) {
-        const updatedGroupPrices = {
-          ...(assignedGroup.prices || {}),
-          [ruleKey]: newPrice,
-        };
-        const { error } = await supabase
-          .from('pricing_groups')
-          .update({ prices: updatedGroupPrices })
-          .eq('id', assignedGroup.id);
-        if (error) throw error;
-
-        setGroups(
-          safeGroups.map((group) =>
-            group.id === assignedGroup.id
-              ? { ...group, prices: updatedGroupPrices }
-              : group
-          )
-        );
-      } else if (type === 'GLOBAL') {
-        const productId = String(product?.id || '');
-        const isUUID = productId.length === 36 && productId.includes('-');
-        let dbError;
-
-        if (isUUID) {
-          const { error } = await supabase
-            .from('product_list')
-            .update({ Price: newPrice })
-            .eq('id', product.id);
-          dbError = error;
-        } else {
-          const legacyName = getProductName(product);
-          const { error } = await supabase
-            .from('product_list')
-            .update({ Price: newPrice })
-            .eq('Name', legacyName);
-          dbError = error;
-        }
-
-        if (dbError) throw dbError;
-
-        sys.setInventory(
-          safeInventory.map((entry) =>
-            entry?.id === product.id ? { ...entry, Price: newPrice } : entry
-          )
-        );
-      } else if (type === 'REMOVE_CUSTOMER') {
-        const updatedCustomPrices = { ...(customer?.custom_prices || {}) };
-        delete updatedCustomPrices[ruleKey];
-
-        const { error } = await supabase
-          .from('customers')
-          .update({ custom_prices: updatedCustomPrices })
-          .eq('id', customer.id);
-        if (error) throw error;
-
-        const updatedCustomer = {
-          ...customer,
-          custom_prices: updatedCustomPrices,
-        };
-
-        sys.setCustomers(
-          safeCustomers.map((entry) =>
-            entry?.id === customer.id ? updatedCustomer : entry
-          )
-        );
-
-        // IMPORTANT: calculate the fallback against the updated customer
-        // object, not the stale React customer object that still contains the
-        // removed individual override.
-        const fallbackPrice = getSafePrice(product, item.unit, updatedCustomer);
-
-        const nextItems = [...cleanDraftItems];
-        if (nextItems[index]) {
-          nextItems[index] = {
-            ...nextItems[index],
-            unitPrice: fallbackPrice,
-            manualPriceOverride: false,
-          };
-        }
-        setItems(nextItems);
-        setPriceModal(null);
-        return;
-      }
-
-      const nextItems = [...cleanDraftItems];
-      if (nextItems[index]) {
-        nextItems[index] = {
-          ...nextItems[index],
-          unitPrice: newPrice,
-          manualPriceOverride: false,
-        };
-      }
-      setItems(nextItems);
-      setPriceModal(null);
-    } catch (error) {
-      window.alert(`Database Update Failed: ${error?.message || 'Unknown error'}`);
-    }
-  };
-
-  if (previewMode) {
-    return (
-      <CashPreview
-        mode="generator"
-        customer={customer}
-        gst={gst}
-        invoiceNumber={invoiceNumber}
-        invoiceDate={invoiceDate}
-        items={items}
-        remarks={invoiceRemarks}
-        onBack={() => setPreviewMode(false)}
-        onRegister={handleRegister}
-        includeGst={includeGst}
-        setItems={setItems}
-        subtotal={subtotal}
-        sys={sys}
-        total={total}
-        existingInvoice={existingInvoice}
-        isSpecialFormat={isSpecialFormat}
-        poNumber={poNumber}
-        carPlateNo={carPlateNo}
-      />
-    );
-  }
 
   return (
-    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-950/90 p-0 backdrop-blur-md xl:p-3">
-      <div className="flex h-[100dvh] w-full max-w-none flex-col overflow-hidden rounded-none border-0 bg-white shadow-2xl xl:h-[calc(100dvh-24px)] xl:w-[calc(100vw-24px)] xl:rounded-2xl xl:border xl:border-white/20">
-        <div className="flex shrink-0 items-center justify-between gap-4 bg-slate-900 px-5 py-3 text-white sm:px-6 xl:px-8">
-          <div className="flex items-center space-x-3">
-            <FileText className="text-blue-500" />
-            <div>
-              <h2 className="text-base font-black uppercase tracking-wider">
-                {existingInvoice ? 'Edit Cash Invoice' : 'Cash Invoice Workspace'}
-              </h2>
-              <p className="mt-0.5 text-xs font-semibold text-slate-400">
-                {cleanDraftItems.length} item{cleanDraftItems.length === 1 ? '' : 's'} • ${formatMoney(total)}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex space-x-3">
-            <button
-              className="flex items-center rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold shadow-lg shadow-blue-500/20 transition-all hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-300"
-              onClick={() => setIsParsing(true)}
-              type="button"
-            >
-              <MessageSquare className="mr-2" size={16} /> Paste Order
-            </button>
-            <button
-              className="rounded-full p-1.5 transition-colors hover:bg-slate-800"
-              onClick={requestClose}
-              type="button"
-              aria-label="Close invoice generator"
-            >
-              <X size={22} />
-            </button>
-          </div>
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">{label}</p>
+          <p className="mt-2 text-2xl font-black text-slate-900">{value}</p>
         </div>
-
-        <div className="min-h-0 flex-1 overflow-y-auto bg-slate-100 p-3 sm:p-4 lg:p-5">
-          {priceRefreshNotice && (
-            <div className="mx-auto mb-4 flex w-full max-w-[1600px] items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-800 shadow-sm">
-              <RefreshCcw size={17} className="mt-0.5 shrink-0" />
-              <p className="text-xs font-bold leading-5">{priceRefreshNotice}</p>
-            </div>
-          )}
-
-          {isParsing && (
-            <div className="mx-auto mb-5 w-full max-w-[1600px] rounded-2xl bg-blue-600 p-5 text-white shadow-xl sm:p-6">
-              <h3 className="mb-2 flex items-center text-lg font-black">
-                <BrainCircuit className="mr-3" size={24} /> Smart Order Extractor
-              </h3>
-              <p className="mb-4 text-xs font-medium leading-5 text-blue-100">
-                Paste an order message below. Quantities such as “2箱”, “qty 2”, “2 product-name” and leading “x2 product-name” are recognised without confusing package sizes such as “500g” or “400g x 20”. Corrections can also improve future matching.
-              </p>
-              <textarea
-                className="mb-4 h-28 w-full rounded-xl border border-blue-400 bg-blue-700/50 p-4 text-base font-medium leading-6 outline-none placeholder:text-blue-300"
-                onChange={(event) => setParseText(event.target.value)}
-                placeholder="Paste order details here..."
-                value={parseText}
-              />
-              <div className="flex justify-end space-x-3">
-                <button
-                  className="px-6 py-2 text-xs font-bold text-blue-200"
-                  onClick={() => setIsParsing(false)}
-                  type="button"
-                >
-                  Cancel
-                </button>
-                <button
-                  className="rounded bg-white px-8 py-2 text-xs font-black text-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
-                  onClick={handleSmartExtract}
-                  disabled={!String(parseText || '').trim()}
-                  type="button"
-                >
-                  Extract Order
-                </button>
-              </div>
-            </div>
-          )}
-
-          <div className="mx-auto mb-4 w-full max-w-[1600px] border-b-4 border-blue-600 bg-white p-5 text-base text-gray-800 shadow-xl sm:p-6 lg:p-7">
-            <CompanyHeader />
-
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-2.5">
-              <div className="flex items-center gap-2 text-sm font-bold text-blue-800">
-                <FileText size={15} className="shrink-0 text-blue-600" />
-                <span>Cash invoice workspace</span>
-                <span className="font-medium text-blue-500">• Search products, edit quantities and prices directly in the table.</span>
-              </div>
-              <div className="text-xs font-black uppercase tracking-wider text-blue-600">
-                {cleanDraftItems.length} item{cleanDraftItems.length === 1 ? '' : 's'}
-              </div>
-            </div>
-
-            <div className="mb-5 flex flex-wrap justify-between gap-y-4 rounded-2xl border border-slate-200 bg-slate-50/60 p-4 xl:flex-nowrap xl:gap-y-0">
-              <div className="w-full border-b border-slate-200 pb-4 xl:w-[36%] xl:border-b-0 xl:border-r xl:pb-0 xl:pr-6">
-                <div className="mb-1 flex items-end justify-between">
-                  <label className="text-xs font-black uppercase tracking-wide text-slate-400">
-                    Customer Account:
-                  </label>
-                  {!existingInvoice && (
-                    <label className="flex cursor-pointer items-center space-x-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 transition-colors hover:bg-slate-100">
-                      <input
-                        type="checkbox"
-                        checked={isAutofillEnabled}
-                        onChange={(event) => {
-                          const checked = event.target.checked;
-                          setIsAutofillEnabled(checked);
-                          if (!checked) {
-                            setItems((current) =>
-                              (Array.isArray(current) ? current : []).filter(
-                                (item) => item && !item.isAutoFilled
-                              )
-                            );
-                            setAutoFillNotif(false);
-                          }
-                        }}
-                        className="h-3 w-3 cursor-pointer rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                      />
-                      <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">
-                        Auto-Predict
-                      </span>
-                    </label>
-                  )}
-                </div>
-
-                <CustomerSearchSelect
-                  value={customerId}
-                  customers={safeCustomers}
-                  onChange={requestCustomerChange}
-                  disabled={Boolean(existingInvoice)}
-                />
-
-                {customer && (
-                  <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[9px] font-bold uppercase tracking-wide text-slate-400">
-                    {customer?.region && (
-                      <span className="rounded bg-slate-100 px-1.5 py-0.5">
-                        {String(customer.region)}
-                      </span>
-                    )}
-                    <span className="rounded bg-slate-100 px-1.5 py-0.5">
-                      {customer?.custom_prices &&
-                      Object.keys(customer.custom_prices || {}).length > 0
-                        ? 'Individual pricing'
-                        : assignedCustomerGroup
-                          ? `${assignedCustomerGroup.name || 'Group'} pricing`
-                          : 'Default pricing'}
-                    </span>
-                  </div>
-                )}
-
-                {autoFillNotif && (
-                  <p className="mt-2 flex items-center text-[10px] font-black uppercase tracking-widest text-indigo-500">
-                    <Sparkles className="mr-1" size={12} /> Predictions Added — Verify Before Saving
-                  </p>
-                )}
-              </div>
-
-              <div className="w-[48%] border-r border-slate-200 px-3 sm:w-[32%] xl:w-[18%] xl:px-6">
-                <label className="text-xs font-black uppercase tracking-wide text-slate-400">
-                  Cash Date:
-                </label>
-                <input
-                  type="date"
-                  className="mt-1 w-full cursor-pointer border-none bg-transparent p-0 text-lg font-black text-slate-800 outline-none focus:ring-0"
-                  value={invoiceDate}
-                  onChange={(event) => setInvoiceDate(event.target.value)}
-                />
-              </div>
-
-              <div className="w-[48%] border-r border-slate-200 px-3 sm:w-[32%] xl:w-[18%] xl:px-6">
-                <label className="text-xs font-black uppercase tracking-wide text-slate-400">
-                  GST Treatment:
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setIncludeGst((current) => !current)}
-                  className={`mt-1 flex w-full items-center justify-between rounded-xl border px-3 py-2 text-sm font-black transition-colors ${
-                    includeGst
-                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  <span>{includeGst ? 'Include 9% GST' : 'No GST'}</span>
-                  <span className={`h-3 w-3 rounded-full ${includeGst ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-                </button>
-                <p className="mt-1 text-[10px] font-semibold leading-4 text-slate-400">
-                  {customer
-                    ? `Customer default: ${
-                        getCustomerCashGstDefault(customer)
-                          ? 'GST 9% applied'
-                          : 'No GST'
-                      }. You can override it for this Cash invoice.`
-                    : includeGst
-                      ? 'GST will be added to subtotal.'
-                      : 'Total equals subtotal; GST is not applied.'}
-                </p>
-              </div>
-
-              <div className="relative w-full pt-2 text-right sm:w-[32%] sm:pl-4 sm:pt-0 xl:w-[28%] xl:pl-6">
-                <label className="text-[10px] font-black uppercase text-gray-400">
-                  Serial No.
-                </label>
-                <div className="mt-1 flex items-center justify-end text-3xl font-black tracking-tighter text-red-600">
-                                    <input
-                    type="text"
-                    value={invoiceNumber}
-                    onChange={(event) => {
-                      setInvoiceNumber(event.target.value);
-                      setInvoiceNumberManuallyEdited(true);
-                    }}
-                    className={`m-0 w-full max-w-[190px] border-b-2 bg-transparent p-0 text-right outline-none focus:ring-0 ${
-                      isDuplicateNumber
-                        ? 'border-red-500 text-red-600'
-                        : 'border-transparent hover:border-red-200 focus:border-red-600'
-                    }`}
-                  />
-                </div>
-                {isDuplicateNumber && (
-                  <p className="mt-1 text-[10px] font-black uppercase text-red-500">
-                    Number Already Exists!
-                  </p>
-                )}
-              </div>
-            </div>
-
-            <div className="mb-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs font-black uppercase tracking-wider text-slate-500">
-                    Cash Options
-                  </p>
-                  <p className="mt-0.5 text-sm font-medium text-slate-500">
-                    Optional settings for this cash invoice.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsRemarkModalOpen(true)}
-                  className="flex items-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-black uppercase tracking-wider text-slate-600 transition-colors hover:bg-slate-100"
-                >
-                  <MessageSquare size={12} className="mr-1.5" />
-                  {invoiceRemarks ? 'Edit Remarks' : 'Add Remarks'}
-                </button>
-              </div>
-
-              <label className="mt-4 flex w-max cursor-pointer items-center space-x-2">
-                <input
-                  type="checkbox"
-                  checked={isSpecialFormat}
-                  onChange={(event) => setIsSpecialFormat(event.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
-                />
-                <span className="flex items-center text-sm font-bold text-slate-700">
-                  <ScanBarcode size={14} className="mr-1 text-purple-500" /> Enable Special Format (Barcode & Car Plate)
-                </span>
-              </label>
-
-              {isSpecialFormat && (
-                <div className="mt-4 flex space-x-6 border-t border-slate-200 pt-4">
-                  <div className="flex-1">
-                    <label className="mb-1 block text-[10px] font-black uppercase text-gray-400">
-                      PO Number
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. POC121950"
-                      value={poNumber}
-                      onChange={(event) => setPoNumber(event.target.value)}
-                      className="w-full rounded-lg border border-slate-300 bg-white p-2 text-sm font-bold outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <label className="mb-1 block text-[10px] font-black uppercase text-gray-400">
-                      Car Plate No.
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. GBF4684U"
-                      value={carPlateNo}
-                      onChange={(event) => setCarPlateNo(event.target.value)}
-                      className="w-full rounded-lg border border-slate-300 bg-white p-2 text-sm font-bold outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {suggestions.length > 0 && !existingInvoice && (
-              <div className="mb-5 rounded-xl border border-dashed border-blue-200 bg-blue-50/50 p-4">
-                <p className="mb-2 text-xs font-black uppercase tracking-wider text-blue-500">
-                  Secondary Recommendations
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {suggestions.map(({ product, unit, key }) => (
-                    <button
-                      key={key}
-                      className="rounded-lg border border-blue-100 bg-white px-3 py-2 text-xs font-bold text-blue-700 shadow-sm transition-colors hover:bg-blue-50"
-                      onClick={() =>
-                        setItems((current) => [
-                          ...(Array.isArray(current) ? current.filter(Boolean) : []),
-                          {
-                            itemId: product.id,
-                            name: getProductName(product),
-                            unit,
-                            qty: 1,
-                            unitPrice: getSafePrice(product, unit),
-                            picked: false,
-                            suggestions: [],
-                            manualPriceOverride: false,
-                          },
-                        ])
-                      }
-                      type="button"
-                    >
-                      + {getProductName(product)} ({unit})
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* ===== COMPACT INVOICE CHECK: ABOVE PRODUCT WORKSPACE ===== */}
-            <div className="mb-3 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-              <div className="flex flex-wrap items-center gap-3 px-4 py-2.5">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck
-                    size={16}
-                    className={
-                      invoiceIssues.errors.length > 0
-                        ? 'text-red-500'
-                        : invoiceIssues.warnings.length > 0
-                          ? 'text-amber-500'
-                          : 'text-emerald-500'
-                    }
-                  />
-                  <span className="text-xs font-black uppercase tracking-wider text-slate-700">
-                    Cash Check
-                  </span>
-                </div>
-
-                {invoiceIssues.errors.length > 0 && (
-                  <span className="rounded-full bg-red-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-red-600">
-                    {invoiceIssues.errors.length} action{invoiceIssues.errors.length === 1 ? '' : 's'} required
-                  </span>
-                )}
-
-                {invoiceIssues.warnings.length > 0 && (
-                  <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-amber-700">
-                    {invoiceIssues.warnings.length} warning{invoiceIssues.warnings.length === 1 ? '' : 's'}
-                  </span>
-                )}
-
-                {invoiceIssues.errors.length === 0 &&
-                  invoiceIssues.warnings.length === 0 &&
-                  customerId &&
-                  cleanDraftItems.length > 0 && (
-                    <span className="flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-emerald-700">
-                      <CheckCircle2 size={12} />
-                      Ready to preview cash invoice
-                    </span>
-                  )}
-
-                <p className="min-w-0 flex-1 text-xs font-medium text-slate-400">
-                  {invoiceIssues.errors.length > 0
-                    ? invoiceIssues.errors[0].message
-                    : invoiceIssues.warnings.length > 0
-                      ? invoiceIssues.warnings[0].message
-                      : customerId && cleanDraftItems.length > 0
-                        ? 'No blocking issues detected.'
-                        : 'Select a customer and add products to begin.'}
-                </p>
-
-                {(invoiceIssues.errors.length > 0 || invoiceIssues.warnings.length > 0) && (
-                  <button
-                    type="button"
-                    onClick={() => setIsInvoiceCheckExpanded((current) => !current)}
-                    className="shrink-0 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-slate-600 transition-colors hover:bg-slate-100"
-                  >
-                    {isInvoiceCheckExpanded ? 'Hide Details' : 'Review Details'}
-                  </button>
-                )}
-              </div>
-
-              {isInvoiceCheckExpanded &&
-                (invoiceIssues.errors.length > 0 || invoiceIssues.warnings.length > 0) && (
-                  <div className="grid max-h-40 grid-cols-1 gap-1 overflow-y-auto border-t border-slate-100 bg-slate-50/70 p-2 md:grid-cols-2">
-                    {invoiceIssues.errors.map((issue, issueIndex) => (
-                      <button
-                        key={`top-error-${issueIndex}-${issue.message}`}
-                        type="button"
-                        onClick={() => {
-                          if (issue.rowIndex !== undefined) {
-                            scrollToRow(issue.rowIndex);
-                          }
-                        }}
-                        className={`flex items-start gap-2 rounded-lg px-3 py-2 text-left text-xs font-bold text-red-600 ${
-                          issue.rowIndex !== undefined
-                            ? 'hover:bg-red-50'
-                            : 'cursor-default'
-                        }`}
-                      >
-                        <AlertTriangle size={13} className="mt-0.5 shrink-0" />
-                        <span>{issue.message}</span>
-                      </button>
-                    ))}
-
-                    {invoiceIssues.warnings.map((issue, issueIndex) => (
-                      <button
-                        key={`top-warning-${issueIndex}-${issue.message}`}
-                        type="button"
-                        onClick={() => {
-                          if (issue.rowIndex !== undefined) {
-                            scrollToRow(issue.rowIndex);
-                          }
-                        }}
-                        className={`flex items-start gap-2 rounded-lg px-3 py-2 text-left text-xs font-semibold text-amber-700 ${
-                          issue.rowIndex !== undefined
-                            ? 'hover:bg-amber-50'
-                            : 'cursor-default'
-                        }`}
-                      >
-                        <AlertTriangle size={13} className="mt-0.5 shrink-0" />
-                        <span>{issue.message}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-            </div>
-
-            {/* ===== PRODUCT ENTRY WORKSPACE ===== */}
-            <div className="relative z-10 w-full overflow-x-auto rounded-xl border border-slate-200 bg-white"><table className="w-full min-w-[1180px] text-left">
-              <thead className="sticky top-0 z-20 border-y-2 border-slate-900 bg-slate-50/95 shadow-sm backdrop-blur">
-                <tr className="text-xs font-black uppercase tracking-wider text-slate-500">
-                  <th className="w-14 p-3 text-center">No.</th>
-                  <th className="min-w-[430px] p-3">Description</th>
-                  <th className="w-28 p-3 text-center">Unit</th>
-                  <th className="w-24 p-3 text-center">Qty</th>
-                  <th className="w-32 p-3 text-right">Unit Price</th>
-                  <th className="w-32 p-3 text-right">Total</th>
-                  <th className="w-12 p-3" />
-                </tr>
-              </thead>
-              <tbody>
-                {cleanDraftItems.map((item, index) => {
-                  const safeItemUnit = getItemUnit(item);
-                  const ruleKey = `${item.itemId}|${safeItemUnit}`;
-
-                  const hasIndividualPrice = Boolean(
-                    customer?.custom_prices &&
-                      typeof customer.custom_prices === 'object' &&
-                      customer.custom_prices[ruleKey] !== undefined
-                  );
-                  const assignedGroup = customer?.pricing_group_id
-                    ? safeGroups.find(
-                        (group) =>
-                          String(group?.id || '') ===
-                          String(customer.pricing_group_id)
-                      )
-                    : null;
-                  const hasGroupPrice = Boolean(
-                    assignedGroup?.prices &&
-                      typeof assignedGroup.prices === 'object' &&
-                      assignedGroup.prices[ruleKey] !== undefined
-                  );
-
-                  const selectedProduct = safeInventory.find(
-                    (product) => String(product?.id || '') === String(item.itemId || '')
-                  );
-                  let rowUnitOptions = [];
-
-                  if (selectedProduct) {
-                    const defaultUnit = getItemUnit(selectedProduct);
-                    rowUnitOptions.push({ value: defaultUnit, label: defaultUnit });
-
-                    if (
-                      customer?.custom_prices &&
-                      typeof customer.custom_prices === 'object'
-                    ) {
-                      Object.keys(customer.custom_prices).forEach((key) => {
-                        const [productId, productUnit] = key.split('|');
-                        if (
-                          String(productId) === String(selectedProduct.id) &&
-                          productUnit !== defaultUnit &&
-                          !rowUnitOptions.find((option) => option.value === productUnit)
-                        ) {
-                          rowUnitOptions.push({
-                            value: productUnit,
-                            label: `${productUnit} (Custom)`,
-                          });
-                        }
-                      });
-                    }
-
-                    if (
-                      safeItemUnit &&
-                      !rowUnitOptions.find((option) => option.value === safeItemUnit)
-                    ) {
-                      rowUnitOptions.push({ value: safeItemUnit, label: safeItemUnit });
-                    }
-                  } else {
-                    rowUnitOptions = Array.isArray(UNIT_OPTIONS) ? [...UNIT_OPTIONS] : [];
-                    if (
-                      safeItemUnit &&
-                      !rowUnitOptions.find((option) => option.value === safeItemUnit)
-                    ) {
-                      rowUnitOptions.push({ value: safeItemUnit, label: safeItemUnit });
-                    }
-                  }
-
-                  const isPredicted = Boolean(item.isAutoFilled);
-                  const duplicateIndexes = item?.itemId
-                    ? duplicateRowMap.get(`${item.itemId}|${safeItemUnit}`) || []
-                    : [];
-                  const isDuplicate = duplicateIndexes.length > 1;
-
-                  const rowClass = isPredicted
-                    ? 'bg-indigo-50/40 border-indigo-200 text-indigo-700'
-                    : !item.itemId && item.rawSearchString
-                      ? 'bg-amber-50/30 border-amber-100'
-                      : 'border-gray-100';
-
-                  return (
-                    <tr
-                      ref={(node) => {
-                        rowRefs.current[index] = node;
-                      }}
-                      className={`border-b font-bold transition-colors ${rowClass}`}
-                      key={`${item.itemId || 'row'}-${index}`}
-                    >
-                      <td className="p-3 pt-4 text-center align-top font-mono text-sm font-bold text-slate-400">
-                        {index + 1}
-                      </td>
-
-                      <td className="relative p-2.5 align-top">
-                        <div className="flex items-center space-x-2">
-                          <input
-                            checked={item.picked || false}
-                            className="h-4 w-4 shrink-0 cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                            onChange={(event) => {
-                              const nextItems = [...cleanDraftItems];
-                              if (nextItems[index]) {
-                                nextItems[index] = {
-                                  ...nextItems[index],
-                                  picked: event.target.checked,
-                                };
-                              }
-                              setItems(nextItems);
-                            }}
-                            type="checkbox"
-                          />
-
-                          <ProductSearchSelect
-                            value={item.itemId}
-                            inventory={safeInventory}
-                            isAutoFilled={isPredicted}
-                            onChange={(selectedId) => {
-                              const product = safeInventory.find(
-                                (entry) =>
-                                  String(entry?.id || '') === String(selectedId || '')
-                              );
-                              if (!product) return;
-
-                              if (item.rawSearchString) {
-                                learnFromCorrection(
-                                  item.rawSearchString,
-                                  selectedId,
-                                  item.originalPredictedId
-                                );
-                              }
-
-                              const nextItems = [...cleanDraftItems];
-                              const determinedUnit = getItemUnit(product);
-                              if (nextItems[index]) {
-                                nextItems[index] = {
-                                  ...nextItems[index],
-                                  itemId: selectedId,
-                                  name: getProductName(product),
-                                  unit: determinedUnit,
-                                  unitPrice: getSafePrice(product, determinedUnit),
-                                  suggestions: [],
-                                  isAutoFilled: false,
-                                  rawSearchString: null,
-                                  originalPredictedId: selectedId,
-                                  manualPriceOverride: false,
-                                };
-                              }
-                              setItems(nextItems);
-                            }}
-                          />
-                        </div>
-
-                        {isPredicted && (
-                          <div className="ml-6 mt-1.5 flex items-center">
-                            <button
-                              onClick={() => {
-                                const next = [...cleanDraftItems];
-                                if (next[index]) {
-                                  if (next[index].rawSearchString && next[index].itemId) {
-                                    learnFromCorrection(
-                                      next[index].rawSearchString,
-                                      next[index].itemId,
-                                      next[index].originalPredictedId
-                                    );
-                                  }
-                                  next[index] = {
-                                    ...next[index],
-                                    isAutoFilled: false,
-                                    rawSearchString: null,
-                                  };
-                                }
-                                setItems(next);
-                              }}
-                              className="flex items-center rounded bg-indigo-200 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-indigo-800 shadow-sm transition-colors hover:bg-indigo-300"
-                              type="button"
-                            >
-                              <Check size={10} className="mr-1" /> Verify Match
-                            </button>
-                          </div>
-                        )}
-
-                        {item.rawSearchString && item.itemId && !isPredicted && (
-                          <p className="ml-6 mt-1.5 flex items-center text-[9px] font-medium text-blue-400">
-                            <BrainCircuit size={10} className="mr-1" /> Predicted from: “{item.rawSearchString}”
-                          </p>
-                        )}
-
-                        {!item.itemId && item.suggestions && item.suggestions.length > 0 && (
-                          <div className="ml-6 mb-1 mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 shadow-sm">
-                            <p className="mb-2 flex items-center text-[9px] font-black uppercase tracking-widest text-amber-700">
-                              <AlertTriangle size={12} className="mr-1.5" /> Did you mean?
-                            </p>
-                            <div className="flex flex-wrap gap-2">
-                              {item.suggestions.map((suggestion) => {
-                                const suggestionName = getProductName(suggestion);
-                                const suggestionUnit = getItemUnit(suggestion);
-
-                                return (
-                                  <button
-                                    key={suggestion.id}
-                                    type="button"
-                                    onClick={() => {
-                                      if (item.rawSearchString) {
-                                        learnFromCorrection(
-                                          item.rawSearchString,
-                                          suggestion.id,
-                                          item.originalPredictedId
-                                        );
-                                      }
-
-                                      const nextItems = [...cleanDraftItems];
-                                      if (nextItems[index]) {
-                                        nextItems[index] = {
-                                          ...nextItems[index],
-                                          itemId: suggestion.id,
-                                          name: suggestionName,
-                                          unit: suggestionUnit,
-                                          unitPrice: getSafePrice(
-                                            suggestion,
-                                            suggestionUnit
-                                          ),
-                                          suggestions: [],
-                                          originalPredictedId: suggestion.id,
-                                          isAutoFilled: false,
-                                          rawSearchString: null,
-                                          manualPriceOverride: false,
-                                        };
-                                      }
-                                      setItems(nextItems);
-                                    }}
-                                    className="rounded border border-amber-300 bg-white px-2 py-1 text-[11px] font-bold text-amber-900 shadow-sm transition-colors hover:bg-amber-200"
-                                  >
-                                    {suggestionName}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-
-                        {!item.itemId &&
-                          item.rawSearchString &&
-                          (!item.suggestions || item.suggestions.length === 0) && (
-                            <p className="ml-6 mt-1.5 flex items-center text-[9px] font-medium text-amber-500">
-                              <AlertTriangle size={10} className="mr-1" /> No matches found for “{item.rawSearchString}”
-                            </p>
-                          )}
-
-                        {isDuplicate && (
-                          <div className="ml-6 mt-2 flex items-center gap-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[9px] font-bold text-amber-700">
-                            <AlertTriangle size={11} className="shrink-0" />
-                            <span>
-                              Same product/unit also appears on row{duplicateIndexes.length > 2 ? 's' : ''} {duplicateIndexes
-                                .filter((row) => row !== index)
-                                .map((row) => row + 1)
-                                .join(', ')}.
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => mergeDuplicateRow(index)}
-                              className="ml-auto shrink-0 rounded bg-amber-100 px-2 py-1 font-black uppercase hover:bg-amber-200"
-                            >
-                              Merge Qty
-                            </button>
-                          </div>
-                        )}
-                      </td>
-
-                      <td className="p-2 pt-4 align-top">
-                        <select
-                          className={`m-0 w-full cursor-pointer rounded-lg border border-transparent bg-transparent px-1 py-1.5 text-center text-sm font-bold focus:border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-100 ${
-                            isPredicted ? 'text-indigo-600' : ''
-                          }`}
-                          onChange={(event) => {
-                            const nextItems = [...cleanDraftItems];
-                            const newUnit = event.target.value;
-                            if (nextItems[index]) {
-                              nextItems[index] = {
-                                ...nextItems[index],
-                                unit: newUnit,
-                                manualPriceOverride: false,
-                              };
-                              const product = safeInventory.find(
-                                (entry) =>
-                                  String(entry?.id || '') ===
-                                  String(nextItems[index].itemId || '')
-                              );
-                              if (product) {
-                                nextItems[index].unitPrice = getSafePrice(product, newUnit);
-                              }
-                            }
-                            setItems(nextItems);
-                          }}
-                          value={safeItemUnit}
-                        >
-                          {rowUnitOptions.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-
-                      <td className="p-2 pt-3 align-top">
-                        <input
-                          className={`m-0 w-full rounded-lg border border-transparent bg-transparent p-1.5 text-center text-base font-black focus:border-blue-200 focus:bg-white focus:ring-2 focus:ring-blue-100 ${
-                            isPredicted ? 'text-indigo-700' : 'text-blue-600'
-                          }`}
-                          onChange={(event) => {
-                            const nextItems = [...cleanDraftItems];
-                            if (nextItems[index]) {
-                              nextItems[index] = {
-                                ...nextItems[index],
-                                qty: event.target.value,
-                              };
-                            }
-                            setItems(nextItems);
-                          }}
-                          min="0"
-                          step="1"
-                          type="number"
-                          value={item.qty || item.quantity || ''}
-                        />
-                      </td>
-
-                      <td className="p-2 pt-3 text-right align-top">
-                        <input
-                          className={`m-0 w-full rounded-lg border border-transparent bg-transparent p-1.5 text-right text-base font-black leading-none focus:border-blue-200 focus:bg-white focus:ring-2 focus:ring-blue-100 ${
-                            isPredicted ? 'text-indigo-900' : ''
-                          }`}
-                          onChange={(event) => {
-                            const nextItems = [...cleanDraftItems];
-                            if (nextItems[index]) {
-                              nextItems[index] = {
-                                ...nextItems[index],
-                                unitPrice: event.target.value,
-                                manualPriceOverride: true,
-                              };
-                            }
-                            setItems(nextItems);
-                          }}
-                          min="0"
-                          step="0.01"
-                          type="number"
-                          value={item.unitPrice ?? ''}
-                        />
-
-                        {item.itemId && customer && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const product = safeInventory.find(
-                                (entry) =>
-                                  String(entry?.id || '') === String(item.itemId || '')
-                              );
-                              if (product) {
-                                setPriceModal({
-                                  index,
-                                  item,
-                                  product,
-                                  hasIndividualPrice,
-                                  assignedGroup,
-                                });
-                              }
-                            }}
-                            className={`mt-0.5 flex w-full items-center justify-end rounded px-2 py-1 text-[9px] uppercase tracking-widest transition-colors ${
-                              item.manualPriceOverride
-                                ? 'font-black text-amber-600 hover:bg-amber-50'
-                                : hasIndividualPrice
-                                  ? isPredicted
-                                    ? 'text-indigo-600 hover:bg-indigo-100'
-                                    : 'font-black text-emerald-500 hover:bg-emerald-50'
-                                  : hasGroupPrice
-                                    ? 'font-black text-indigo-500 hover:bg-indigo-50'
-                                    : 'font-semibold text-slate-400 hover:bg-slate-100'
-                            }`}
-                          >
-                            {item.manualPriceOverride ? (
-                              <>Invoice-only</>
-                            ) : hasIndividualPrice ? (
-                              '★ Customer'
-                            ) : hasGroupPrice ? (
-                              <>
-                                <Layers size={10} className="mr-1" /> Group
-                              </>
-                            ) : (
-                              <>
-                                <Settings size={10} className="mr-1" /> Default
-                              </>
-                            )}
-                          </button>
-                        )}
-
-                        {item.itemId && !customer && item.manualPriceOverride && (
-                          <p className="mt-1 text-[10px] font-black uppercase tracking-wide text-amber-600">
-                            Invoice-only
-                          </p>
-                        )}
-
-                        {item.itemId && customer && item.manualPriceOverride && (
-                          <p className="mt-1 text-[10px] font-medium text-amber-500">
-                            Current customer price: ${formatMoney(
-                              resolvePriceInfo(selectedProduct, safeItemUnit).price
-                            )}
-                          </p>
-                        )}
-                      </td>
-
-                      <td
-                        className={`p-3 pt-3 text-right align-top font-mono text-xl font-black tracking-tighter ${
-                          isPredicted ? 'text-indigo-900' : 'text-slate-900'
-                        }`}
-                      >
-                        ${formatMoney(
-                          (Number(item.qty || item.quantity) || 0) *
-                            (Number(item.unitPrice) || 0)
-                        )}
-                      </td>
-
-                      <td className="w-12 p-1 pt-4 text-center align-top">
-                        <button
-                          className={`ml-2 hover:text-red-500 ${
-                            isPredicted
-                              ? 'text-indigo-300 hover:bg-indigo-100'
-                              : 'text-red-200'
-                          }`}
-                          onClick={() =>
-                            setItems(cleanDraftItems.filter((_, itemIndex) => itemIndex !== index))
-                          }
-                          type="button"
-                          aria-label={`Delete row ${index + 1}`}
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table></div>
-
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button
-                className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-2.5 text-xs font-black uppercase tracking-wide text-blue-700 shadow-sm transition-all hover:bg-blue-100"
-                onClick={() =>
-                  setItems([
-                    ...cleanDraftItems,
-                    {
-                      itemId: '',
-                      name: '',
-                      unit: DEFAULT_UNIT,
-                      qty: 1,
-                      unitPrice: 0,
-                      picked: false,
-                      suggestions: [],
-                      manualPriceOverride: false,
-                    },
-                  ])
-                }
-                type="button"
-              >
-                + Add Row Manually
-              </button>
-
-              <button
-                className="flex items-center rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-2.5 text-xs font-black uppercase tracking-wide text-indigo-700 shadow-sm transition-all hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-40"
-                onClick={() => {
-                  setHistorySearch('');
-                  setSelectedHistoryKeys([]);
-                  setIsHistoryModalOpen(true);
-                }}
-                disabled={!customerId}
-                type="button"
-              >
-                <History size={12} className="mr-1.5" /> Previously Ordered
-              </button>
-
-              <button
-                className="flex items-center rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-2.5 text-xs font-black uppercase tracking-wide text-emerald-700 shadow-sm transition-all hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-40"
-                onClick={addLastOrderItems}
-                disabled={!latestCustomerInvoice}
-                type="button"
-                title={latestCustomerInvoice ? `Add items from invoice #${String(latestCustomerInvoice.number || '')}` : 'No previous order found'}
-              >
-                <ShoppingCart size={13} className="mr-1.5" /> Add Last Order
-              </button>
-
-              <button
-                className="flex items-center rounded-xl border border-slate-200 bg-slate-100 px-4 py-2.5 text-xs font-black uppercase tracking-wide text-slate-700 shadow-sm transition-all hover:bg-slate-200"
-                onClick={() => setIsRemarkModalOpen(true)}
-                type="button"
-              >
-                <MessageSquare size={12} className="mr-1.5" /> Add / Edit Cash Remarks
-              </button>
-            </div>
-
-            <div className="mt-4 flex flex-col gap-4 border-t-2 border-slate-900 pt-4 lg:flex-row lg:justify-between">
-              <div className="w-full lg:w-[55%]">
-                {invoiceRemarks && (
-                  <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-4">
-                    <h4 className="mb-1 text-[10px] font-black uppercase tracking-widest text-yellow-600">
-                      Cash Remarks
-                    </h4>
-                    <p className="whitespace-pre-wrap text-sm font-medium text-slate-700">
-                      {invoiceRemarks}
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              <div className="w-full max-w-sm space-y-2 lg:w-80">
-                <div className="flex justify-between text-xs font-black uppercase tracking-wider text-slate-400">
-                  <span>Sub-Total ($)</span>
-                  <span className="text-slate-900">${formatMoney(subtotal)}</span>
-                </div>
-                <div className="flex justify-between text-xs font-black uppercase tracking-wider text-slate-400">
-                  <span>{includeGst ? 'GST 9%' : 'GST'}</span>
-                  <span className="text-slate-900">{includeGst ? `$${formatMoney(gst)}` : 'Not Applied'}</span>
-                </div>
-                <div className="flex items-center justify-between pt-2">
-                  <span className="text-sm font-black uppercase">Total Due</span>
-                  <span className="text-3xl font-black tracking-tighter">
-                    ${formatMoney(total)}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="shrink-0 border-t bg-white px-5 py-3 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] sm:px-6 xl:rounded-b-2xl xl:px-8">
-          <div className="flex items-center justify-between gap-4">
-            <button
-              className="rounded-xl px-4 py-2.5 text-sm font-black uppercase tracking-wider text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500"
-              onClick={requestClose}
-              type="button"
-            >
-              Discard
-            </button>
-
-            <div className="hidden text-center sm:block">
-              <p className="text-xs font-black text-slate-700">
-                {cleanDraftItems.length} item{cleanDraftItems.length === 1 ? '' : 's'} • ${formatMoney(total)}
-              </p>
-              <p className="mt-0.5 text-[10px] font-semibold text-slate-400">
-                {invoiceIssues.errors.length > 0
-                  ? `${invoiceIssues.errors.length} issue${invoiceIssues.errors.length === 1 ? '' : 's'} must be fixed`
-                  : invoiceIssues.warnings.length > 0
-                    ? `${invoiceIssues.warnings.length} warning${invoiceIssues.warnings.length === 1 ? '' : 's'} to review`
-                    : 'Invoice check passed'}
-              </p>
-            </div>
-
-            <button
-              className="flex items-center rounded-xl bg-indigo-600 px-7 py-3 text-sm font-black uppercase tracking-wider text-white shadow-xl transition-all hover:bg-indigo-700 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={invoiceIssues.errors.length > 0 || isSaving}
-              onClick={() => setPreviewMode(true)}
-              type="button"
-            >
-              <Eye className="mr-2" size={18} /> Preview Cash Invoice
-            </button>
-          </div>
-        </div>
+        <div className={`rounded-xl p-3 ${tones[tone] || tones.blue}`}>{icon}</div>
       </div>
-
-      {pendingCustomerChange && (
-        <div className="fixed inset-0 z-[6500] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg overflow-hidden rounded-3xl bg-white shadow-2xl">
-            <div className="bg-slate-900 px-6 py-4 text-white">
-              <h2 className="flex items-center text-sm font-black uppercase tracking-widest">
-                <RefreshCcw size={16} className="mr-2 text-blue-400" /> Customer Changed
-              </h2>
-            </div>
-
-            <div className="p-6">
-              <p className="text-sm leading-6 text-slate-600">
-                This invoice already contains products. Prices may have been calculated using the previous customer&apos;s individual or group pricing.
-              </p>
-
-              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm">
-                <p className="font-bold text-slate-400">Change customer</p>
-                <p className="mt-1 font-black text-slate-800">
-                  {getCustomerName(
-                    safeCustomers.find(
-                      (entry) => String(entry?.id || '') === String(pendingCustomerChange.fromId || '')
-                    )
-                  ) || 'No customer'}
-                  {' → '}
-                  {getCustomerName(
-                    safeCustomers.find(
-                      (entry) => String(entry?.id || '') === String(pendingCustomerChange.toId || '')
-                    )
-                  ) || 'Selected customer'}
-                </p>
-              </div>
-
-              <p className="mt-4 text-xs leading-5 text-slate-500">
-                Refreshing will recalculate normal rows using the new customer&apos;s pricing cascade. Prices manually typed for this invoice are preserved.
-              </p>
-
-              <div className="mt-6 space-y-3">
-                <button
-                  type="button"
-                  onClick={() => applyCustomerChange(true)}
-                  className="flex w-full items-center rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-blue-500/20 transition-colors hover:bg-blue-700"
-                >
-                  <RefreshCcw size={16} className="mr-3" />
-                  Refresh Using New Customer Pricing
-                </button>
-                <button
-                  type="button"
-                  onClick={() => applyCustomerChange(false)}
-                  className="flex w-full items-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-50"
-                >
-                  Keep Existing Prices
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPendingCustomerChange(null)}
-                  className="w-full px-4 py-2 text-xs font-bold text-slate-400 hover:text-slate-600"
-                >
-                  Cancel Customer Change
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isHistoryModalOpen && (
-        <div className="fixed inset-0 z-[6200] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
-          <div className="flex max-h-[86vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between bg-slate-900 px-6 py-4 text-white">
-              <div>
-                <h2 className="flex items-center text-sm font-black uppercase tracking-widest">
-                  <History size={16} className="mr-2 text-indigo-400" /> Previously Ordered
-                </h2>
-                <p className="mt-1 text-xs font-medium text-slate-400">
-                  {getCustomerName(customer) || 'Selected customer'} • {customerInvoiceHistory.length} historical invoice{customerInvoiceHistory.length === 1 ? '' : 's'}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsHistoryModalOpen(false)}
-                className="rounded-full p-1.5 hover:bg-slate-800"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="border-b border-slate-100 p-5">
-              {latestCustomerInvoice ? (
-                <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-blue-100 bg-blue-50 p-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-blue-500">
-                      Last Order
-                    </p>
-                    <p className="mt-1 text-sm font-black text-slate-800">
-                      Invoice #{String(latestCustomerInvoice.number || '—')} • {formatShortDate(latestCustomerInvoice.date)}
-                    </p>
-                    <p className="mt-0.5 text-xs font-medium text-slate-500">
-                      {(Array.isArray(latestCustomerInvoice.items) ? latestCustomerInvoice.items.filter(Boolean).length : 0)} item rows
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={addLastOrderItems}
-                    className="flex items-center justify-center rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white transition-colors hover:bg-blue-700"
-                  >
-                    <ShoppingCart size={14} className="mr-2" /> Add Last Order Items
-                  </button>
-                </div>
-              ) : (
-                <div className="mb-4 rounded-2xl border border-dashed border-slate-200 p-4 text-center text-sm font-medium text-slate-400">
-                  No previous invoices found for this customer.
-                </div>
-              )}
-
-              <div className="flex items-center rounded-xl border border-slate-200 bg-slate-50 px-3">
-                <Search size={16} className="mr-2 shrink-0 text-slate-400" />
-                <input
-                  type="text"
-                  value={historySearch}
-                  onChange={(event) => setHistorySearch(event.target.value)}
-                  placeholder="Search previous products, SKU, unit or invoice..."
-                  className="w-full border-none bg-transparent py-3 text-sm font-semibold text-slate-700 outline-none focus:ring-0"
-                />
-              </div>
-            </div>
-
-            <div className="min-h-0 flex-1 overflow-y-auto p-5">
-              {filteredCustomerHistoryRows.length > 0 ? (
-                <div className="space-y-2">
-                  {filteredCustomerHistoryRows.map((entry) => {
-                    const selected = selectedHistoryKeys.includes(entry.key);
-                    const source = entry.product
-                      ? resolvePriceInfo(entry.product, entry.unit)
-                      : { label: 'Last invoiced price' };
-
-                    return (
-                      <label
-                        key={entry.key}
-                        className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition-colors ${
-                          selected
-                            ? 'border-indigo-200 bg-indigo-50'
-                            : 'border-slate-200 bg-white hover:bg-slate-50'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selected}
-                          onChange={() => toggleHistorySelection(entry.key)}
-                          className="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                            <div>
-                              <p className="text-sm font-black text-slate-800">
-                                {entry.sku ? `[${entry.sku}] ` : ''}{entry.name}
-                              </p>
-                              <p className="mt-1 text-[11px] font-semibold text-slate-400">
-                                {entry.unit} • Ordered on {entry.orderCount} invoice{entry.orderCount === 1 ? '' : 's'} • Total qty {entry.totalQty}
-                              </p>
-                              <p className="mt-0.5 text-[11px] text-slate-400">
-                                Last: {formatShortDate(entry.lastDate)}{entry.lastInvoice ? ` • #${entry.lastInvoice}` : ''}
-                              </p>
-                            </div>
-                            <div className="shrink-0 text-left sm:text-right">
-                              <p className="text-base font-black text-blue-700">
-                                ${formatMoney(entry.currentPrice)}
-                              </p>
-                              <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">
-                                {source.label}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      </label>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-10 text-center">
-                  <History size={24} className="mx-auto text-slate-300" />
-                  <p className="mt-3 text-sm font-bold text-slate-500">
-                    No matching historical products
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50 px-6 py-4">
-              <p className="text-xs font-bold text-slate-500">
-                {selectedHistoryKeys.length} selected
-              </p>
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => setIsHistoryModalOpen(false)}
-                  className="rounded-xl px-4 py-2.5 text-sm font-bold text-slate-500 hover:bg-slate-100"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  disabled={selectedHistoryKeys.length === 0}
-                  onClick={addSelectedHistoryItems}
-                  className="flex items-center rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <ShoppingCart size={15} className="mr-2" /> Add Selected Items
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {priceModal && (
-        <div className="fixed inset-0 z-[6000] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm overflow-hidden rounded-3xl bg-white shadow-2xl animate-in fade-in zoom-in duration-200">
-            <div className="flex items-center justify-between bg-slate-900 px-6 py-4 text-white">
-              <h2 className="flex items-center text-sm font-black uppercase tracking-widest">
-                <Settings size={16} className="mr-2 text-blue-400" /> Pricing Cascade
-              </h2>
-              <button
-                onClick={() => setPriceModal(null)}
-                className="rounded-full p-1 transition-colors hover:bg-slate-800"
-                type="button"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="p-6">
-              <p className="mb-1 text-sm text-slate-500">Editing price for:</p>
-              <p className="mb-4 text-base font-bold text-slate-900">
-                {getProductName(priceModal.product)} ({String(priceModal.item?.unit || '')})
-              </p>
-
-              <div className="mb-6">
-                <label className="mb-2 block text-[11px] font-black uppercase tracking-widest text-slate-400">
-                  Price to save ($)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  className="w-full rounded-xl border-2 border-blue-100 bg-blue-50/50 p-4 text-2xl font-black text-blue-600 outline-none focus:border-blue-500"
-                  defaultValue={priceModal.item?.unitPrice}
-                  id="pricingManagerInput"
-                />
-                <p className="mt-2 text-[11px] leading-4 text-slate-400">
-                  Choose where this price should be saved permanently. Typing directly in the invoice row remains invoice-only.
-                </p>
-              </div>
-
-              <div className="space-y-3">
-                <button
-                  onClick={() =>
-                    executePriceSave(
-                      'CUSTOMER',
-                      document.getElementById('pricingManagerInput').value
-                    )
-                  }
-                  className="flex w-full items-center rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 transition-colors hover:bg-emerald-700"
-                  type="button"
-                >
-                  <User size={16} className="mr-3 shrink-0" />
-                  <span className="flex-1 text-left">
-                    Save for {getCustomerName(customer) || 'Customer'}
-                  </span>
-                </button>
-
-                {priceModal.assignedGroup && (
-                  <button
-                    onClick={() =>
-                      executePriceSave(
-                        'GROUP',
-                        document.getElementById('pricingManagerInput').value
-                      )
-                    }
-                    className="flex w-full items-center rounded-xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-500/20 transition-colors hover:bg-indigo-700"
-                    type="button"
-                  >
-                    <Layers size={16} className="mr-3 shrink-0" />
-                    <span className="flex-1 text-left">
-                      Save for {priceModal.assignedGroup.name} Group
-                    </span>
-                  </button>
-                )}
-
-                <button
-                  onClick={() =>
-                    executePriceSave(
-                      'GLOBAL',
-                      document.getElementById('pricingManagerInput').value
-                    )
-                  }
-                  className="flex w-full items-center rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-blue-500/20 transition-colors hover:bg-blue-700"
-                  type="button"
-                >
-                  <Settings size={16} className="mr-3 shrink-0" />
-                  <span className="flex-1 text-left">Update Global Catalog</span>
-                </button>
-
-                {priceModal.hasIndividualPrice && (
-                  <button
-                    onClick={() => executePriceSave('REMOVE_CUSTOMER')}
-                    className="mt-4 flex w-full items-center rounded-xl border-2 border-red-100 bg-white px-4 py-3 text-sm font-bold text-red-600 transition-colors hover:bg-red-50"
-                    type="button"
-                  >
-                    <Trash2 size={16} className="mr-3 shrink-0" />
-                    <span className="flex-1 text-left">Clear Individual Override</span>
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isRemarkModalOpen && (
-        <div className="fixed inset-0 z-[6000] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl animate-in fade-in zoom-in duration-200">
-            <div className="flex items-center justify-between bg-slate-900 px-6 py-4 text-white">
-              <h2 className="flex items-center text-sm font-black uppercase tracking-widest">
-                <MessageSquare size={16} className="mr-2 text-blue-400" /> Cash Remarks
-              </h2>
-              <button
-                onClick={() => setIsRemarkModalOpen(false)}
-                className="rounded-full p-1 transition-colors hover:bg-slate-800"
-                type="button"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="p-6">
-              <p className="mb-4 text-sm text-slate-500">
-                Add notes or special instructions for this invoice. These will appear in the bottom-left corner of the cash invoice template.
-              </p>
-
-              <div className="mb-6">
-                <textarea
-                  id="invoiceRemarkInput"
-                  rows={5}
-                  className="w-full resize-none rounded-xl border-2 border-blue-100 bg-blue-50/50 p-4 text-sm font-medium text-slate-800 shadow-inner outline-none focus:border-blue-500"
-                  defaultValue={invoiceRemarks}
-                  placeholder="Enter any special instructions, backorder notes, or highlights..."
-                />
-              </div>
-
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setIsRemarkModalOpen(false)}
-                  className="flex-1 rounded-xl bg-slate-100 px-4 py-3 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-200"
-                  type="button"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => {
-                    setInvoiceRemarks(
-                      document.getElementById('invoiceRemarkInput').value
-                    );
-                    setIsRemarkModalOpen(false);
-                  }}
-                  className="flex flex-1 items-center justify-center rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-blue-500/20 transition-colors hover:bg-blue-700"
-                  type="button"
-                >
-                  <Save size={16} className="mr-2 shrink-0" /> Save Remarks
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isDiscardConfirmOpen && (
-        <div className="fixed inset-0 z-[7000] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl">
-            <div className="p-6">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-50 text-red-500">
-                <AlertTriangle size={24} />
-              </div>
-              <h2 className="mt-4 text-lg font-black text-slate-900">
-                Discard unsaved cash changes?
-              </h2>
-              <p className="mt-2 text-sm leading-6 text-slate-500">
-                This cash invoice has unsaved changes. Closing now will remove the current draft changes from this workspace.
-              </p>
-
-              <div className="mt-6 flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => setIsDiscardConfirmOpen(false)}
-                  className="flex-1 rounded-xl bg-slate-100 px-4 py-3 text-sm font-bold text-slate-600 hover:bg-slate-200"
-                >
-                  Keep Editing
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsDiscardConfirmOpen(false);
-                    onClose();
-                  }}
-                  className="flex-1 rounded-xl bg-red-600 px-4 py-3 text-sm font-bold text-white hover:bg-red-700"
-                >
-                  Discard Changes
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isSaving && (
-        <div className="pointer-events-none fixed bottom-6 left-1/2 z-[8000] -translate-x-1/2 rounded-full bg-slate-900 px-5 py-2.5 text-xs font-black uppercase tracking-wider text-white shadow-2xl">
-          Saving cash invoice…
-        </div>
-      )}
+      <p className="mt-3 text-xs text-slate-500">{subtext}</p>
     </div>
   );
 }
