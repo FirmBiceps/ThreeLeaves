@@ -40,6 +40,49 @@ function getProductSku(item) {
   return String(item?.SKU || item?.sku || '');
 }
 
+function getProductCost(item) {
+  const rawValue =
+    item?.['cost_price (SGD)'] ??
+    item?.cost_price ??
+    item?.costPrice ??
+    null;
+
+  if (rawValue === null || rawValue === undefined || rawValue === '') {
+    return null;
+  }
+
+  const value = Number(rawValue);
+
+  // A zero/negative inventory cost is treated as incomplete cost data rather
+  // than silently assuming the product was free.
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function getSnapshotCost(item) {
+  const rawValue =
+    item?.costPriceSnapshot ??
+    item?.cost_price_snapshot ??
+    null;
+
+  if (rawValue === null || rawValue === undefined || rawValue === '') {
+    return null;
+  }
+
+  const value = Number(rawValue);
+  return Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function getItemSellingPrice(item) {
+  const value = Number(
+    item?.unitPrice ??
+    item?.price ??
+    item?.Price ??
+    0
+  );
+
+  return Number.isFinite(value) ? value : 0;
+}
+
 function getItemUnit(item) {
   return String(item?.unit || item?.Unit || DEFAULT_UNIT);
 }
@@ -668,6 +711,136 @@ export function InvoiceGenerator({
   );
   const gst = subtotal * 0.09;
   const total = subtotal + gst;
+
+  /**
+   * Build immutable cost snapshots for invoice lines.
+   *
+   * Rules:
+   * - If an invoice line already has a valid snapshot for the SAME product,
+   *   preserve it. Updating today's inventory cost must not rewrite history.
+   * - A new/replaced product captures the current product_list cost.
+   * - If the invoice unit differs from the inventory base unit, mark the cost
+   *   for review instead of pretending the unit cost is definitely correct.
+   * - Missing/zero inventory cost is also flagged for review.
+   */
+  const buildProfitSnapshot = useCallback(
+    (sourceItems) => {
+      const capturedAt = new Date().toISOString();
+
+      const snapshottedItems = (Array.isArray(sourceItems) ? sourceItems : []).map(
+        (item) => {
+          const itemId = String(item?.itemId || '');
+          const product = safeInventory.find(
+            (entry) => String(entry?.id || '') === itemId
+          );
+
+          const qty = Number(item?.qty ?? item?.quantity ?? 0) || 0;
+          const sellingPrice = getItemSellingPrice(item);
+          const lineRevenueSnapshot = qty * sellingPrice;
+
+          const itemUnit = String(getItemUnit(item) || '');
+          const inventoryUnit = product
+            ? String(product?.Unit || product?.unit || DEFAULT_UNIT)
+            : '';
+
+          const previousSnapshotItemId = String(
+            item?.costSnapshotItemId ??
+            item?.cost_snapshot_item_id ??
+            ''
+          );
+          const previousSnapshotCost = getSnapshotCost(item);
+          const previousSnapshotMatchesProduct =
+            itemId !== '' &&
+            previousSnapshotItemId === itemId &&
+            previousSnapshotCost !== null;
+
+          const inventoryCost = getProductCost(product);
+
+          const costPriceSnapshot = previousSnapshotMatchesProduct
+            ? previousSnapshotCost
+            : inventoryCost;
+
+          const unitMismatch =
+            Boolean(product) &&
+            Boolean(itemUnit) &&
+            Boolean(inventoryUnit) &&
+            itemUnit !== inventoryUnit;
+
+          const missingCost = costPriceSnapshot === null;
+          const costNeedsReview = missingCost || unitMismatch;
+
+          const lineCostSnapshot = costNeedsReview
+            ? null
+            : qty * costPriceSnapshot;
+
+          const lineProfitSnapshot =
+            lineCostSnapshot === null
+              ? null
+              : lineRevenueSnapshot - lineCostSnapshot;
+
+          return {
+            ...item,
+
+            // Selling price was already stored as unitPrice; these explicit
+            // fields make reporting/auditing easier.
+            sellingPriceSnapshot: sellingPrice,
+            lineRevenueSnapshot,
+
+            // Historical cost fields.
+            costPriceSnapshot,
+            costSnapshotItemId: itemId || null,
+            inventoryUnitSnapshot: inventoryUnit || null,
+            lineCostSnapshot,
+            lineProfitSnapshot,
+            costNeedsReview,
+            costReviewReason: missingCost
+              ? 'Missing inventory cost'
+              : unitMismatch
+                ? `Invoice unit ${itemUnit} differs from inventory unit ${inventoryUnit}`
+                : null,
+            costSnapshotBasis: previousSnapshotMatchesProduct
+              ? String(item?.costSnapshotBasis || 'existing_locked_snapshot')
+              : existingInvoice
+                ? 'invoice_edit_current_cost'
+                : 'invoice_cost_snapshot',
+            costCapturedAt: previousSnapshotMatchesProduct
+              ? item?.costCapturedAt || capturedAt
+              : capturedAt,
+          };
+        }
+      );
+
+      const missingCostCount = snapshottedItems.filter(
+        (item) => item?.costNeedsReview
+      ).length;
+
+      const costTotal =
+        missingCostCount === 0
+          ? snapshottedItems.reduce(
+              (sum, item) => sum + (Number(item?.lineCostSnapshot) || 0),
+              0
+            )
+          : null;
+
+      const grossProfit =
+        costTotal === null ? null : subtotal - costTotal;
+
+      const grossMarginPct =
+        grossProfit === null || subtotal <= 0
+          ? null
+          : (grossProfit / subtotal) * 100;
+
+      return {
+        items: snapshottedItems,
+        costTotal,
+        grossProfit,
+        grossMarginPct,
+        missingCostCount,
+        capturedAt,
+      };
+    },
+    [existingInvoice, safeInventory, subtotal]
+  );
 
   const customerInvoiceHistory = useMemo(() => {
     if (!customerId) return [];
@@ -1525,6 +1698,23 @@ export function InvoiceGenerator({
       (item) => item.itemId || item.rawSearchString || item.name
     );
 
+    const profitSnapshot = buildProfitSnapshot(finalItems);
+
+    // Preserve the legacy-estimate flag on invoices that were backfilled from
+    // today's inventory costs. Editing such an old invoice should not make it
+    // look like an originally captured historical cost.
+    const existingProfitBasis = String(existingInvoice?.profit_basis || '');
+    const existingIsEstimated =
+      existingInvoice?.profit_is_estimated === true ||
+      existingProfitBasis.startsWith('legacy_backfill');
+
+    const profitBasis = existingInvoice
+      ? existingProfitBasis || 'invoice_edit_snapshot'
+      : 'invoice_cost_snapshot';
+
+    const profitIsEstimated =
+      existingIsEstimated || profitSnapshot.missingCostCount > 0;
+
     const invoice = {
       id: existingInvoice ? existingInvoice.id : `INV-${invoiceNumber}`,
       number: String(invoiceNumber),
@@ -1534,8 +1724,25 @@ export function InvoiceGenerator({
       ),
       region: String(customer?.region || existingInvoice?.region || ''),
       date: String(invoiceDate),
-      items: finalItems,
+
+      // Items now carry the cost/selling-price snapshots used for reporting.
+      items: profitSnapshot.items,
+
+      // Invoice totals. Profit uses sales EXCLUDING GST.
+      subtotal_ex_gst: subtotal,
+      gst_amount: gst,
       total,
+      cost_total: profitSnapshot.costTotal,
+      gross_profit: profitSnapshot.grossProfit,
+      gross_margin_pct: profitSnapshot.grossMarginPct,
+
+      // Audit metadata: costs are locked against future inventory changes.
+      profit_basis: profitBasis,
+      profit_locked_at:
+        existingInvoice?.profit_locked_at || profitSnapshot.capturedAt,
+      profit_is_estimated: profitIsEstimated,
+      profit_missing_cost_count: profitSnapshot.missingCostCount,
+
       status: invoiceStatus,
       deliveryStatus: existingInvoice
         ? String(existingInvoice.deliveryStatus || 'Pending')
