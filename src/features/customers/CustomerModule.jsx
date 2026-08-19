@@ -697,7 +697,9 @@ function CustomerFormModal({ initialValue, onClose, onSave, groups }) {
             <option value="North">North Sector</option><option value="West">West Sector</option><option value="East">East Sector</option><option value="South">South Sector</option><option value="Central">Central Sector</option>
           </select>
           <select className="w-full rounded-xl border border-gray-200 p-3 text-sm bg-white cursor-pointer" onChange={(event) => setForm((current) => ({ ...current, payment_terms: event.target.value }))} value={form.payment_terms || '30_days'}>
-            <option value="30_days">30 Days Credit</option><option value="cod">C.O.D</option>
+            <option value="30_days">30 Days Credit</option>
+            <option value="cod">C.O.D</option>
+            <option value="paynow">PayNow</option>
           </select>
           <select className="w-full rounded-xl border border-indigo-200 text-indigo-800 bg-indigo-50 p-3 text-sm font-bold cursor-pointer outline-none focus:ring-2 focus:ring-indigo-500" onChange={(event) => setForm((current) => ({ ...current, pricing_group_id: event.target.value }))} value={form.pricing_group_id || ''}>
             <option value="">No Pricing Group</option>
@@ -1047,8 +1049,20 @@ export function CustomerModule({ sys }) {
                   <div className="mt-4 flex flex-wrap gap-2 items-center">
                     <span className={`${statusStyle.bg} ${statusStyle.text} rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest`}>{statusStyle.label}</span>
                     <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-slate-600">{selectedCustomer.trend === 'growing' ? 'Growing' : selectedCustomer.trend === 'declining' ? 'Declining' : 'Stable'}</span>
-                    <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest ${selectedCustomer.customer.payment_terms === 'cod' ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'}`}>
-                      {selectedCustomer.customer.payment_terms === 'cod' ? 'C.O.D' : '30 Days'}
+                    <span
+                      className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest ${
+                        selectedCustomer.customer.payment_terms === 'cod'
+                          ? 'bg-amber-100 text-amber-700'
+                          : selectedCustomer.customer.payment_terms === 'paynow'
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : 'bg-indigo-100 text-indigo-700'
+                      }`}
+                    >
+                      {selectedCustomer.customer.payment_terms === 'cod'
+                        ? 'C.O.D'
+                        : selectedCustomer.customer.payment_terms === 'paynow'
+                          ? 'PayNow'
+                          : '30 Days'}
                     </span>
                     <span
                       className={`flex items-center rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest ${
@@ -1295,8 +1309,20 @@ export function CustomerModule({ sys }) {
                     <div className="font-bold text-slate-900">{entry.customer.name || 'Unknown'}</div>
                     <div className="mt-1 flex items-center space-x-2">
                       <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{entry.customer.region || '-'} Sector</span>
-                      <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${entry.customer.payment_terms === 'cod' ? 'bg-amber-50 text-amber-600 border border-amber-200' : 'bg-indigo-50 text-indigo-500 border border-indigo-200'}`}>
-                        {entry.customer.payment_terms === 'cod' ? 'C.O.D' : '30 Days'}
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border ${
+                          entry.customer.payment_terms === 'cod'
+                            ? 'bg-amber-50 text-amber-600 border-amber-200'
+                            : entry.customer.payment_terms === 'paynow'
+                              ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
+                              : 'bg-indigo-50 text-indigo-500 border-indigo-200'
+                        }`}
+                      >
+                        {entry.customer.payment_terms === 'cod'
+                          ? 'C.O.D'
+                          : entry.customer.payment_terms === 'paynow'
+                            ? 'PayNow'
+                            : '30 Days'}
                       </span>
                       <span
                         className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border ${
