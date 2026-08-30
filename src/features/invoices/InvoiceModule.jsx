@@ -6,6 +6,45 @@ import { InvoiceGenerator } from './InvoiceGenerator';
 import { InvoicePreviewModal } from './InvoicePreview';
 
 // ============================================================================
+// DATABASE LOADING
+// ============================================================================
+// Supabase/PostgREST can cap a single select request. Fetch invoices in stable
+// 1,000-row ranges so Invoice History receives every accessible invoice.
+const INVOICE_FETCH_BATCH_SIZE = 1000;
+
+async function fetchAllInvoiceRows() {
+  const allInvoices = [];
+  let from = 0;
+
+  while (true) {
+    const to = from + INVOICE_FETCH_BATCH_SIZE - 1;
+
+    const { data, error } = await supabase
+      .from('invoices')
+      .select('*')
+      .order('id', { ascending: true })
+      .range(from, to);
+
+    if (error) throw error;
+
+    const rows = Array.isArray(data) ? data : [];
+    allInvoices.push(...rows);
+
+    if (rows.length < INVOICE_FETCH_BATCH_SIZE) break;
+
+    from += INVOICE_FETCH_BATCH_SIZE;
+
+    if (from > 1000000) {
+      throw new Error(
+        'Invoice loading stopped after 1,000,000 rows. Please review the database query.'
+      );
+    }
+  }
+
+  return allInvoices;
+}
+
+// ============================================================================
 // PROFIT REPORTING
 // ============================================================================
 // Prefer the immutable values stored on the invoice. For legacy invoices that
@@ -978,6 +1017,12 @@ export function InvoiceModule({ sys }) {
   const [editingInvoice, setEditingInvoice] = useState(null);
 
   const [pricingGroups, setPricingGroups] = useState([]);
+
+  // This module now performs its own complete Supabase invoice refresh so it
+  // can be tested without changing the app-wide loader first.
+  const [isRefreshingInvoices, setIsRefreshingInvoices] = useState(false);
+  const [invoiceLoadError, setInvoiceLoadError] = useState('');
+  const [lastInvoiceRefresh, setLastInvoiceRefresh] = useState(null);
   
   // Auto-reset back to Page 1 whenever the user searches or changes a filter
   useEffect(() => {
@@ -993,6 +1038,72 @@ export function InvoiceModule({ sys }) {
     };
     fetchGroups();
   }, [isGeneratorOpen]);
+
+  const refreshAllInvoices = async () => {
+    setIsRefreshingInvoices(true);
+    setInvoiceLoadError('');
+
+    try {
+      const allInvoices = await fetchAllInvoiceRows();
+
+      if (typeof sys?.setInvoices === 'function') {
+        sys.setInvoices(allInvoices);
+      }
+
+      setLastInvoiceRefresh(new Date());
+      return allInvoices;
+    } catch (error) {
+      console.error('Failed to load all invoices:', error);
+      setInvoiceLoadError(
+        error?.message || 'Unable to refresh invoices from Supabase.'
+      );
+      throw error;
+    } finally {
+      setIsRefreshingInvoices(false);
+    }
+  };
+
+  // Test fix: when Invoice History opens, load the complete invoices table
+  // directly in stable batches rather than relying only on the app-wide
+  // initial sys.invoices payload.
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadAllInvoices = async () => {
+      setIsRefreshingInvoices(true);
+      setInvoiceLoadError('');
+
+      try {
+        const allInvoices = await fetchAllInvoiceRows();
+
+        if (!cancelled && typeof sys?.setInvoices === 'function') {
+          sys.setInvoices(allInvoices);
+          setLastInvoiceRefresh(new Date());
+        }
+      } catch (error) {
+        console.error('Failed to load all invoices:', error);
+
+        if (!cancelled) {
+          setInvoiceLoadError(
+            error?.message || 'Unable to refresh invoices from Supabase.'
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setIsRefreshingInvoices(false);
+        }
+      }
+    };
+
+    loadAllInvoices();
+
+    return () => {
+      cancelled = true;
+    };
+    // Run once when this module mounts. Use the Refresh Invoices button to
+    // re-sync later if another user creates invoices.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const safeInvoices = Array.isArray(sys?.invoices) ? sys.invoices : [];
   const safeInventory = Array.isArray(sys?.inventory) ? sys.inventory : [];
@@ -1294,14 +1405,64 @@ export function InvoiceModule({ sys }) {
             </div>
           </div>
 
-          <button
-            className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-6 py-3 font-medium text-white shadow-lg shadow-blue-600/20 transition-all hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-xl active:translate-y-0"
-            onClick={() => setIsGeneratorOpen(true)}
-          >
-            <Plus className="mr-2" size={18} />
-            New Invoice
-          </button>
+          <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
+            <button
+              type="button"
+              onClick={() => {
+                refreshAllInvoices().catch(() => {
+                  // Error is displayed in the status banner below.
+                });
+              }}
+              disabled={isRefreshingInvoices}
+              className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-600 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+              title="Reload every accessible invoice from Supabase"
+            >
+              <RotateCcw
+                className={`mr-2 ${isRefreshingInvoices ? 'animate-spin' : ''}`}
+                size={16}
+              />
+              {isRefreshingInvoices ? 'Loading Invoices…' : 'Refresh Invoices'}
+            </button>
+
+            <button
+              className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-6 py-3 font-medium text-white shadow-lg shadow-blue-600/20 transition-all hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-xl active:translate-y-0"
+              onClick={() => setIsGeneratorOpen(true)}
+            >
+              <Plus className="mr-2" size={18} />
+              New Invoice
+            </button>
+          </div>
         </div>
+
+        {(isRefreshingInvoices || invoiceLoadError || lastInvoiceRefresh) && (
+          <div
+            className={`mb-4 flex flex-col gap-2 rounded-xl border px-4 py-3 text-xs sm:flex-row sm:items-center sm:justify-between ${
+              invoiceLoadError
+                ? 'border-red-200 bg-red-50 text-red-700'
+                : isRefreshingInvoices
+                  ? 'border-blue-200 bg-blue-50 text-blue-700'
+                  : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+            }`}
+          >
+            <div className="font-bold">
+              {invoiceLoadError
+                ? `Invoice refresh failed: ${invoiceLoadError}`
+                : isRefreshingInvoices
+                  ? 'Loading all invoice batches from Supabase…'
+                  : `Loaded ${safeInvoices.length} invoice${safeInvoices.length === 1 ? '' : 's'} from Supabase.`}
+            </div>
+
+            {!invoiceLoadError && lastInvoiceRefresh && !isRefreshingInvoices && (
+              <div className="font-semibold opacity-80">
+                Last refreshed {lastInvoiceRefresh.toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
