@@ -8,6 +8,7 @@ import { GSTModule } from './features/gst/GSTModule';
 import { InventoryModule } from './features/inventory/InventoryModule';
 import { InvoiceModule } from './features/invoices/InvoiceModule';
 import { CashModule } from './features/cash/CashModule';
+import { CashWorkspace as CashModule } from './features/cash/CashWorkspace';
 import { LogisticsModule } from './features/logistics/LogisticsModule';
 import { PickingModule } from './features/picking/PickingModule';
 import { SupplierModule } from './features/suppliers/SupplierModule';
