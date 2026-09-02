@@ -1535,22 +1535,36 @@ export function InventoryModule({ sys }) {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1180px] border-collapse text-left">
+          <div className="w-full overflow-x-hidden">
+            <table className="w-full table-fixed border-collapse text-left">
+              <colgroup>
+                <col className="w-[9%]" />
+                <col className="w-[27%]" />
+                <col className="w-[13%]" />
+                <col className="w-[7%]" />
+                <col className="w-[11%]" />
+                <col className="w-[8%]" />
+                <col className="w-[8%]" />
+                <col className="w-[7%]" />
+                <col className="w-[6%]" />
+                <col className="w-[4%]" />
+              </colgroup>
+
               <thead className="sticky top-0 z-10 bg-white shadow-sm">
-                <tr className="border-b border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-500">
-                  <th className="p-4 pl-6">SKU</th>
-                  <th className="p-4">Product</th>
-                  <th className="p-4">Supplier</th>
-                  <th className="p-4 text-center">Unit</th>
-                  <th className="p-4">Packing</th>
-                  <th className="p-4 text-right">Cost</th>
-                  <th className="p-4 text-right">Sell</th>
-                  <th className="p-4 text-right">Margin</th>
-                  <th className="p-4 text-center">Stock</th>
-                  <th className="sticky right-0 bg-white p-4 pr-6 text-center">Action</th>
+                <tr className="border-b border-slate-200 text-[clamp(8px,0.62vw,10px)] font-black uppercase tracking-[0.12em] text-slate-500">
+                  <th className="px-2.5 py-3 pl-4">SKU</th>
+                  <th className="px-2.5 py-3">Product</th>
+                  <th className="px-2.5 py-3">Supplier</th>
+                  <th className="px-2 py-3 text-center">Unit</th>
+                  <th className="px-2.5 py-3">Packing</th>
+                  <th className="px-2 py-3 text-right">Cost</th>
+                  <th className="px-2 py-3 text-right">Sell</th>
+                  <th className="px-2 py-3 text-right">Margin</th>
+                  <th className="px-2 py-3 text-center">Stock</th>
+                  <th className="px-1.5 py-3 text-center">Edit</th>
                 </tr>
               </thead>
+
               <tbody className="divide-y divide-slate-100">
                 {pageRows.map((item, index) => {
                   const cost = getInventoryCost(item);
@@ -1558,37 +1572,98 @@ export function InventoryModule({ sys }) {
                   const margin = getMargin(item);
                   const stock = getInventoryStock(item);
                   const status = getStockStatus(stock);
+
                   return (
                     <tr key={getInventoryId(item) || index} className="group hover:bg-slate-50">
-                      <td className="whitespace-nowrap p-4 pl-6 font-mono text-sm uppercase text-slate-500">{getInventorySku(item) || '-'}</td>
-                      <td className="max-w-[340px] p-4">
-                        <p className="font-bold text-slate-800">{getInventoryName(item) || 'Unnamed Product'}</p>
-                        {getInventoryDescription(item) && <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{getInventoryDescription(item)}</p>}
+                      <td className="truncate whitespace-nowrap px-2.5 py-3 pl-4 font-mono text-[clamp(10px,0.76vw,12px)] uppercase text-slate-500">
+                        {getInventorySku(item) || '-'}
                       </td>
-                      <td className="max-w-[220px] p-4 text-sm font-bold text-indigo-600">{getInventorySupplier(item) || '-'}</td>
-                      <td className="p-4 text-center"><span className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs">{getInventoryUnit(item) || '-'}</span></td>
-                      <td className="p-4 text-sm text-slate-600">{getInventoryPacking(item) || '-'}</td>
-                      <td className="p-4 text-right text-sm font-bold">
-                        {cost === null ? <span className="rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-700">Missing</span>
-                          : <span className="text-orange-600">${formatMoney(cost)}</span>}
+
+                      <td className="px-2.5 py-3 align-top">
+                        <p className="line-clamp-2 break-words text-[clamp(11px,0.92vw,14px)] font-bold leading-[1.28] text-slate-800">
+                          {getInventoryName(item) || 'Unnamed Product'}
+                        </p>
+
+                        {getInventoryDescription(item) && (
+                          <p className="mt-1 line-clamp-2 break-words text-[clamp(9px,0.72vw,11px)] leading-[1.35] text-slate-500">
+                            {getInventoryDescription(item)}
+                          </p>
+                        )}
                       </td>
-                      <td className="p-4 text-right text-sm font-bold text-blue-700">${formatMoney(sell)}</td>
-                      <td className="p-4 text-right text-sm font-black">
-                        {margin === null ? <span className="text-slate-300">—</span>
-                          : <span className={margin < 0 ? 'text-red-600' : 'text-emerald-600'}>{margin.toFixed(1)}%</span>}
+
+                      <td className="px-2.5 py-3 align-top">
+                        <p className="line-clamp-2 break-words text-[clamp(10px,0.76vw,12px)] font-bold leading-[1.3] text-indigo-600">
+                          {getInventorySupplier(item) || '-'}
+                        </p>
                       </td>
-                      <td className="p-4 text-center">
-                        <span className={`rounded-md border px-2.5 py-1 text-xs font-black ${
-                          status === 'out' ? 'border-red-200 bg-red-50 text-red-700'
-                            : status === 'low' ? 'border-amber-200 bg-amber-50 text-amber-700'
-                              : 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                        }`}>{stock}</span>
-                        <p className="mt-1 text-[9px] font-black uppercase text-slate-400">{status === 'out' ? 'Out' : status === 'low' ? 'Low' : 'Healthy'}</p>
+
+                      <td className="px-2 py-3 text-center align-top">
+                        <span className="inline-block max-w-full truncate rounded-md border border-slate-200 bg-white px-1.5 py-1 text-[clamp(9px,0.7vw,11px)] text-slate-600">
+                          {getInventoryUnit(item) || '-'}
+                        </span>
                       </td>
-                      <td className="sticky right-0 bg-white/95 p-4 pr-6 text-center backdrop-blur-sm group-hover:bg-slate-50">
-                        <button type="button" onClick={() => { setEditingItem(item); setModalOpen(true); }}
-                          className="rounded-lg bg-white p-2 text-slate-400 shadow-sm hover:bg-blue-50 hover:text-blue-600">
-                          <Edit size={16} />
+
+                      <td className="px-2.5 py-3 align-top">
+                        <p className="line-clamp-2 break-words text-[clamp(9px,0.72vw,11px)] leading-[1.35] text-slate-600">
+                          {getInventoryPacking(item) || '-'}
+                        </p>
+                      </td>
+
+                      <td className="whitespace-nowrap px-2 py-3 text-right align-top text-[clamp(9px,0.72vw,11px)] font-bold">
+                        {cost === null ? (
+                          <span className="rounded-md bg-amber-50 px-1.5 py-1 text-[clamp(8px,0.62vw,10px)] text-amber-700">
+                            Missing
+                          </span>
+                        ) : (
+                          <span className="text-orange-600">
+                            ${formatMoney(cost)}
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="whitespace-nowrap px-2 py-3 text-right align-top text-[clamp(9px,0.72vw,11px)] font-bold text-blue-700">
+                        ${formatMoney(sell)}
+                      </td>
+
+                      <td className="whitespace-nowrap px-2 py-3 text-right align-top text-[clamp(9px,0.72vw,11px)] font-black">
+                        {margin === null ? (
+                          <span className="text-slate-300">—</span>
+                        ) : (
+                          <span className={margin < 0 ? 'text-red-600' : 'text-emerald-600'}>
+                            {margin.toFixed(1)}%
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="px-2 py-3 text-center align-top">
+                        <span
+                          className={`inline-block rounded-md border px-1.5 py-1 text-[clamp(9px,0.68vw,10px)] font-black ${
+                            status === 'out'
+                              ? 'border-red-200 bg-red-50 text-red-700'
+                              : status === 'low'
+                                ? 'border-amber-200 bg-amber-50 text-amber-700'
+                                : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                          }`}
+                        >
+                          {stock}
+                        </span>
+
+                        <p className="mt-1 text-[clamp(7px,0.55vw,9px)] font-black uppercase leading-none text-slate-400">
+                          {status === 'out' ? 'Out' : status === 'low' ? 'Low' : 'Healthy'}
+                        </p>
+                      </td>
+
+                      <td className="px-1.5 py-3 text-center align-top">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingItem(item);
+                            setModalOpen(true);
+                          }}
+                          className="inline-flex rounded-lg bg-white p-1.5 text-slate-400 shadow-sm transition hover:bg-blue-50 hover:text-blue-600"
+                          aria-label={`Edit ${getInventoryName(item) || 'product'}`}
+                        >
+                          <Edit size={14} />
                         </button>
                       </td>
                     </tr>
@@ -1596,7 +1671,11 @@ export function InventoryModule({ sys }) {
                 })}
 
                 {!pageRows.length && (
-                  <tr><td colSpan="10" className="p-14 text-center text-sm font-bold text-slate-400">No products match the current search and filters.</td></tr>
+                  <tr>
+                    <td colSpan="10" className="p-14 text-center text-sm font-bold text-slate-400">
+                      No products match the current search and filters.
+                    </td>
+                  </tr>
                 )}
               </tbody>
             </table>
