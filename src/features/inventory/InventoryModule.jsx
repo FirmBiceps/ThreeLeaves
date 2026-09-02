@@ -89,6 +89,61 @@ function getStockStatus(stock) {
   return 'healthy';
 }
 
+const DATA_QUALITY_RULES = [
+  { key: 'missing_cost', label: 'Missing Cost', shortLabel: 'Cost' },
+  { key: 'missing_supplier', label: 'Missing Supplier', shortLabel: 'Supplier' },
+  { key: 'missing_sku', label: 'Missing SKU', shortLabel: 'SKU' },
+  { key: 'missing_packing', label: 'Missing Packing', shortLabel: 'Packing' },
+  { key: 'missing_description', label: 'Missing Description', shortLabel: 'Description' },
+  { key: 'missing_unit', label: 'Missing Unit', shortLabel: 'Unit' },
+  { key: 'missing_sell_price', label: 'Missing Sell Price', shortLabel: 'Sell Price' },
+];
+
+function getProductCompletenessIssues(item) {
+  const issues = [];
+
+  if (!String(getInventorySku(item) || '').trim()) {
+    issues.push('missing_sku');
+  }
+
+  if (!String(getInventorySupplier(item) || '').trim()) {
+    issues.push('missing_supplier');
+  }
+
+  if (!String(getInventoryUnit(item) || '').trim()) {
+    issues.push('missing_unit');
+  }
+
+  if (!String(getInventoryPacking(item) || '').trim()) {
+    issues.push('missing_packing');
+  }
+
+  if (!String(getInventoryDescription(item) || '').trim()) {
+    issues.push('missing_description');
+  }
+
+  if (getInventoryCost(item) === null) {
+    issues.push('missing_cost');
+  }
+
+  const rawSellPrice =
+    item?.Price ??
+    item?.unitPrice ??
+    item?.['Unit Price (SG)'] ??
+    null;
+
+  if (
+    rawSellPrice === null ||
+    rawSellPrice === undefined ||
+    rawSellPrice === '' ||
+    !Number.isFinite(Number(rawSellPrice))
+  ) {
+    issues.push('missing_sell_price');
+  }
+
+  return issues;
+}
+
 function getCustomerName(customer) {
   return String(
     customer?.name ?? customer?.Name ?? customer?.companyName ??
@@ -975,6 +1030,7 @@ export function InventoryModule({ sys }) {
   const [unitFilter, setUnitFilter] = useState('All');
   const [stockFilter, setStockFilter] = useState('All');
   const [costFilter, setCostFilter] = useState('All');
+  const [qualityFilter, setQualityFilter] = useState('All');
   const [sortOption, setSortOption] = useState('name_asc');
   const [page, setPage] = useState(1);
 
@@ -1035,7 +1091,7 @@ export function InventoryModule({ sys }) {
   }, [searchTerm]);
 
   useEffect(() => setPage(1), [
-    debouncedSearch, supplierFilter, unitFilter, stockFilter, costFilter, sortOption,
+    debouncedSearch, supplierFilter, unitFilter, stockFilter, costFilter, qualityFilter, sortOption,
   ]);
 
   const supplierOptions = useMemo(() =>
@@ -1061,6 +1117,44 @@ export function InventoryModule({ sys }) {
     return { low, out, missingCost, costValue, retailValue, noSupplier };
   }, [inventory]);
 
+  const qualitySummary = useMemo(() => {
+    const counts = Object.fromEntries(
+      DATA_QUALITY_RULES.map((rule) => [rule.key, 0])
+    );
+
+    let incompleteProducts = 0;
+    let completeProducts = 0;
+    let totalIssues = 0;
+
+    inventory.forEach((item) => {
+      const issues = getProductCompletenessIssues(item);
+
+      if (issues.length === 0) {
+        completeProducts += 1;
+      } else {
+        incompleteProducts += 1;
+        totalIssues += issues.length;
+
+        issues.forEach((issue) => {
+          counts[issue] = (counts[issue] || 0) + 1;
+        });
+      }
+    });
+
+    const completenessPct =
+      inventory.length === 0
+        ? 100
+        : (completeProducts / inventory.length) * 100;
+
+    return {
+      counts,
+      incompleteProducts,
+      completeProducts,
+      totalIssues,
+      completenessPct,
+    };
+  }, [inventory]);
+
   const filtered = useMemo(() => {
     const query = normalise(debouncedSearch);
     const rows = inventory.filter((item) => {
@@ -1079,10 +1173,32 @@ export function InventoryModule({ sys }) {
       if (stockFilter === 'Out of Stock' && getStockStatus(stock) !== 'out') return false;
       if (costFilter === 'Has Cost' && cost === null) return false;
       if (costFilter === 'Missing Cost' && cost !== null) return false;
+
+      const completenessIssues = getProductCompletenessIssues(item);
+
+      if (qualityFilter === 'Incomplete' && completenessIssues.length === 0) {
+        return false;
+      }
+
+      if (
+        qualityFilter !== 'All' &&
+        qualityFilter !== 'Incomplete' &&
+        !completenessIssues.includes(qualityFilter)
+      ) {
+        return false;
+      }
+
       return true;
     });
 
     return [...rows].sort((a, b) => {
+      if (qualityFilter !== 'All') {
+        const issueDifference =
+          getProductCompletenessIssues(b).length -
+          getProductCompletenessIssues(a).length;
+
+        if (issueDifference !== 0) return issueDifference;
+      }
       if (sortOption === 'name_desc') return getInventoryName(b).localeCompare(getInventoryName(a));
       if (sortOption === 'sku_asc') return getInventorySku(a).localeCompare(getInventorySku(b), undefined, { numeric: true });
       if (sortOption === 'stock_asc') return getInventoryStock(a) - getInventoryStock(b);
@@ -1093,7 +1209,7 @@ export function InventoryModule({ sys }) {
       if (sortOption === 'supplier_asc') return getInventorySupplier(a).localeCompare(getInventorySupplier(b));
       return getInventoryName(a).localeCompare(getInventoryName(b));
     });
-  }, [inventory, debouncedSearch, supplierFilter, unitFilter, stockFilter, costFilter, sortOption]);
+  }, [inventory, debouncedSearch, supplierFilter, unitFilter, stockFilter, costFilter, qualityFilter, sortOption]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   useEffect(() => setPage((current) => Math.min(Math.max(1, current), totalPages)), [totalPages]);
@@ -1103,8 +1219,25 @@ export function InventoryModule({ sys }) {
   const resetFilters = () => {
     setSearchTerm(''); setDebouncedSearch('');
     setSupplierFilter('All'); setUnitFilter('All');
-    setStockFilter('All'); setCostFilter('All'); setSortOption('name_asc'); setPage(1);
+    setStockFilter('All'); setCostFilter('All'); setQualityFilter('All');
+    setSortOption('name_asc'); setPage(1);
   };
+
+  const openQualityView = (nextQualityFilter) => {
+    setSearchTerm('');
+    setDebouncedSearch('');
+    setSupplierFilter('All');
+    setUnitFilter('All');
+    setStockFilter('All');
+    setCostFilter('All');
+    setQualityFilter(nextQualityFilter);
+    setSortOption('name_asc');
+    setPage(1);
+  };
+
+  const activeQualityRule = DATA_QUALITY_RULES.find(
+    (rule) => rule.key === qualityFilter
+  );
 
   const pricingImpact = (productId, oldUnit, newUnit) => {
     const oldKey = `${productId}|${oldUnit}`;
@@ -1466,6 +1599,133 @@ export function InventoryModule({ sys }) {
         </div>
 
         <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-col gap-4 border-b border-slate-200 bg-gradient-to-r from-amber-50/80 via-white to-white p-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-start gap-4">
+              <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${
+                qualitySummary.incompleteProducts > 0
+                  ? 'bg-amber-100 text-amber-700'
+                  : 'bg-emerald-100 text-emerald-700'
+              }`}>
+                {qualitySummary.incompleteProducts > 0
+                  ? <AlertTriangle size={22} />
+                  : <CheckCircle size={22} />}
+              </div>
+
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-base font-black text-slate-900">
+                    Product Data Health
+                  </h2>
+
+                  <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ${
+                    qualitySummary.incompleteProducts > 0
+                      ? 'bg-amber-100 text-amber-700'
+                      : 'bg-emerald-100 text-emerald-700'
+                  }`}>
+                    {qualitySummary.completenessPct.toFixed(0)}% complete
+                  </span>
+                </div>
+
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  {qualitySummary.incompleteProducts > 0
+                    ? `${qualitySummary.incompleteProducts} product${qualitySummary.incompleteProducts === 1 ? '' : 's'} have ${qualitySummary.totalIssues} incomplete field${qualitySummary.totalIssues === 1 ? '' : 's'} in total. Use the shortcuts below to review them immediately.`
+                    : 'All products currently have the key inventory information completed.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex shrink-0 flex-wrap gap-2">
+              {qualityFilter !== 'All' && (
+                <button
+                  type="button"
+                  onClick={() => openQualityView('All')}
+                  className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-black text-slate-600 shadow-sm transition hover:bg-slate-50"
+                >
+                  <X size={14} className="mr-1.5" />
+                  Exit Review
+                </button>
+              )}
+
+              <button
+                type="button"
+                disabled={qualitySummary.incompleteProducts === 0}
+                onClick={() => openQualityView('Incomplete')}
+                className="inline-flex items-center rounded-xl bg-amber-600 px-4 py-2.5 text-xs font-black text-white shadow-sm transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                <AlertTriangle size={14} className="mr-2" />
+                Review All Incomplete ({qualitySummary.incompleteProducts})
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-px bg-slate-200 sm:grid-cols-4 xl:grid-cols-7">
+            {DATA_QUALITY_RULES.map((rule) => {
+              const count = qualitySummary.counts[rule.key] || 0;
+              const isActive = qualityFilter === rule.key;
+
+              return (
+                <button
+                  key={rule.key}
+                  type="button"
+                  disabled={count === 0}
+                  onClick={() => openQualityView(rule.key)}
+                  className={`group min-h-[86px] bg-white px-4 py-3 text-left transition ${
+                    isActive
+                      ? 'relative z-10 bg-amber-50 ring-2 ring-inset ring-amber-300'
+                      : 'hover:bg-slate-50'
+                  } disabled:cursor-default disabled:bg-slate-50/80`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className={`text-[10px] font-black uppercase tracking-[0.12em] ${
+                      count > 0 ? 'text-slate-500' : 'text-slate-300'
+                    }`}>
+                      {rule.shortLabel}
+                    </p>
+
+                    {isActive && (
+                      <span className="rounded-full bg-amber-600 px-1.5 py-0.5 text-[8px] font-black uppercase text-white">
+                        Viewing
+                      </span>
+                    )}
+                  </div>
+
+                  <p className={`mt-2 text-xl font-black ${
+                    count > 0 ? 'text-amber-700' : 'text-slate-300'
+                  }`}>
+                    {count}
+                  </p>
+
+                  <p className={`mt-0.5 text-[10px] font-semibold ${
+                    count > 0 ? 'text-slate-400' : 'text-slate-300'
+                  }`}>
+                    {count === 1 ? 'product' : 'products'}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+
+          {qualityFilter !== 'All' && (
+            <div className="flex flex-col gap-2 border-t border-amber-200 bg-amber-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-2 text-xs font-bold text-amber-800">
+                <AlertTriangle size={14} className="shrink-0" />
+                <span>
+                  Quick review active:
+                  {' '}
+                  {qualityFilter === 'Incomplete'
+                    ? 'All products with incomplete information'
+                    : activeQualityRule?.label || 'Incomplete information'}
+                </span>
+              </div>
+
+              <span className="text-[10px] font-black uppercase tracking-wider text-amber-600">
+                {filtered.length} product{filtered.length === 1 ? '' : 's'} ready to review
+              </span>
+            </div>
+          )}
+        </div>
+
+        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 bg-slate-50/80 p-4 sm:p-5">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-12">
               <div className="md:col-span-2 xl:col-span-4">
@@ -1526,7 +1786,7 @@ export function InventoryModule({ sys }) {
 
             <div className="mt-3 flex items-center justify-between gap-3">
               <span className="text-xs font-semibold text-slate-400">Showing {filtered.length} of {inventory.length} products</span>
-              {(searchTerm || supplierFilter !== 'All' || unitFilter !== 'All' || stockFilter !== 'All' || costFilter !== 'All' || sortOption !== 'name_asc') && (
+              {(searchTerm || supplierFilter !== 'All' || unitFilter !== 'All' || stockFilter !== 'All' || costFilter !== 'All' || qualityFilter !== 'All' || sortOption !== 'name_asc') && (
                 <button type="button" onClick={resetFilters}
                   className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 shadow-sm">
                   <RotateCcw size={13} className="mr-1.5" /> Reset filters
@@ -1572,6 +1832,7 @@ export function InventoryModule({ sys }) {
                   const margin = getMargin(item);
                   const stock = getInventoryStock(item);
                   const status = getStockStatus(stock);
+                  const dataIssues = getProductCompletenessIssues(item);
 
                   return (
                     <tr key={getInventoryId(item) || index} className="group hover:bg-slate-50">
@@ -1588,6 +1849,33 @@ export function InventoryModule({ sys }) {
                           <p className="mt-1 line-clamp-2 break-words text-[clamp(9px,0.72vw,11px)] leading-[1.35] text-slate-500">
                             {getInventoryDescription(item)}
                           </p>
+                        )}
+
+                        {dataIssues.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {dataIssues
+                              .slice(0, 3)
+                              .map((issue) => {
+                                const rule = DATA_QUALITY_RULES.find(
+                                  (entry) => entry.key === issue
+                                );
+
+                                return (
+                                  <span
+                                    key={issue}
+                                    className="rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.06em] text-amber-700"
+                                  >
+                                    {rule?.shortLabel || issue}
+                                  </span>
+                                );
+                              })}
+
+                            {dataIssues.length > 3 && (
+                              <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[8px] font-black text-slate-500">
+                                +{dataIssues.length - 3}
+                              </span>
+                            )}
+                          </div>
                         )}
                       </td>
 
