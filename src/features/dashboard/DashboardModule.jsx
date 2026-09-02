@@ -514,7 +514,7 @@ function buildLedgerSummary(invoices) {
   );
 }
 
-function MetricCard({
+function ExecutiveMetric({
   label,
   value,
   subtext,
@@ -523,60 +523,55 @@ function MetricCard({
   onClick,
 }) {
   const tones = {
-    blue: {
-      icon: 'bg-blue-50 text-blue-600',
-      ring: 'hover:border-blue-200 hover:shadow-blue-100/70',
-    },
-    emerald: {
-      icon: 'bg-emerald-50 text-emerald-600',
-      ring: 'hover:border-emerald-200 hover:shadow-emerald-100/70',
-    },
-    amber: {
-      icon: 'bg-amber-50 text-amber-600',
-      ring: 'hover:border-amber-200 hover:shadow-amber-100/70',
-    },
-    violet: {
-      icon: 'bg-violet-50 text-violet-600',
-      ring: 'hover:border-violet-200 hover:shadow-violet-100/70',
-    },
-    rose: {
-      icon: 'bg-rose-50 text-rose-600',
-      ring: 'hover:border-rose-200 hover:shadow-rose-100/70',
-    },
+    blue: 'border-blue-400/20 bg-blue-400/10 text-blue-300',
+    emerald: 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300',
+    amber: 'border-amber-400/20 bg-amber-400/10 text-amber-300',
+    violet: 'border-violet-400/20 bg-violet-400/10 text-violet-300',
+    rose: 'border-rose-400/20 bg-rose-400/10 text-rose-300',
   };
 
-  const style = tones[tone] || tones.blue;
   const Component = onClick ? 'button' : 'div';
 
   return (
     <Component
       type={onClick ? 'button' : undefined}
       onClick={onClick}
-      className={`group rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition-all ${
-        onClick
-          ? `cursor-pointer hover:-translate-y-0.5 hover:shadow-lg ${style.ring}`
-          : ''
+      className={`group relative min-h-[150px] overflow-hidden px-5 py-5 text-left transition ${
+        onClick ? 'cursor-pointer hover:bg-white/[0.055]' : ''
       }`}
     >
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex h-full items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
             {label}
           </p>
-          <p className="mt-2 break-words text-2xl font-black tracking-tight text-slate-900">
+
+          <p className="mt-3 break-words text-[28px] font-semibold tracking-[-0.03em] text-white">
             {value}
           </p>
+
           {subtext && (
-            <p className="mt-2 text-xs leading-5 text-slate-500">
+            <p className="mt-2 max-w-[290px] text-[11px] leading-5 text-slate-400">
               {subtext}
             </p>
           )}
         </div>
 
-        <div className={`shrink-0 rounded-xl p-3 ${style.icon}`}>
-          <Icon size={20} />
+        <div
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${
+            tones[tone] || tones.blue
+          }`}
+        >
+          <Icon size={18} />
         </div>
       </div>
+
+      {onClick && (
+        <ArrowRight
+          size={14}
+          className="absolute bottom-4 right-5 text-slate-600 transition group-hover:translate-x-0.5 group-hover:text-slate-300"
+        />
+      )}
     </Component>
   );
 }
@@ -592,17 +587,25 @@ function SmallFinancialCard({
     <button
       type="button"
       onClick={onClick}
-      className="rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
+      className="group rounded-xl border border-slate-200 bg-white px-4 py-4 text-left transition hover:border-slate-300 hover:bg-slate-50/70"
     >
       <div className="flex items-center justify-between gap-3">
-        <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
           {label}
         </p>
-        <Icon size={16} className="shrink-0 text-slate-400" />
+
+        <Icon
+          size={15}
+          className="shrink-0 text-slate-400 transition group-hover:text-slate-600"
+        />
       </div>
-      <p className="mt-2 text-xl font-black text-slate-900">{value}</p>
+
+      <p className="mt-2 text-[21px] font-semibold tracking-[-0.02em] text-slate-900">
+        {value}
+      </p>
+
       {subtext && (
-        <p className="mt-1 text-[11px] leading-4 text-slate-500">
+        <p className="mt-1.5 text-[11px] leading-4 text-slate-500">
           {subtext}
         </p>
       )}
@@ -619,25 +622,25 @@ function AttentionItem({
   onClick,
 }) {
   const tones = {
-    amber: 'border-amber-200 bg-amber-50 text-amber-700',
-    rose: 'border-rose-200 bg-rose-50 text-rose-700',
-    blue: 'border-blue-200 bg-blue-50 text-blue-700',
-    violet: 'border-violet-200 bg-violet-50 text-violet-700',
+    amber: 'bg-amber-50 text-amber-700 ring-amber-100',
+    rose: 'bg-rose-50 text-rose-700 ring-rose-100',
+    blue: 'bg-blue-50 text-blue-700 ring-blue-100',
+    violet: 'bg-violet-50 text-violet-700 ring-violet-100',
   };
 
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-3 border-b border-slate-100 py-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex min-w-0 items-start gap-3">
         <div
-          className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${
+          className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ring-1 ${
             tones[tone] || tones.amber
           }`}
         >
-          <Icon size={17} />
+          <Icon size={16} />
         </div>
 
         <div className="min-w-0">
-          <p className="text-sm font-black text-slate-800">{title}</p>
+          <p className="text-sm font-semibold text-slate-800">{title}</p>
           <p className="mt-1 text-xs leading-5 text-slate-500">{detail}</p>
         </div>
       </div>
@@ -645,10 +648,10 @@ function AttentionItem({
       <button
         type="button"
         onClick={onClick}
-        className="inline-flex shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-black text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
+        className="inline-flex shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
       >
         {actionLabel}
-        <ArrowRight size={13} className="ml-1.5" />
+        <ArrowRight size={12} className="ml-1.5" />
       </button>
     </div>
   );
@@ -656,21 +659,26 @@ function AttentionItem({
 
 function SectionHeader({ eyebrow, title, subtitle, action }) {
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-      <div>
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="min-w-0">
         {eyebrow && (
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
             {eyebrow}
           </p>
         )}
-        <h2 className="mt-1 text-lg font-black tracking-tight text-slate-900">
+
+        <h2 className="mt-1 text-lg font-semibold tracking-[-0.015em] text-slate-900">
           {title}
         </h2>
+
         {subtitle && (
-          <p className="mt-1 text-xs leading-5 text-slate-500">{subtitle}</p>
+          <p className="mt-1 max-w-3xl text-xs leading-5 text-slate-500">
+            {subtitle}
+          </p>
         )}
       </div>
-      {action}
+
+      {action && <div className="shrink-0">{action}</div>}
     </div>
   );
 }
@@ -680,7 +688,7 @@ function TransactionTypeBadge({ type }) {
 
   return (
     <span
-      className={`inline-flex rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wider ${
+      className={`inline-flex rounded-md border px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.1em] ${
         isCash
           ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
           : 'border-blue-200 bg-blue-50 text-blue-700'
@@ -688,6 +696,65 @@ function TransactionTypeBadge({ type }) {
     >
       {type}
     </span>
+  );
+}
+
+function WorkflowCard({
+  eyebrow,
+  title,
+  value,
+  detail,
+  icon: Icon,
+  tone = 'blue',
+  onClick,
+  children,
+}) {
+  const tones = {
+    blue: 'bg-blue-50 text-blue-700 ring-blue-100',
+    emerald: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
+    amber: 'bg-amber-50 text-amber-700 ring-amber-100',
+    violet: 'bg-violet-50 text-violet-700 ring-violet-100',
+  };
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+            {eyebrow}
+          </p>
+          <h3 className="mt-1 text-sm font-semibold text-slate-800">{title}</h3>
+        </div>
+
+        <div
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ring-1 ${
+            tones[tone] || tones.blue
+          }`}
+        >
+          <Icon size={16} />
+        </div>
+      </div>
+
+      <div className="mt-4">
+        <p className="text-[28px] font-semibold tracking-[-0.03em] text-slate-900">
+          {value}
+        </p>
+        <p className="mt-1 text-[11px] leading-5 text-slate-500">{detail}</p>
+      </div>
+
+      {children}
+
+      {onClick && (
+        <button
+          type="button"
+          onClick={onClick}
+          className="mt-4 inline-flex items-center text-[11px] font-semibold text-slate-600 transition hover:text-slate-900"
+        >
+          Open workflow
+          <ArrowRight size={12} className="ml-1.5" />
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -1038,111 +1105,87 @@ export function DashboardModule({
   const hasAttentionItems = attentionItems.length > 0;
 
   return (
-    <div className="mx-auto w-full max-w-[1700px] space-y-7 pb-8">
-      {/* HEADER */}
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-        <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
-            Operations Overview
-          </p>
-          <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">
-            Daily Control Centre
-          </h1>
-          <p className="mt-2 text-sm text-slate-500">
-            {formatDisplayDate(today)} · sales, profit, outstanding balances,
-            stock and delivery workload in one place.
-          </p>
-        </div>
+    <div className="mx-auto w-full max-w-[1700px] space-y-6 pb-8">
+      {/* EXECUTIVE HEADER */}
+      <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-950 shadow-sm">
+        <div className="flex flex-col gap-5 px-5 py-6 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-blue-300">
+                Three Leaves ERP
+              </span>
+              <span className="h-1 w-1 rounded-full bg-slate-600" />
+              <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-slate-500">
+                Operations
+              </span>
+            </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <div
-            className={`inline-flex items-center rounded-full border px-3 py-2 text-[10px] font-black uppercase tracking-wider ${
-              sys?.storageMode === 'supabase'
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                : 'border-slate-200 bg-white text-slate-500'
-            }`}
-          >
-            <ShieldCheck size={13} className="mr-1.5" />
-            {sys?.storageMode === 'supabase'
-              ? 'Supabase Connected'
-              : 'Demo / Local Mode'}
-          </div>
+            <h1 className="mt-2 text-2xl font-semibold tracking-[-0.025em] text-white sm:text-[30px]">
+              Operations Dashboard
+            </h1>
 
-          <button
-            type="button"
-            onClick={() => setCashRefreshNonce((value) => value + 1)}
-            disabled={cashLoading}
-            className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-black text-slate-600 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <RefreshCw
-              size={14}
-              className={`mr-1.5 ${cashLoading ? 'animate-spin' : ''}`}
-            />
-            Refresh Cash
-          </button>
-        </div>
-      </div>
-
-      {cashError && (
-        <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-red-800">
-          <AlertCircle size={18} className="mt-0.5 shrink-0" />
-          <div>
-            <p className="text-sm font-black">
-              Cash dashboard summary could not be loaded
-            </p>
-            <p className="mt-1 text-xs leading-5 text-red-600">{cashError}</p>
-          </div>
-        </div>
-      )}
-
-      {sys?.lastSyncError && (
-        <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800">
-          <AlertTriangle size={18} className="mt-0.5 shrink-0" />
-          <div>
-            <p className="text-sm font-black">ERP sync needs attention</p>
-            <p className="mt-1 text-xs leading-5 text-amber-700">
-              A system sync error has been reported. The figures below may not
-              include the latest remote changes until the sync succeeds.
+            <p className="mt-2 text-sm leading-6 text-slate-400">
+              {formatDisplayDate(today)} · a consolidated view of sales,
+              profitability, receivables, stock and delivery workload.
             </p>
           </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <div
+              className={`inline-flex items-center rounded-lg border px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.1em] ${
+                sys?.storageMode === 'supabase'
+                  ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300'
+                  : 'border-slate-700 bg-slate-900 text-slate-400'
+              }`}
+            >
+              <ShieldCheck size={13} className="mr-1.5" />
+              {sys?.storageMode === 'supabase'
+                ? 'Supabase Connected'
+                : 'Demo / Local Mode'}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setCashRefreshNonce((value) => value + 1)}
+              disabled={cashLoading}
+              className="inline-flex items-center rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-300 transition hover:border-slate-600 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <RefreshCw
+                size={13}
+                className={`mr-1.5 ${cashLoading ? 'animate-spin' : ''}`}
+              />
+              Refresh Cash
+            </button>
+          </div>
         </div>
-      )}
 
-      {/* TODAY AT A GLANCE */}
-      <section className="space-y-4">
-        <SectionHeader
-          eyebrow="Today at a glance"
-          title="What is happening today"
-          subtitle="Normal and Cash ledgers stay separate internally; combined figures are used only where a quick operational total is useful."
-        />
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <MetricCard
-            label="Today's Sales excl. GST"
+        <div className="grid grid-cols-1 divide-y divide-white/10 border-t border-white/10 bg-slate-900/40 sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4">
+          <ExecutiveMetric
+            label="Sales Today · excl. GST"
             value={`$${formatMoney(dashboardData.todayCombined.subtotal)}`}
             subtext={`Normal $${formatMoney(
               dashboardData.todayNormalSummary.subtotal
-            )} · Cash $${formatMoney(
-              dashboardData.todayCashSummary.subtotal
-            )}`}
+            )} · Cash ${
+              cashLoading
+                ? 'loading…'
+                : `$${formatMoney(dashboardData.todayCashSummary.subtotal)}`
+            }`}
             icon={ShoppingCart}
             tone="blue"
             onClick={() => setActiveTab('invoices')}
           />
 
-          <MetricCard
-            label="Today's Gross Profit"
+          <ExecutiveMetric
+            label="Gross Profit Today"
             value={`$${formatMoney(dashboardData.todayCombined.profit)}`}
             subtext={
               dashboardData.todayCombined.costReviewCount > 0
-                ? `${dashboardData.todayCombined.profitCount} invoice${
+                ? `${dashboardData.todayCombined.costReviewCount} transaction${
+                    dashboardData.todayCombined.costReviewCount === 1 ? '' : 's'
+                  } excluded pending cost review`
+                : `${dashboardData.todayCombined.profitCount} transaction${
                     dashboardData.todayCombined.profitCount === 1 ? '' : 's'
-                  } included · ${
-                    dashboardData.todayCombined.costReviewCount
-                  } excluded for cost review`
-                : `${dashboardData.todayCombined.profitCount} invoice${
-                    dashboardData.todayCombined.profitCount === 1 ? '' : 's'
-                  } with stored profit`
+                  } included`
             }
             icon={TrendingUp}
             tone={
@@ -1152,7 +1195,7 @@ export function DashboardModule({
             }
           />
 
-          <MetricCard
+          <ExecutiveMetric
             label={`${formatMonthLabel(monthKey)} Outstanding`}
             value={`$${formatMoney(dashboardData.monthCombined.outstanding)}`}
             subtext={`${dashboardData.monthCombined.unpaidCount} unpaid · Normal $${formatMoney(
@@ -1165,8 +1208,8 @@ export function DashboardModule({
             onClick={() => setActiveTab('billing')}
           />
 
-          <MetricCard
-            label="Today's Deliveries"
+          <ExecutiveMetric
+            label="Deliveries Today"
             value={dashboardData.deliveryRecords.length}
             subtext={
               dashboardData.missingDeliveryAddressCount > 0
@@ -1175,230 +1218,218 @@ export function DashboardModule({
             }
             icon={Truck}
             tone={
-              dashboardData.missingDeliveryAddressCount > 0 ? 'amber' : 'emerald'
+              dashboardData.missingDeliveryAddressCount > 0
+                ? 'amber'
+                : 'emerald'
             }
             onClick={() => setActiveTab('logistics')}
           />
         </div>
       </section>
 
-      {/* NEEDS ATTENTION */}
-      <section className="space-y-4">
-        <SectionHeader
-          eyebrow="Action queue"
-          title="Needs your attention"
-          subtitle="Only items that require follow-up are shown here."
-        />
-
-        {hasAttentionItems ? (
-          <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-            {attentionItems.map((item) => (
-              <AttentionItem
-                key={item.key}
-                icon={item.icon}
-                title={item.title}
-                detail={item.detail}
-                tone={item.tone}
-                actionLabel={item.actionLabel}
-                onClick={item.onClick}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-emerald-600 shadow-sm">
-              <CheckCircle2 size={20} />
-            </div>
-            <div>
-              <p className="text-sm font-black text-emerald-800">
-                No urgent dashboard issues
-              </p>
-              <p className="mt-1 text-xs text-emerald-700">
-                No low-stock, outstanding, missing-address or profit-review
-                alerts were detected in the current dashboard scope.
-              </p>
-            </div>
-          </div>
-        )}
-      </section>
-
-      {/* TODAY'S OPERATIONS */}
-      <section className="space-y-4">
-        <SectionHeader
-          eyebrow="Daily workflow"
-          title="Today's operations"
-          subtitle="Workload summary for invoicing, delivery and picking."
-        />
-
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-          {/* INVOICE WORKLOAD */}
-          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-start justify-between gap-4">
+      {/* SYSTEM ALERTS */}
+      {(cashError || sys?.lastSyncError) && (
+        <section className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+          {cashError && (
+            <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-red-800">
+              <AlertCircle size={17} className="mt-0.5 shrink-0" />
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
-                  Invoice workload
+                <p className="text-sm font-semibold">
+                  Cash dashboard data could not be loaded
                 </p>
-                <h3 className="mt-1 text-base font-black text-slate-900">
-                  Today's ledgers
-                </h3>
-              </div>
-              <div className="rounded-xl bg-blue-50 p-2.5 text-blue-600">
-                <FileText size={18} />
+                <p className="mt-1 text-xs leading-5 text-red-600">
+                  {cashError}
+                </p>
               </div>
             </div>
+          )}
 
-            <div className="mt-5 grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => setActiveTab('invoices')}
-                className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4 text-left transition hover:bg-blue-50"
-              >
-                <p className="text-[10px] font-black uppercase tracking-wider text-blue-500">
-                  Normal
-                </p>
-                <p className="mt-2 text-2xl font-black text-slate-900">
-                  {dashboardData.todayNormal.length}
-                </p>
-                <p className="mt-1 text-xs text-slate-500">
-                  ${formatMoney(dashboardData.todayNormalSummary.total)} incl. GST
-                </p>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab('cash')}
-                className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4 text-left transition hover:bg-emerald-50"
-              >
-                <p className="text-[10px] font-black uppercase tracking-wider text-emerald-600">
-                  Cash
-                </p>
-                <p className="mt-2 text-2xl font-black text-slate-900">
-                  {dashboardData.todayCash.length}
-                </p>
-                <p className="mt-1 text-xs text-slate-500">
-                  ${formatMoney(dashboardData.todayCashSummary.total)} incl. GST
-                </p>
-              </button>
-            </div>
-
-            <div className="mt-4 flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
-              <span className="text-xs font-bold text-slate-500">
-                Total transactions today
-              </span>
-              <span className="text-sm font-black text-slate-900">
-                {dashboardData.todayCombined.count}
-              </span>
-            </div>
-          </div>
-
-          {/* DELIVERY LOAD */}
-          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-start justify-between gap-4">
+          {sys?.lastSyncError && (
+            <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800">
+              <AlertTriangle size={17} className="mt-0.5 shrink-0" />
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
-                  Delivery load
+                <p className="text-sm font-semibold">ERP sync needs attention</p>
+                <p className="mt-1 text-xs leading-5 text-amber-700">
+                  Some figures may not include the latest remote changes until
+                  synchronization succeeds.
                 </p>
-                <h3 className="mt-1 text-base font-black text-slate-900">
-                  Today's regions
-                </h3>
-              </div>
-              <div className="rounded-xl bg-violet-50 p-2.5 text-violet-600">
-                <MapPinned size={18} />
               </div>
             </div>
+          )}
+        </section>
+      )}
 
-            <div className="mt-5 space-y-2.5">
-              {[
-                ['North', dashboardData.regionCounts.North],
-                ['West', dashboardData.regionCounts.West],
-                ['East', dashboardData.regionCounts.East],
-                ['Central', dashboardData.regionCounts.Central],
-              ].map(([label, count]) => (
-                <div
-                  key={label}
-                  className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3.5 py-2.5"
-                >
-                  <span className="text-xs font-bold text-slate-600">{label}</span>
-                  <span className="rounded-lg bg-white px-2.5 py-1 text-xs font-black text-slate-800 shadow-sm">
-                    {count}
+      {/* ACTION CENTRE + DAILY WORKFLOW */}
+      <section className="grid grid-cols-1 gap-5 xl:grid-cols-12">
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm xl:col-span-7">
+          <div className="border-b border-slate-200 px-5 py-4 sm:px-6">
+            <SectionHeader
+              eyebrow="Action Centre"
+              title="Items requiring follow-up"
+              subtitle="Priority operational exceptions are surfaced here so they can be resolved without searching through each module."
+              action={
+                hasAttentionItems ? (
+                  <span className="inline-flex rounded-lg bg-amber-50 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-amber-700">
+                    {attentionItems.length} open
                   </span>
-                </div>
-              ))}
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('logistics')}
-              className="mt-4 inline-flex w-full items-center justify-center rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-black text-white transition hover:bg-slate-800"
-            >
-              Open Delivery Map
-              <ArrowRight size={14} className="ml-1.5" />
-            </button>
+                ) : null
+              }
+            />
           </div>
 
-          {/* PICKING LOAD */}
-          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
-                  Picking
-                </p>
-                <h3 className="mt-1 text-base font-black text-slate-900">
-                  Today's picking load
-                </h3>
+          <div className="px-5 sm:px-6">
+            {hasAttentionItems ? (
+              attentionItems.map((item) => (
+                <AttentionItem
+                  key={item.key}
+                  icon={item.icon}
+                  title={item.title}
+                  detail={item.detail}
+                  tone={item.tone}
+                  actionLabel={item.actionLabel}
+                  onClick={item.onClick}
+                />
+              ))
+            ) : (
+              <div className="flex items-center gap-3 py-6">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100">
+                  <CheckCircle2 size={19} />
+                </div>
+
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">
+                    No urgent operational exceptions
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    No low-stock, outstanding, missing-address or profit-review
+                    alerts were detected in the current dashboard scope.
+                  </p>
+                </div>
               </div>
-              <div className="rounded-xl bg-amber-50 p-2.5 text-amber-600">
-                <ClipboardList size={18} />
-              </div>
-            </div>
+            )}
+          </div>
+        </div>
 
-            <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-5 text-center">
-              <p className="text-4xl font-black tracking-tight text-slate-900">
-                {dashboardData.todayNormal.length}
-              </p>
-              <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">
-                Today's normal invoices are available to the Pick List workflow.
-              </p>
-            </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 xl:col-span-5">
+          <SectionHeader
+            eyebrow="Today's Workflow"
+            title="Operational workload"
+            subtitle="A compact view of the work moving through invoicing, delivery and picking today."
+          />
 
-            <div className="mt-4 rounded-xl border border-slate-100 px-4 py-3">
-              <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                Delivery address check
-              </p>
-              <p
-                className={`mt-1 text-sm font-black ${
-                  dashboardData.missingDeliveryAddressCount > 0
-                    ? 'text-amber-600'
-                    : 'text-emerald-600'
-                }`}
-              >
-                {dashboardData.missingDeliveryAddressCount > 0
-                  ? `${dashboardData.missingDeliveryAddressCount} need attention`
-                  : 'Addresses ready'}
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('picking')}
-              className="mt-4 inline-flex w-full items-center justify-center rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-black text-white transition hover:bg-slate-800"
+          <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3 xl:grid-cols-1">
+            <WorkflowCard
+              eyebrow="Transactions"
+              title="Invoice workload"
+              value={dashboardData.todayCombined.count}
+              detail={`${dashboardData.todayNormal.length} normal · ${dashboardData.todayCash.length} Cash`}
+              icon={FileText}
+              tone="blue"
             >
-              Open Pick List
-              <ArrowRight size={14} className="ml-1.5" />
-            </button>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('invoices')}
+                  className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-left transition hover:bg-white"
+                >
+                  <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-slate-400">
+                    Normal
+                  </p>
+                  <p className="mt-1 text-xs font-semibold text-slate-700">
+                    ${formatMoney(dashboardData.todayNormalSummary.total)}
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('cash')}
+                  className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-left transition hover:bg-white"
+                >
+                  <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-slate-400">
+                    Cash
+                  </p>
+                  <p className="mt-1 text-xs font-semibold text-slate-700">
+                    ${formatMoney(dashboardData.todayCashSummary.total)}
+                  </p>
+                </button>
+              </div>
+            </WorkflowCard>
+
+            <WorkflowCard
+              eyebrow="Delivery"
+              title="Regional workload"
+              value={dashboardData.deliveryRecords.length}
+              detail={
+                dashboardData.missingDeliveryAddressCount > 0
+                  ? `${dashboardData.missingDeliveryAddressCount} address exception${
+                      dashboardData.missingDeliveryAddressCount === 1 ? '' : 's'
+                    }`
+                  : 'All delivery addresses ready'
+              }
+              icon={MapPinned}
+              tone={
+                dashboardData.missingDeliveryAddressCount > 0
+                  ? 'amber'
+                  : 'violet'
+              }
+              onClick={() => setActiveTab('logistics')}
+            >
+              <div className="mt-3 grid grid-cols-4 gap-1.5">
+                {[
+                  ['N', dashboardData.regionCounts.North],
+                  ['W', dashboardData.regionCounts.West],
+                  ['E', dashboardData.regionCounts.East],
+                  ['C', dashboardData.regionCounts.Central],
+                ].map(([label, count]) => (
+                  <div
+                    key={label}
+                    className="rounded-lg bg-slate-50 px-2 py-2 text-center"
+                  >
+                    <p className="text-[9px] font-semibold text-slate-400">
+                      {label}
+                    </p>
+                    <p className="mt-0.5 text-xs font-semibold text-slate-700">
+                      {count}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </WorkflowCard>
+
+            <WorkflowCard
+              eyebrow="Picking"
+              title="Pick-list workload"
+              value={dashboardData.todayNormal.length}
+              detail="Today's normal invoices available to the picking workflow."
+              icon={ClipboardList}
+              tone="amber"
+              onClick={() => setActiveTab('picking')}
+            />
           </div>
         </div>
       </section>
 
       {/* MONTHLY FINANCIAL SNAPSHOT */}
-      <section className="space-y-4">
-        <SectionHeader
-          eyebrow="Financial snapshot"
-          title={formatMonthLabel(monthKey)}
-          subtitle="Normal and Cash billing remain separate while Paid, Outstanding and GST show a combined operational view."
-        />
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-200 px-5 py-4 sm:px-6">
+          <SectionHeader
+            eyebrow="Financial Snapshot"
+            title={formatMonthLabel(monthKey)}
+            subtitle="Normal and Cash ledgers remain separate while Paid, Outstanding and GST provide a consolidated operating view."
+            action={
+              <button
+                type="button"
+                onClick={() => setActiveTab('billing')}
+                className="inline-flex items-center text-[11px] font-semibold text-slate-600 transition hover:text-slate-900"
+              >
+                Open Billing
+                <ArrowRight size={12} className="ml-1.5" />
+              </button>
+            }
+          />
+        </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 sm:p-5 xl:grid-cols-5">
           <SmallFinancialCard
             label="Normal Billing"
             value={`$${formatMoney(dashboardData.monthNormalSummary.total)}`}
@@ -1426,7 +1457,7 @@ export function DashboardModule({
           <SmallFinancialCard
             label="Paid"
             value={`$${formatMoney(dashboardData.monthCombined.paid)}`}
-            subtext="Normal + Cash, incl. GST"
+            subtext="Normal + Cash · incl. GST"
             icon={CheckCircle2}
             onClick={() => setActiveTab('billing')}
           />
@@ -1451,176 +1482,220 @@ export function DashboardModule({
         </div>
       </section>
 
-      {/* INVENTORY + QUICK ACTIONS */}
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-5">
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
+      {/* INVENTORY + QUICK ACCESS */}
+      <section className="grid grid-cols-1 gap-5 xl:grid-cols-12">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 xl:col-span-5">
           <SectionHeader
             eyebrow="Inventory"
-            title="Stock attention"
-            subtitle={`${dashboardData.lowStockItems.length} item${
+            title="Stock exceptions"
+            subtitle={`${dashboardData.lowStockItems.length} product${
               dashboardData.lowStockItems.length === 1 ? '' : 's'
-            } below ${lowStockThreshold} units`}
+            } below the ${lowStockThreshold}-unit dashboard threshold.`}
             action={
               <button
                 type="button"
                 onClick={() => setActiveTab('inventory')}
-                className="inline-flex items-center text-xs font-black text-blue-600 hover:text-blue-700"
+                className="inline-flex items-center text-[11px] font-semibold text-slate-600 transition hover:text-slate-900"
               >
                 View Inventory
-                <ArrowRight size={13} className="ml-1" />
+                <ArrowRight size={12} className="ml-1.5" />
               </button>
             }
           />
 
-          <div className="mt-5 space-y-2">
-            {dashboardData.lowStockItems.slice(0, 5).map(({ item, stock }) => {
-              const name = getInventoryName(item);
-              const sku = getInventorySku(item);
-              const unit = getInventoryUnit(item);
+          <div className="mt-5">
+            {dashboardData.lowStockItems.length > 0 ? (
+              <div className="divide-y divide-slate-100">
+                {dashboardData.lowStockItems
+                  .slice(0, 5)
+                  .map(({ item, stock }) => {
+                    const name = getInventoryName(item);
+                    const sku = getInventorySku(item);
+                    const unit = getInventoryUnit(item);
 
-              return (
-                <button
-                  type="button"
-                  key={String(item?.id || `${sku}-${name}`)}
-                  onClick={() => setActiveTab('inventory')}
-                  className="flex w-full items-center justify-between gap-4 rounded-xl border border-slate-100 bg-slate-50 px-3.5 py-3 text-left transition hover:border-slate-200 hover:bg-white"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-xs font-black text-slate-800">
-                      {name}
-                    </p>
-                    {sku && (
-                      <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        {sku}
-                      </p>
-                    )}
-                  </div>
+                    return (
+                      <button
+                        type="button"
+                        key={String(item?.id || `${sku}-${name}`)}
+                        onClick={() => setActiveTab('inventory')}
+                        className="flex w-full items-center justify-between gap-4 py-3 text-left transition hover:bg-slate-50/80"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-semibold text-slate-800">
+                            {name}
+                          </p>
+                          <p className="mt-1 text-[10px] font-medium uppercase tracking-[0.08em] text-slate-400">
+                            {sku || 'No SKU'}
+                          </p>
+                        </div>
 
-                  <div className="shrink-0 text-right">
-                    <p
-                      className={`text-sm font-black ${
-                        stock <= 0 ? 'text-red-600' : 'text-amber-600'
-                      }`}
-                    >
-                      {stock}
-                      {unit ? ` ${unit}` : ''}
-                    </p>
-                    <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">
-                      {stock <= 0 ? 'Out' : 'Low'}
-                    </p>
-                  </div>
-                </button>
-              );
-            })}
-
-            {dashboardData.lowStockItems.length === 0 && (
-              <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-6 text-center">
-                <Boxes size={22} className="mx-auto text-emerald-500" />
-                <p className="mt-2 text-sm font-black text-emerald-700">
-                  Stock levels look healthy
-                </p>
-                <p className="mt-1 text-xs text-emerald-600">
-                  No item is below the dashboard threshold.
-                </p>
+                        <div className="shrink-0 text-right">
+                          <p
+                            className={`text-sm font-semibold ${
+                              stock <= 0 ? 'text-red-600' : 'text-amber-600'
+                            }`}
+                          >
+                            {stock}
+                            {unit ? ` ${unit}` : ''}
+                          </p>
+                          <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-slate-400">
+                            {stock <= 0 ? 'Out of stock' : 'Low stock'}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })}
+              </div>
+            ) : (
+              <div className="flex items-center gap-3 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-4">
+                <CheckCircle2 size={18} className="shrink-0 text-emerald-600" />
+                <div>
+                  <p className="text-sm font-semibold text-emerald-800">
+                    Stock levels are within threshold
+                  </p>
+                  <p className="mt-1 text-xs text-emerald-700">
+                    No product is currently below the dashboard threshold.
+                  </p>
+                </div>
               </div>
             )}
           </div>
         </div>
 
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-3">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 xl:col-span-7">
           <SectionHeader
-            eyebrow="Quick actions"
-            title="Operation hub"
-            subtitle="Jump directly into the workflows used throughout the day."
+            eyebrow="Quick Access"
+            title="Frequently used workflows"
+            subtitle="Direct access to the ERP functions used most often during daily operations."
           />
 
-          <div className="mt-5 flex flex-wrap gap-3">
-            <ShortcutBtn
-              icon={FileText}
-              label="Invoicing"
-              onClick={() => setActiveTab('invoices')}
-              perm="create_invoices"
-              sys={sys}
-            />
+          <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+            <div className="flex flex-wrap gap-3">
+              <ShortcutBtn
+                icon={FileText}
+                label="Invoicing"
+                onClick={() => setActiveTab('invoices')}
+                perm="create_invoices"
+                sys={sys}
+              />
 
-            <ShortcutBtn
-              icon={WalletCards}
-              label="Cash"
-              onClick={() => setActiveTab('cash')}
-              perm="create_invoices"
-              sys={sys}
-            />
+              <ShortcutBtn
+                icon={WalletCards}
+                label="Cash"
+                onClick={() => setActiveTab('cash')}
+                perm="create_invoices"
+                sys={sys}
+              />
 
-            <ShortcutBtn
-              icon={Receipt}
-              label="Billing"
-              onClick={() => setActiveTab('billing')}
-              perm="manage_billing"
-              sys={sys}
-            />
+              <ShortcutBtn
+                icon={Receipt}
+                label="Billing"
+                onClick={() => setActiveTab('billing')}
+                perm="manage_billing"
+                sys={sys}
+              />
 
-            <ShortcutBtn
-              icon={MapPinned}
-              label="Delivery Map"
-              onClick={() => setActiveTab('logistics')}
-              sys={sys}
-            />
+              <ShortcutBtn
+                icon={MapPinned}
+                label="Delivery Map"
+                onClick={() => setActiveTab('logistics')}
+                sys={sys}
+              />
 
-            <ShortcutBtn
-              icon={ClipboardList}
-              label="Pick List"
-              onClick={() => setActiveTab('picking')}
-              sys={sys}
-            />
+              <ShortcutBtn
+                icon={ClipboardList}
+                label="Pick List"
+                onClick={() => setActiveTab('picking')}
+                sys={sys}
+              />
 
-            <ShortcutBtn
-              icon={Package}
-              label="Inventory"
-              onClick={() => setActiveTab('inventory')}
-              sys={sys}
-            />
+              <ShortcutBtn
+                icon={Package}
+                label="Inventory"
+                onClick={() => setActiveTab('inventory')}
+                sys={sys}
+              />
 
-            <ShortcutBtn
-              icon={UserPlus}
-              label="Customers"
-              onClick={() => setActiveTab('customers')}
-              sys={sys}
-            />
+              <ShortcutBtn
+                icon={UserPlus}
+                label="Customers"
+                onClick={() => setActiveTab('customers')}
+                sys={sys}
+              />
 
-            <ShortcutBtn
-              icon={Truck}
-              label="Stock In"
-              onClick={() => setActiveTab('suppliers')}
-              perm="manage_suppliers"
-              sys={sys}
-            />
+              <ShortcutBtn
+                icon={Truck}
+                label="Stock In"
+                onClick={() => setActiveTab('suppliers')}
+                perm="manage_suppliers"
+                sys={sys}
+              />
+            </div>
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="rounded-lg border border-slate-200 px-3 py-3">
+              <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+                Customers
+              </p>
+              <p className="mt-1.5 text-lg font-semibold text-slate-800">
+                {customers.length}
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 px-3 py-3">
+              <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+                Team
+              </p>
+              <p className="mt-1.5 text-lg font-semibold text-slate-800">
+                {users.length}
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 px-3 py-3">
+              <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+                Normal today
+              </p>
+              <p className="mt-1.5 text-lg font-semibold text-slate-800">
+                {dashboardData.todayNormal.length}
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 px-3 py-3">
+              <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+                Cash today
+              </p>
+              <p className="mt-1.5 text-lg font-semibold text-slate-800">
+                {dashboardData.todayCash.length}
+              </p>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* RECENT TRANSACTIONS */}
-      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-200 px-5 py-5 sm:px-6">
+      {/* RECENT ACTIVITY */}
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-200 px-5 py-4 sm:px-6">
           <SectionHeader
-            eyebrow="Recent activity"
+            eyebrow="Recent Activity"
             title="Latest transactions"
-            subtitle={`Most recent Normal and Cash transactions in ${formatMonthLabel(
+            subtitle={`The ${RECENT_TRANSACTION_LIMIT} most recent Normal and Cash transactions in ${formatMonthLabel(
               monthKey
             )}.`}
           />
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px] border-collapse text-left">
-            <thead className="bg-slate-50">
-              <tr className="border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-400">
-                <th className="px-6 py-3.5">Type</th>
-                <th className="px-4 py-3.5">Number</th>
-                <th className="px-4 py-3.5">Date</th>
-                <th className="px-4 py-3.5">Customer</th>
-                <th className="px-4 py-3.5 text-right">Amount</th>
-                <th className="px-4 py-3.5 text-right">Profit</th>
-                <th className="px-6 py-3.5 text-center">Status</th>
+          <table className="w-full min-w-[840px] border-collapse text-left">
+            <thead className="bg-slate-50/80">
+              <tr className="border-b border-slate-200 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-400">
+                <th className="px-5 py-3 sm:px-6">Type</th>
+                <th className="px-4 py-3">Number</th>
+                <th className="px-4 py-3">Date</th>
+                <th className="px-4 py-3">Customer</th>
+                <th className="px-4 py-3 text-right">Amount</th>
+                <th className="px-4 py-3 text-right">Profit</th>
+                <th className="px-5 py-3 text-center sm:px-6">Status</th>
               </tr>
             </thead>
 
@@ -1634,39 +1709,39 @@ export function DashboardModule({
                     key={`${type}-${getInvoiceNumber(invoice)}-${getInvoiceDate(
                       invoice
                     )}`}
-                    className="cursor-pointer bg-white transition hover:bg-slate-50"
+                    className="cursor-pointer bg-white transition hover:bg-slate-50/80"
                     onClick={() =>
                       setActiveTab(type === 'Cash' ? 'cash' : 'invoices')
                     }
                   >
-                    <td className="px-6 py-4">
+                    <td className="px-5 py-3.5 sm:px-6">
                       <TransactionTypeBadge type={type} />
                     </td>
 
-                    <td className="px-4 py-4 font-mono font-black text-slate-800">
+                    <td className="px-4 py-3.5 font-mono font-semibold text-slate-800">
                       {getInvoiceNumber(invoice)}
                     </td>
 
-                    <td className="px-4 py-4 text-slate-500">
-                      {getInvoiceDate(invoice)}
+                    <td className="px-4 py-3.5 text-slate-500">
+                      {formatDisplayDate(getInvoiceDate(invoice))}
                     </td>
 
-                    <td className="max-w-[280px] truncate px-4 py-4 font-bold text-slate-700">
+                    <td className="max-w-[300px] truncate px-4 py-3.5 font-medium text-slate-700">
                       {getInvoiceCustomerName(invoice)}
                     </td>
 
-                    <td className="px-4 py-4 text-right font-mono font-black text-slate-900">
+                    <td className="px-4 py-3.5 text-right font-mono font-semibold text-slate-900">
                       ${formatMoney(getInvoiceTotal(invoice))}
                     </td>
 
-                    <td className="px-4 py-4 text-right font-mono">
+                    <td className="px-4 py-3.5 text-right font-mono">
                       {profitStatus.profit === null ? (
-                        <span className="font-black text-amber-600">
+                        <span className="font-semibold text-amber-600">
                           Needs review
                         </span>
                       ) : (
                         <span
-                          className={`font-black ${
+                          className={`font-semibold ${
                             profitStatus.profit < 0
                               ? 'text-red-600'
                               : 'text-emerald-600'
@@ -1677,9 +1752,9 @@ export function DashboardModule({
                       )}
                     </td>
 
-                    <td className="px-6 py-4 text-center">
+                    <td className="px-5 py-3.5 text-center sm:px-6">
                       <span
-                        className={`inline-flex rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wider ${
+                        className={`inline-flex rounded-md border px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.08em] ${
                           paid
                             ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                             : 'border-orange-200 bg-orange-50 text-orange-700'
@@ -1695,8 +1770,8 @@ export function DashboardModule({
               {dashboardData.recentTransactions.length === 0 && (
                 <tr>
                   <td colSpan="7" className="px-6 py-12 text-center">
-                    <FileText size={24} className="mx-auto text-slate-300" />
-                    <p className="mt-3 text-sm font-black text-slate-600">
+                    <FileText size={22} className="mx-auto text-slate-300" />
+                    <p className="mt-3 text-sm font-semibold text-slate-600">
                       No transactions this month
                     </p>
                     <p className="mt-1 text-xs text-slate-400">
@@ -1710,69 +1785,66 @@ export function DashboardModule({
         </div>
       </section>
 
-      {/* SYSTEM / DATA STATUS */}
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="rounded-xl bg-blue-50 p-2.5 text-blue-600">
-              <Users size={17} />
+      {/* SYSTEM STATUS */}
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="grid grid-cols-1 divide-y divide-slate-200 md:grid-cols-3 md:divide-x md:divide-y-0">
+          <div className="flex items-center gap-3 px-5 py-4">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600 ring-1 ring-blue-100">
+              <Users size={16} />
             </div>
             <div>
-              <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                Customers
+              <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+                Customer Records
               </p>
-              <p className="mt-1 text-lg font-black text-slate-900">
-                {customers.length}
+              <p className="mt-1 text-sm font-semibold text-slate-800">
+                {customers.length} customers
               </p>
             </div>
           </div>
-        </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="rounded-xl bg-violet-50 p-2.5 text-violet-600">
-              <Users size={17} />
+          <div className="flex items-center gap-3 px-5 py-4">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-50 text-violet-600 ring-1 ring-violet-100">
+              <Users size={16} />
             </div>
             <div>
-              <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                Team Members
+              <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+                Team Access
               </p>
-              <p className="mt-1 text-lg font-black text-slate-900">
-                {users.length}
+              <p className="mt-1 text-sm font-semibold text-slate-800">
+                {users.length} team members
               </p>
             </div>
           </div>
-        </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 px-5 py-4">
             <div
-              className={`rounded-xl p-2.5 ${
+              className={`flex h-9 w-9 items-center justify-center rounded-lg ring-1 ${
                 cashError
-                  ? 'bg-red-50 text-red-600'
+                  ? 'bg-red-50 text-red-600 ring-red-100'
                   : cashLoading
-                    ? 'bg-blue-50 text-blue-600'
-                    : 'bg-emerald-50 text-emerald-600'
+                    ? 'bg-blue-50 text-blue-600 ring-blue-100'
+                    : 'bg-emerald-50 text-emerald-600 ring-emerald-100'
               }`}
             >
               {cashError ? (
-                <AlertCircle size={17} />
+                <AlertCircle size={16} />
               ) : cashLoading ? (
-                <RefreshCw size={17} className="animate-spin" />
+                <RefreshCw size={16} className="animate-spin" />
               ) : (
-                <CheckCircle2 size={17} />
+                <CheckCircle2 size={16} />
               )}
             </div>
+
             <div>
-              <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                Cash Data
+              <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+                Cash Ledger
               </p>
-              <p className="mt-1 text-sm font-black text-slate-900">
+              <p className="mt-1 text-sm font-semibold text-slate-800">
                 {cashError
                   ? 'Load issue'
                   : cashLoading
                     ? 'Refreshing'
-                    : `${cashInvoices.length} this month`}
+                    : `${cashInvoices.length} records this month`}
               </p>
             </div>
           </div>
