@@ -974,7 +974,10 @@ function CustomerFormModal({ initialValue, onClose, onSave, groups, existingCust
 
   return (
     <EntityModal onClose={onClose} onSave={handleSubmit} title={form.id ? 'Edit Customer' : 'New Customer Account'}>
-      <div className="space-y-6">
+      <div
+        className="max-h-[calc(100vh-220px)] space-y-6 overflow-y-auto overscroll-contain pr-2 pb-2"
+        style={{ scrollbarGutter: 'stable' }}
+      >
         <section>
           <p className="mb-3 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Customer</p>
           <label className="block"><span className="mb-1.5 block text-xs font-black text-slate-600">Company Name *</span><input className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3 font-bold outline-none focus:bg-white focus:ring-2 focus:ring-blue-500" onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="Company Name" value={form.name}/></label>
