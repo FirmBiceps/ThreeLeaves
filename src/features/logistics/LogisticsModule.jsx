@@ -3,7 +3,6 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import {
   AlertCircle,
-  Building2,
   CheckCircle,
   Clock3,
   ExternalLink,
@@ -81,6 +80,252 @@ const SUCCESS_CACHE_MAX_AGE_MS =
 // immediately repeat the same failed public-API request.
 const FAILURE_CACHE_MAX_AGE_MS =
   24 * 60 * 60 * 1000;
+
+
+const MAP_TILE_LAYER_URL =
+  'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+const MAP_TILE_ATTRIBUTION =
+  '&copy; OpenStreetMap contributors &copy; CARTO';
+
+const LOGISTICS_MAP_STYLE_ID =
+  'three-leaves-logistics-map-theme';
+
+const LOGISTICS_MAP_STYLES = `
+  .three-leaves-logistics-map .leaflet-control-zoom {
+    border: 0;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
+  }
+
+  .three-leaves-logistics-map .leaflet-control-zoom a {
+    width: 34px;
+    height: 34px;
+    line-height: 34px;
+    color: #0f172a;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+  }
+
+  .three-leaves-logistics-map .leaflet-popup-content-wrapper {
+    border-radius: 18px;
+    padding: 0;
+    box-shadow: 0 22px 56px rgba(15, 23, 42, 0.2);
+  }
+
+  .three-leaves-logistics-map .leaflet-popup-content {
+    margin: 0;
+    width: 300px !important;
+  }
+
+  .three-leaves-logistics-map .leaflet-popup-tip {
+    background: #ffffff;
+  }
+
+  .tl-map-tooltip {
+    background: rgba(15, 23, 42, 0.96);
+    border: 0;
+    color: #ffffff;
+    border-radius: 10px;
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.2);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 6px 10px;
+  }
+
+  .tl-map-tooltip::before {
+    border-top-color: rgba(15, 23, 42, 0.96) !important;
+  }
+
+  .tl-marker-icon {
+    background: transparent;
+    border: 0;
+  }
+
+  .tl-marker {
+    position: relative;
+    width: 42px;
+    height: 52px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+  }
+
+  .tl-marker__bubble {
+    position: relative;
+    width: 42px;
+    height: 42px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 3px solid #ffffff;
+    box-shadow: 0 14px 28px rgba(15, 23, 42, 0.22);
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+
+  .tl-marker__pointer {
+    position: absolute;
+    left: 50%;
+    bottom: 3px;
+    width: 14px;
+    height: 14px;
+    transform: translateX(-50%) rotate(45deg);
+    border-right: 3px solid #ffffff;
+    border-bottom: 3px solid #ffffff;
+    box-shadow: 6px 6px 16px rgba(15, 23, 42, 0.08);
+  }
+
+  .tl-marker--stop .tl-marker__bubble,
+  .tl-marker--stop .tl-marker__pointer {
+    background: #2563eb;
+    color: #ffffff;
+  }
+
+  .tl-marker--hq .tl-marker__bubble,
+  .tl-marker--hq .tl-marker__pointer {
+    background: #0f172a;
+    color: #ffffff;
+  }
+
+  .tl-marker--north .tl-marker__bubble,
+  .tl-marker--north .tl-marker__pointer {
+    background: #0ea5e9;
+  }
+
+  .tl-marker--west .tl-marker__bubble,
+  .tl-marker--west .tl-marker__pointer {
+    background: #7c3aed;
+  }
+
+  .tl-marker--east .tl-marker__bubble,
+  .tl-marker--east .tl-marker__pointer {
+    background: #f59e0b;
+  }
+
+  .tl-marker--central .tl-marker__bubble,
+  .tl-marker--central .tl-marker__pointer {
+    background: #10b981;
+  }
+
+  .tl-marker--muted .tl-marker__bubble,
+  .tl-marker--muted .tl-marker__pointer {
+    background: #475569;
+  }
+
+  .tl-marker__accent {
+    position: absolute;
+    inset: 3px 3px auto 3px;
+    height: 7px;
+    border-radius: 10px 10px 6px 6px;
+    background: rgba(255, 255, 255, 0.24);
+  }
+
+  .tl-marker__label {
+    position: relative;
+    z-index: 1;
+    display: block;
+    transform: translateY(1px);
+  }
+
+  .tl-popup {
+    padding: 16px 16px 15px;
+    color: #0f172a;
+  }
+
+  .tl-popup__eyebrow {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: #64748b;
+  }
+
+  .tl-popup__title {
+    margin-top: 6px;
+    font-size: 18px;
+    line-height: 1.3;
+    font-weight: 800;
+    color: #0f172a;
+  }
+
+  .tl-popup__invoice {
+    margin-top: 8px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #2563eb;
+  }
+
+  .tl-popup__address {
+    margin-top: 10px;
+    font-size: 12px;
+    line-height: 1.55;
+    color: #475569;
+  }
+
+  .tl-popup__meta {
+    margin-top: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .tl-popup__chip {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 5px 9px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #0f172a;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+  }
+
+  .tl-popup__chip--primary {
+    color: #1d4ed8;
+    background: #eff6ff;
+    border-color: #bfdbfe;
+  }
+
+  .tl-popup__chip--emerald {
+    color: #047857;
+    background: #ecfdf5;
+    border-color: #a7f3d0;
+  }
+
+  .tl-popup__actions {
+    margin-top: 14px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .tl-popup__button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 36px;
+    padding: 0 12px;
+    border-radius: 10px;
+    background: #0f172a;
+    color: #ffffff;
+    text-decoration: none;
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  .tl-popup__button:hover {
+    background: #1e293b;
+  }
+`;
+
+const REGION_THEME_MAP = {
+  North: { markerClass: 'tl-marker--north', shortLabel: 'N' },
+  West: { markerClass: 'tl-marker--west', shortLabel: 'W' },
+  East: { markerClass: 'tl-marker--east', shortLabel: 'E' },
+  Central: { markerClass: 'tl-marker--central', shortLabel: 'C' },
+};
 
 function wait(ms) {
   return new Promise((resolve) => {
@@ -427,6 +672,107 @@ function formatDuration(totalMinutes) {
   return `${hours} hr ${remainingMinutes} min`;
 }
 
+
+function ensureLogisticsMapStyles() {
+  if (typeof document === 'undefined') return;
+
+  if (document.getElementById(LOGISTICS_MAP_STYLE_ID)) {
+    return;
+  }
+
+  const styleElement = document.createElement('style');
+  styleElement.id = LOGISTICS_MAP_STYLE_ID;
+  styleElement.textContent = LOGISTICS_MAP_STYLES;
+  document.head.appendChild(styleElement);
+}
+
+function getRegionTheme(region) {
+  const cleanRegion = String(region || '').trim();
+  return (
+    REGION_THEME_MAP[cleanRegion] || {
+      markerClass: 'tl-marker--muted',
+      shortLabel: '•',
+    }
+  );
+}
+
+function getStopKey(stop, index = 0) {
+  return String(
+    stop?.id ||
+      stop?.number ||
+      stop?.invoiceNumber ||
+      `${getCustomerName(stop?.cust)}|${stop?.deliveryAddress || ''}|${index}`
+  );
+}
+
+function createHeadquartersIcon() {
+  return L.divIcon({
+    className: 'tl-marker-icon',
+    html: `
+      <div class="tl-marker tl-marker--hq">
+        <div class="tl-marker__bubble">
+          <span class="tl-marker__accent"></span>
+          <span class="tl-marker__label">HQ</span>
+        </div>
+        <div class="tl-marker__pointer"></div>
+      </div>
+    `,
+    iconSize: [42, 52],
+    iconAnchor: [21, 52],
+    popupAnchor: [0, -38],
+  });
+}
+
+function createDeliveryIcon({ region, label }) {
+  const theme = getRegionTheme(region);
+
+  return L.divIcon({
+    className: 'tl-marker-icon',
+    html: `
+      <div class="tl-marker tl-marker--stop ${theme.markerClass}">
+        <div class="tl-marker__bubble">
+          <span class="tl-marker__accent"></span>
+          <span class="tl-marker__label">${escapeHtml(label || theme.shortLabel || '•')}</span>
+        </div>
+        <div class="tl-marker__pointer"></div>
+      </div>
+    `,
+    iconSize: [42, 52],
+    iconAnchor: [21, 52],
+    popupAnchor: [0, -38],
+  });
+}
+
+function buildStopPopupHtml(stop, index = null) {
+  const customerName = escapeHtml(getCustomerName(stop?.cust));
+  const deliveryAddress = escapeHtml(stop?.deliveryAddress || 'No address available');
+  const resolvedAddress = escapeHtml(stop?.resolvedAddress || '');
+  const navigationUrl = escapeHtml(stop?.navigationUrl || '');
+  const invoiceNumber = escapeHtml(
+    stop?.number || stop?.invoiceNumber || stop?.id || ''
+  );
+  const region = escapeHtml(stop?.cust?.region || stop?.region || 'Unassigned');
+  const sourceLabel = escapeHtml(stop?.locationSource || 'Mapped');
+  const postalCode = escapeHtml(stop?.postalCode || '');
+  const stopLabel =
+    index === null ? 'Customer location' : `Route stop ${index + 1}`;
+
+  return `
+    <div class="tl-popup">
+      <div class="tl-popup__eyebrow">${stopLabel} · ${region}</div>
+      <div class="tl-popup__title">${customerName}</div>
+      ${invoiceNumber ? `<div class="tl-popup__invoice">Invoice #${invoiceNumber}</div>` : ''}
+      <div class="tl-popup__address">${deliveryAddress}</div>
+      ${resolvedAddress && resolvedAddress !== deliveryAddress ? `<div class="tl-popup__address" style="margin-top:8px;font-size:11px;color:#64748b;">Matched map address: ${resolvedAddress}</div>` : ''}
+      <div class="tl-popup__meta">
+        ${sourceLabel ? `<span class="tl-popup__chip tl-popup__chip--emerald">${sourceLabel}</span>` : ''}
+        ${postalCode ? `<span class="tl-popup__chip tl-popup__chip--primary">Postal ${postalCode}</span>` : ''}
+      </div>
+      ${navigationUrl ? `<div class="tl-popup__actions"><a class="tl-popup__button" href="${navigationUrl}" target="_blank" rel="noopener noreferrer">Navigate to address</a></div>` : ''}
+    </div>
+  `;
+}
+
 function getLocationSourceLabel(source, postalCode) {
   if (source === 'saved_coordinates') {
     return 'Saved coordinates';
@@ -657,6 +1003,7 @@ export function LogisticsModule({ sys }) {
   const mapRef = useRef(null);
   const markersLayerRef = useRef(null);
   const polylineRef = useRef(null);
+  const markerLookupRef = useRef({});
   const geocodeRunRef = useRef(0);
 
   const safeInvoices = useMemo(
@@ -1367,6 +1714,37 @@ export function LogisticsModule({ sys }) {
     selectedRegion,
   ]);
 
+
+  const visibleStops = useMemo(
+    () =>
+      selectedRegion && routeMetrics
+        ? routeMetrics.sequence
+        : todayDeliveryRecords,
+    [routeMetrics, selectedRegion, todayDeliveryRecords]
+  );
+
+  const focusStopOnMap = (stop, index = 0) => {
+    const map = mapRef.current;
+    const marker =
+      markerLookupRef.current[
+        getStopKey(stop, index)
+      ];
+
+    if (!map || !marker) return;
+
+    const latLng = marker.getLatLng?.();
+    if (latLng) {
+      map.flyTo(latLng, Math.max(map.getZoom(), 14), {
+        animate: true,
+        duration: 0.6,
+      });
+    }
+
+    window.setTimeout(() => {
+      marker.openPopup();
+    }, 120);
+  };
+
   const totalMappedInvoices =
     todayStops.length;
 
@@ -1393,6 +1771,13 @@ export function LogisticsModule({ sys }) {
   useEffect(() => {
     setIsClient(true);
   }, []);
+
+  useEffect(() => {
+    if (!isClient) return;
+
+    ensureLogisticsMapStyles();
+  }, [isClient]);
+
 
   useEffect(() => {
     if (
@@ -1423,10 +1808,9 @@ export function LogisticsModule({ sys }) {
         );
 
         L.tileLayer(
-          'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+          MAP_TILE_LAYER_URL,
           {
-            attribution:
-              '&copy; OpenStreetMap contributors',
+            attribution: MAP_TILE_ATTRIBUTION,
             maxZoom: 19,
           }
         ).addTo(mapRef.current);
@@ -1458,6 +1842,7 @@ export function LogisticsModule({ sys }) {
 
       markersLayerRef.current = null;
       polylineRef.current = null;
+      markerLookupRef.current = {};
 
       const featureGroup =
         L.featureGroup();
@@ -1470,21 +1855,27 @@ export function LogisticsModule({ sys }) {
       let deliveryMarkerCount = 0;
 
       if (headquarters) {
-        L.circleMarker(
+        L.marker(
           [
             headquarters.lat,
             headquarters.lng,
           ],
           {
-            radius: 8,
-            color: '#dc2626',
-            weight: 2,
-            fillColor: '#ef4444',
-            fillOpacity: 1,
+            icon: createHeadquartersIcon(),
+            zIndexOffset: 1000,
           }
         )
           .bindPopup(
-            '<b>Three Leaves HQ</b>'
+            `
+              <div class="tl-popup">
+                <div class="tl-popup__eyebrow">Operations base</div>
+                <div class="tl-popup__title">Three Leaves HQ</div>
+                <div class="tl-popup__address">Starting point for route planning and dispatch coordination.</div>
+              </div>
+            `,
+            {
+              maxWidth: 320,
+            }
           )
           .addTo(featureGroup);
       }
@@ -1502,92 +1893,53 @@ export function LogisticsModule({ sys }) {
 
         deliveryMarkerCount += 1;
 
-        const customerName =
-          escapeHtml(
-            getCustomerName(stop?.cust)
-          );
+        const stopRegion = String(
+          stop?.cust?.region ||
+            stop?.region ||
+            ''
+        ).trim();
 
-        const deliveryAddress =
-          escapeHtml(
-            stop?.deliveryAddress || ''
-          );
+        const label =
+          index === null
+            ? getRegionTheme(stopRegion)
+                .shortLabel
+            : String(index + 1);
 
-        const resolvedAddress =
-          escapeHtml(
-            stop?.resolvedAddress || ''
-          );
-
-        const navigationUrl =
-          escapeHtml(
-            stop?.navigationUrl || ''
-          );
-
-        const invoiceNumber =
-          escapeHtml(
-            stop?.number ||
-              stop?.invoiceNumber ||
-              stop?.id ||
-              ''
-          );
-
-        const sourceLabel =
-          escapeHtml(
-            stop?.locationSource || ''
-          );
-
-        L.circleMarker(
+        const marker = L.marker(
           [customer.lat, customer.lng],
           {
-            radius:
-              index === null ? 6 : 7,
-            color: '#1d4ed8',
-            weight: 2,
-            fillColor: '#3b82f6',
-            fillOpacity: 1,
+            icon: createDeliveryIcon({
+              region: stopRegion,
+              label,
+            }),
           }
         )
           .bindPopup(
-            `<div style="min-width:230px">
-              <b>${
-                index === null
-                  ? ''
-                  : `${index + 1}. `
-              }${customerName}</b>
-
-              ${
-                deliveryAddress
-                  ? `<br/><span style="display:block;margin-top:4px">${deliveryAddress}</span>`
-                  : ''
-              }
-
-              ${
-                resolvedAddress &&
-                resolvedAddress !==
-                  deliveryAddress
-                  ? `<br/><span style="display:block;margin-top:5px;color:#64748b;font-size:11px">OSM match: ${resolvedAddress}</span>`
-                  : ''
-              }
-
-              ${
-                sourceLabel
-                  ? `<br/><span style="display:inline-block;margin-top:7px;color:#166534;background:#dcfce7;padding:3px 7px;border-radius:999px;font-size:10px;font-weight:700">${sourceLabel}</span>`
-                  : ''
-              }
-
-              ${
-                invoiceNumber
-                  ? `<br/><span style="display:block;margin-top:7px;color:#2563eb">Invoice #${invoiceNumber}</span>`
-                  : ''
-              }
-
-              ${
-                navigationUrl
-                  ? `<br/><a href="${navigationUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin-top:8px;font-weight:700;color:#ffffff;background:#2563eb;padding:6px 10px;border-radius:8px;text-decoration:none">Navigate to address</a>`
-                  : ''
-              }
-            </div>`
+            buildStopPopupHtml(stop, index),
+            {
+              maxWidth: 320,
+              autoPanPadding: [24, 24],
+            }
+          )
+          .bindTooltip(
+            getCustomerName(stop?.cust),
+            {
+              direction: 'top',
+              offset: [0, -40],
+              opacity: 0.98,
+              className: 'tl-map-tooltip',
+            }
           )
           .addTo(featureGroup);
+
+        markerLookupRef.current[
+          getStopKey(
+            stop,
+            index === null
+              ? deliveryMarkerCount - 1
+              : index
+          )
+        ] = marker;
       };
 
       if (
@@ -1632,10 +1984,11 @@ export function LogisticsModule({ sys }) {
             L.polyline(
               routeCoordinates,
               {
-                color: '#2563eb',
-                weight: 4,
-                opacity: 0.9,
-                dashArray: '10, 10',
+                color: '#1d4ed8',
+                weight: 3.5,
+                opacity: 0.72,
+                lineCap: 'round',
+                lineJoin: 'round',
               }
             ).addTo(map);
         }
@@ -1738,6 +2091,7 @@ export function LogisticsModule({ sys }) {
 
       markersLayerRef.current = null;
       polylineRef.current = null;
+      markerLookupRef.current = {};
     };
   }, [
     isClient,
@@ -1754,6 +2108,7 @@ export function LogisticsModule({ sys }) {
 
       markersLayerRef.current = null;
       polylineRef.current = null;
+      markerLookupRef.current = {};
     };
   }, []);
 
@@ -2099,11 +2454,7 @@ export function LogisticsModule({ sys }) {
               </div>
 
               <div className="max-h-[440px] space-y-2 overflow-y-auto px-4 pb-5">
-                {(selectedRegion &&
-                routeMetrics
-                  ? routeMetrics.sequence
-                  : todayDeliveryRecords
-                ).map((stop, index) => {
+                {visibleStops.map((stop, index) => {
                   const customerName =
                     getCustomerName(
                       stop?.cust
@@ -2215,25 +2566,43 @@ export function LogisticsModule({ sys }) {
                               </p>
                             )}
 
-                          {navigationUrl && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                openNavigation(
-                                  navigationUrl
-                                )
-                              }
-                              className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-[11px] font-black text-white shadow-sm transition hover:bg-blue-700"
-                            >
-                              <Navigation
-                                size={13}
-                              />
-                              Navigate to address
-                              <ExternalLink
-                                size={12}
-                              />
-                            </button>
-                          )}
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
+                            {hasMapCoordinates && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  focusStopOnMap(
+                                    stop,
+                                    index
+                                  )
+                                }
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-100"
+                              >
+                                <MapPin size={13} />
+                                Show on map
+                              </button>
+                            )}
+
+                            {navigationUrl && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  openNavigation(
+                                    navigationUrl
+                                  )
+                                }
+                                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-[11px] font-black text-white shadow-sm transition hover:bg-blue-700"
+                              >
+                                <Navigation
+                                  size={13}
+                                />
+                                Navigate
+                                <ExternalLink
+                                  size={12}
+                                />
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -2243,7 +2612,7 @@ export function LogisticsModule({ sys }) {
                 {(selectedRegion &&
                   !routeMetrics) ||
                 (!selectedRegion &&
-                  todayDeliveryRecords.length ===
+                  visibleStops.length ===
                     0) ? (
                   <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-8 text-center">
                     <MapPin
@@ -2267,57 +2636,62 @@ export function LogisticsModule({ sys }) {
           <section className="relative min-h-[680px] overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm lg:col-span-3">
             <div
               ref={mapContainerRef}
-              className="absolute inset-0 z-0"
+              className="three-leaves-logistics-map absolute inset-0 z-0"
             />
 
-            <div className="pointer-events-none absolute left-4 top-4 z-[1000] max-w-[calc(100%-2rem)] rounded-2xl border border-white/70 bg-white/95 px-4 py-3 shadow-lg backdrop-blur">
-              <div className="flex items-center gap-3">
-                <div className="rounded-xl bg-blue-50 p-2 text-blue-600">
-                  <Navigation size={18} />
+            <div className="pointer-events-none absolute left-4 top-4 z-[1000] max-w-[min(420px,calc(100%-2rem))] rounded-2xl border border-white/80 bg-white/95 px-4 py-4 shadow-xl backdrop-blur">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-white shadow-sm">
+                  <MapPin size={18} />
                 </div>
 
-                <div>
-                  <p className="text-sm font-black text-slate-900">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                    Customer location map
+                  </p>
+
+                  <p className="mt-1 text-sm font-bold text-slate-900">
                     {selectedRegion
-                      ? `${selectedRegion} delivery route`
+                      ? `${selectedRegion} deliveries`
                       : 'All mapped deliveries'}
                   </p>
 
-                  <p className="text-xs text-slate-500">
-                    {selectedRegion &&
-                    routeMetrics
-                      ? `${routeMetrics.sequence.length} stops · ${routeMetrics.totalDist.toFixed(
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    {selectedRegion && routeMetrics
+                      ? `${routeMetrics.sequence.length} route stops · ${routeMetrics.totalDist.toFixed(
                           1
-                        )} km`
-                      : `${todayStops.length} customer locations`}
+                        )} km estimated`
+                      : `${todayStops.length} mapped customer locations ready for review`}
                   </p>
                 </div>
               </div>
+
+              <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-semibold">
+                <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-slate-700">
+                  {todayStops.length} mapped
+                </span>
+                <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-1 text-amber-700">
+                  {unmappedInvoices} need review
+                </span>
+                <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-1 text-blue-700">
+                  Click a stop or marker for details
+                </span>
+              </div>
             </div>
 
-            <div className="pointer-events-none absolute right-4 top-4 z-[1000] rounded-2xl border border-white/70 bg-white/95 px-4 py-3 text-xs shadow-lg backdrop-blur">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 font-bold text-slate-700">
-                  <span className="h-3 w-3 rounded-full bg-red-500" />
-
-                  <Building2
-                    size={14}
-                    className="text-slate-400"
-                  />
-
-                  Three Leaves HQ
-                </div>
-
-                <div className="flex items-center gap-2 font-bold text-slate-700">
-                  <span className="h-3 w-3 rounded-full bg-blue-500" />
-
-                  <MapPin
-                    size={14}
-                    className="text-slate-400"
-                  />
-
-                  Delivery stop
-                </div>
+            <div className="pointer-events-none absolute bottom-4 left-4 z-[1000] max-w-[calc(100%-8rem)] rounded-2xl border border-white/80 bg-white/92 px-4 py-3 text-xs shadow-lg backdrop-blur">
+              <div className="flex flex-wrap items-center gap-3 text-slate-600">
+                <span className="inline-flex items-center gap-2 font-semibold text-slate-700">
+                  <span className="h-3.5 w-3.5 rounded bg-slate-900" />
+                  HQ
+                </span>
+                <span className="inline-flex items-center gap-2 font-semibold text-slate-700">
+                  <span className="h-3.5 w-3.5 rounded bg-blue-600" />
+                  Customer stop
+                </span>
+                <span className="text-slate-500">
+                  Cleaner basemap prioritises stop visibility over unnecessary map detail.
+                </span>
               </div>
             </div>
 
