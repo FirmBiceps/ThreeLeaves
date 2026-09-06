@@ -28,13 +28,28 @@ const INVENTORY_EXPORT_COLUMNS = [
 ];
 
 const CUSTOMER_HISTORY_EXPORT_COLUMNS = [
-  ...INVENTORY_EXPORT_COLUMNS.map((column) =>
-    column.key === 'Price'
-      ? { ...column, label: 'Customer Price (SGD)', defaultVisible: true }
-      : column.key === 'stock'
-        ? { ...column, defaultVisible: false }
-        : column
-  ),
+  ...INVENTORY_EXPORT_COLUMNS.map((column) => {
+    if (column.key === 'Price') {
+      return {
+        ...column,
+        label: 'Customer Price (SGD)',
+        defaultVisible: true,
+      };
+    }
+
+    if (
+      ['Supplier', 'Description', 'cost_price (SGD)', 'stock'].includes(
+        column.key
+      )
+    ) {
+      return {
+        ...column,
+        defaultVisible: false,
+      };
+    }
+
+    return column;
+  }),
   { key: 'Last Ordered', label: 'Last Ordered', defaultVisible: true },
   { key: 'Orders', label: 'Order Count', defaultVisible: false },
   { key: 'Total Qty', label: 'Total Qty', defaultVisible: false },
@@ -411,105 +426,728 @@ function sanitiseFilePart(value) {
 async function exportInventoryToPDF(items, selectedKeys, options = {}) {
   try {
     const rows = normaliseInventoryForExport(items);
-    const definitions = Array.isArray(options.columnDefinitions)
-      ? options.columnDefinitions : INVENTORY_EXPORT_COLUMNS;
-    const columns = definitions.filter((column) => selectedKeys.includes(column.key));
 
-    if (!rows.length) return window.alert('There is no inventory data to export.'), false;
-    if (!columns.length) return window.alert('Select at least one column for the PDF.'), false;
+    const definitions = Array.isArray(options.columnDefinitions)
+      ? options.columnDefinitions
+      : INVENTORY_EXPORT_COLUMNS;
+
+    const columns = definitions.filter((column) =>
+      selectedKeys.includes(column.key)
+    );
+
+    if (!rows.length) {
+      window.alert('There is no inventory data to export.');
+      return false;
+    }
+
+    if (!columns.length) {
+      window.alert('Select at least one column for the PDF.');
+      return false;
+    }
+
+    const customerCatalogue = Boolean(options.customerName);
+
+    // Customer catalogues are kept landscape for a consistent B2B catalogue
+    // appearance. Generic Inventory exports may use portrait for short tables.
+    const orientation =
+      customerCatalogue || columns.length > 4
+        ? 'landscape'
+        : 'portrait';
 
     const document = new jsPDF({
-      orientation: columns.length <= 4 ? 'portrait' : 'landscape',
-      unit: 'pt', format: 'a4', compress: true, putOnlyUsedFonts: true, precision: 2,
+      orientation,
+      unit: 'pt',
+      format: 'a4',
+      compress: true,
+      putOnlyUsedFonts: true,
+      precision: 2,
     });
 
     let tableFont;
+
     try {
       tableFont = await loadChinesePdfFont(document);
     } catch (error) {
-      window.alert(`Chinese PDF font error:\n${error?.message || 'Unknown font error.'}`);
+      window.alert(
+        `Chinese PDF font error:\n${
+          error?.message || 'Unknown font error.'
+        }`
+      );
       return false;
     }
 
     const pageWidth = document.internal.pageSize.getWidth();
     const pageHeight = document.internal.pageSize.getHeight();
-    const customerCatalogue = Boolean(options.customerName);
-    const startY = customerCatalogue ? 112 : 92;
 
-    document.setFillColor(15, 23, 42);
-    document.rect(0, 0, pageWidth, customerCatalogue ? 96 : 74, 'F');
-    document.setTextColor(255, 255, 255);
-    document.setFont('helvetica', 'bold');
-    document.setFontSize(20);
-    document.text('THREE LEAVES', 40, 31);
-    document.setFontSize(12);
-    document.text(options.catalogueTitle || 'Inventory Catalogue', 40, 53);
+    const marginX = orientation === 'landscape' ? 34 : 38;
+    const continuationTopMargin = 62;
+    const bottomMargin = 44;
 
-    if (customerCatalogue) {
-      document.setFont(tableFont, 'normal');
-      document.setFontSize(10);
-      document.text(String(options.customerName), 40, 73);
-      if (options.customerAddress) {
-        document.setFontSize(8);
-        document.text(String(options.customerAddress), 40, 87, { maxWidth: pageWidth - 220 });
+    const palette = {
+      navy: [15, 23, 42],
+      blue: [29, 78, 216],
+      blueSoft: [239, 246, 255],
+      ink: [30, 41, 59],
+      slate: [71, 85, 105],
+      muted: [100, 116, 139],
+      border: [226, 232, 240],
+      rowAlt: [248, 250, 252],
+      panel: [248, 250, 252],
+      white: [255, 255, 255],
+    };
+
+    const catalogueTitle =
+      options.catalogueTitle || 'Inventory Catalogue';
+
+    const customerName = String(options.customerName || '');
+    const customerAddress = String(options.customerAddress || '');
+    const invoiceCount = Number(options.invoiceCount || 0);
+    const latestOrderDate = String(options.latestOrderDate || '');
+
+    const generatedDate = new Date().toLocaleDateString('en-SG', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+
+    document.setProperties({
+      title: customerCatalogue
+        ? `${customerName} - ${catalogueTitle}`
+        : catalogueTitle,
+      subject: customerCatalogue
+        ? 'Customer product order catalogue'
+        : 'Inventory product catalogue',
+      author: 'Three Leaves',
+      creator: 'Three Leaves ERP',
+    });
+
+    const columnWeights = {
+      SKU: 0.8,
+      Name: 2.85,
+      Supplier: 1.9,
+      Unit: 0.7,
+      Description: 2.45,
+      Packing: 1.15,
+      'cost_price (SGD)': 1.0,
+      Price: 1.05,
+      stock: 0.75,
+      'Last Ordered': 1.15,
+      Orders: 0.8,
+      'Total Qty': 0.85,
+      'Last Invoice': 1.2,
+    };
+
+    const availableTableWidth = pageWidth - marginX * 2;
+
+    const totalWeight = columns.reduce(
+      (total, column) =>
+        total + (columnWeights[column.key] || 1),
+      0
+    );
+
+    const columnStyles = columns.reduce(
+      (styles, column, index) => {
+        styles[index] = {
+          cellWidth:
+            availableTableWidth *
+            ((columnWeights[column.key] || 1) / totalWeight),
+        };
+
+        if (
+          ['Price', 'cost_price (SGD)', 'stock', 'Orders', 'Total Qty'].includes(
+            column.key
+          )
+        ) {
+          styles[index].halign = 'right';
+        } else if (column.key === 'Unit') {
+          styles[index].halign = 'center';
+        }
+
+        return styles;
+      },
+      {}
+    );
+
+    function formatCellValue(row, column) {
+      const value = row[column.key];
+
+      if (['Price', 'cost_price (SGD)'].includes(column.key)) {
+        const number = Number(value);
+        return Number.isFinite(number)
+          ? `$${number.toFixed(2)}`
+          : '';
       }
+
+      if (column.key === 'Total Qty') {
+        const number = Number(value);
+
+        if (!Number.isFinite(number)) return '';
+
+        return Number.isInteger(number)
+          ? String(number)
+          : number.toFixed(2).replace(/\.?0+$/, '');
+      }
+
+      return String(value ?? '');
     }
 
-    document.setFont('helvetica', 'normal');
-    document.setFontSize(9);
-    document.text(
-      `Generated: ${new Date().toLocaleDateString('en-SG', { day: '2-digit', month: 'short', year: 'numeric' })}`,
-      pageWidth - 40, 31, { align: 'right' }
-    );
-    document.text(`${rows.length} product${rows.length === 1 ? '' : 's'}`, pageWidth - 40, 50, { align: 'right' });
+    function drawTopRule() {
+      document.setFillColor(...palette.navy);
+      document.rect(0, 0, pageWidth, 6, 'F');
+    }
 
-    const baseFont = columns.length >= 8 ? 7.8 : columns.length >= 6 ? 9 : 10.8;
+    function drawFirstPageHeader() {
+      drawTopRule();
+
+      document.setTextColor(...palette.navy);
+      document.setFont('helvetica', 'bold');
+      document.setFontSize(18);
+      document.text('THREE LEAVES', marginX, 31);
+
+      document.setFont('helvetica', 'bold');
+      document.setFontSize(9);
+      document.setTextColor(...palette.blue);
+      document.text(
+        String(catalogueTitle).toUpperCase(),
+        marginX,
+        48
+      );
+
+      document.setFont('helvetica', 'normal');
+      document.setFontSize(8);
+      document.setTextColor(...palette.muted);
+      document.text(
+        `Generated ${generatedDate}`,
+        pageWidth - marginX,
+        30,
+        { align: 'right' }
+      );
+
+      document.setFontSize(8);
+      document.text(
+        `${rows.length} product${rows.length === 1 ? '' : 's'}`,
+        pageWidth - marginX,
+        45,
+        { align: 'right' }
+      );
+
+      document.setDrawColor(...palette.border);
+      document.setLineWidth(0.8);
+      document.line(marginX, 60, pageWidth - marginX, 60);
+
+      if (!customerCatalogue) {
+        const panelY = 76;
+        const panelHeight = 45;
+
+        document.setFillColor(...palette.panel);
+        document.roundedRect(
+          marginX,
+          panelY,
+          pageWidth - marginX * 2,
+          panelHeight,
+          5,
+          5,
+          'F'
+        );
+
+        document.setFillColor(...palette.blue);
+        document.roundedRect(
+          marginX,
+          panelY,
+          4,
+          panelHeight,
+          2,
+          2,
+          'F'
+        );
+
+        document.setTextColor(...palette.muted);
+        document.setFont('helvetica', 'bold');
+        document.setFontSize(7.5);
+        document.text('CATALOGUE SUMMARY', marginX + 16, panelY + 16);
+
+        document.setTextColor(...palette.ink);
+        document.setFont('helvetica', 'normal');
+        document.setFontSize(9.5);
+        document.text(
+          `${rows.length} products included in this catalogue`,
+          marginX + 16,
+          panelY + 33
+        );
+
+        return panelY + panelHeight + 16;
+      }
+
+      const panelY = 76;
+      const metricsWidth = 222;
+      const contentWidth =
+        pageWidth - marginX * 2 - metricsWidth - 30;
+
+      document.setFont(tableFont, 'normal');
+      document.setFontSize(8.2);
+
+      const addressLines = customerAddress
+        ? document.splitTextToSize(
+            customerAddress,
+            Math.max(190, contentWidth)
+          )
+        : [];
+
+      const panelHeight = Math.max(
+        70,
+        48 + addressLines.length * 10
+      );
+
+      document.setFillColor(...palette.panel);
+      document.roundedRect(
+        marginX,
+        panelY,
+        pageWidth - marginX * 2,
+        panelHeight,
+        5,
+        5,
+        'F'
+      );
+
+      document.setFillColor(...palette.blue);
+      document.roundedRect(
+        marginX,
+        panelY,
+        4,
+        panelHeight,
+        2,
+        2,
+        'F'
+      );
+
+      document.setFont('helvetica', 'bold');
+      document.setFontSize(7.3);
+      document.setTextColor(...palette.muted);
+      document.text('PREPARED FOR', marginX + 16, panelY + 17);
+
+      document.setFont(tableFont, 'normal');
+      document.setFontSize(12.2);
+      document.setTextColor(...palette.navy);
+
+      const customerNameLines = document.splitTextToSize(
+        customerName || 'Customer',
+        Math.max(190, contentWidth)
+      );
+
+      document.text(
+        customerNameLines,
+        marginX + 16,
+        panelY + 35
+      );
+
+      const customerNameHeight =
+        Math.max(1, customerNameLines.length) * 12;
+
+      if (addressLines.length > 0) {
+        document.setFont(tableFont, 'normal');
+        document.setFontSize(8.2);
+        document.setTextColor(...palette.slate);
+        document.text(
+          addressLines,
+          marginX + 16,
+          panelY + 42 + customerNameHeight
+        );
+      }
+
+      const metricsStartX = pageWidth - marginX - metricsWidth;
+
+      document.setDrawColor(...palette.border);
+      document.setLineWidth(0.7);
+      document.line(
+        metricsStartX - 15,
+        panelY + 12,
+        metricsStartX - 15,
+        panelY + panelHeight - 12
+      );
+
+      const metricColumns = [
+        {
+          label: 'PRODUCTS',
+          value: String(rows.length),
+        },
+        {
+          label: 'INVOICES',
+          value: invoiceCount > 0 ? String(invoiceCount) : '-',
+        },
+        {
+          label: 'LAST ORDER',
+          value: latestOrderDate || '-',
+        },
+      ];
+
+      const metricWidth = metricsWidth / metricColumns.length;
+
+      metricColumns.forEach((metric, index) => {
+        const x = metricsStartX + metricWidth * index;
+
+        document.setFont('helvetica', 'bold');
+        document.setFontSize(6.7);
+        document.setTextColor(...palette.muted);
+        document.text(metric.label, x, panelY + 21);
+
+        if (index === 2 && latestOrderDate) {
+          document.setFont('helvetica', 'bold');
+          document.setFontSize(8);
+        } else {
+          document.setFont('helvetica', 'bold');
+          document.setFontSize(12);
+        }
+
+        document.setTextColor(...palette.ink);
+        document.text(
+          metric.value,
+          x,
+          panelY + 41,
+          {
+            maxWidth: metricWidth - 8,
+          }
+        );
+      });
+
+      return panelY + panelHeight + 16;
+    }
+
+    function drawContinuationHeader(pageNumber) {
+      drawTopRule();
+
+      document.setFont('helvetica', 'bold');
+      document.setFontSize(11.5);
+      document.setTextColor(...palette.navy);
+      document.text('THREE LEAVES', marginX, 25);
+
+      document.setFont('helvetica', 'normal');
+      document.setFontSize(7.5);
+      document.setTextColor(...palette.muted);
+      document.text(catalogueTitle, marginX, 40);
+
+      if (customerCatalogue && customerName) {
+        document.setFont(tableFont, 'normal');
+        document.setFontSize(8);
+        document.setTextColor(...palette.slate);
+
+        const customerHeader = document.splitTextToSize(
+          customerName,
+          pageWidth * 0.38
+        );
+
+        document.text(
+          customerHeader.slice(0, 1),
+          pageWidth - marginX,
+          26,
+          { align: 'right' }
+        );
+      }
+
+      document.setFont('helvetica', 'normal');
+      document.setFontSize(7);
+      document.setTextColor(...palette.muted);
+      document.text(
+        `Continuation ${pageNumber}`,
+        pageWidth - marginX,
+        41,
+        { align: 'right' }
+      );
+
+      document.setDrawColor(...palette.border);
+      document.setLineWidth(0.7);
+      document.line(marginX, 50, pageWidth - marginX, 50);
+    }
+
+    const firstTableY = drawFirstPageHeader();
+
+    const baseFont =
+      columns.length >= 9
+        ? 7.2
+        : columns.length >= 7
+          ? 7.8
+          : columns.length >= 5
+            ? 8.5
+            : 9.2;
 
     autoTable(document, {
-      startY,
+      startY: firstTableY,
       head: [columns.map((column) => column.label)],
       body: rows.map((row) =>
         columns.map((column) =>
-          ['Price', 'cost_price (SGD)'].includes(column.key)
-            ? `$${Number(row[column.key] || 0).toFixed(2)}`
-            : String(row[column.key] ?? '')
+          formatCellValue(row, column)
         )
       ),
-      theme: 'grid',
-      margin: { top: startY, right: 32, bottom: 42, left: 32 },
+      theme: 'plain',
+      showHead: 'everyPage',
+      margin: {
+        top: continuationTopMargin,
+        right: marginX,
+        bottom: bottomMargin,
+        left: marginX,
+      },
+      tableWidth: availableTableWidth,
       styles: {
-        font: tableFont, fontStyle: 'normal', fontSize: baseFont,
-        cellPadding: 4, overflow: 'linebreak', valign: 'middle',
-        lineColor: [226, 232, 240], lineWidth: 0.5, textColor: [30, 41, 59],
+        font: tableFont,
+        fontStyle: 'normal',
+        fontSize: baseFont,
+        textColor: palette.ink,
+        cellPadding: {
+          top: 4.2,
+          right: 4,
+          bottom: 4.2,
+          left: 4,
+        },
+        minCellHeight: 19,
+        overflow: 'linebreak',
+        valign: 'middle',
+        lineWidth: 0,
       },
       headStyles: {
-        font: tableFont, fontStyle: 'normal',
-        fillColor: [30, 64, 175], textColor: [255, 255, 255],
+        font: 'helvetica',
+        fontStyle: 'bold',
+        fontSize: Math.max(7.3, baseFont - 0.2),
+        fillColor: palette.navy,
+        textColor: palette.white,
+        cellPadding: {
+          top: 5.5,
+          right: 4,
+          bottom: 5.5,
+          left: 4,
+        },
+        minCellHeight: 23,
       },
-      alternateRowStyles: { fillColor: [248, 250, 252] },
+      bodyStyles: {
+        fillColor: palette.white,
+      },
+      alternateRowStyles: {
+        fillColor: palette.rowAlt,
+      },
+      columnStyles,
       rowPageBreak: 'avoid',
-      didDrawPage: () => {
-        const page = document.internal.getCurrentPageInfo().pageNumber;
-        document.setDrawColor(226, 232, 240);
-        document.line(32, pageHeight - 30, pageWidth - 32, pageHeight - 30);
-        document.setFont('helvetica', 'normal');
-        document.setFontSize(8);
-        document.setTextColor(100, 116, 139);
-        document.text(options.footerLabel || 'Three Leaves Inventory Catalogue', 32, pageHeight - 15);
-        document.text(`Page ${page}`, pageWidth - 32, pageHeight - 15, { align: 'right' });
+      pageBreak: 'auto',
+      didParseCell: (data) => {
+        const columnKey =
+          columns[data.column.index]?.key || '';
+
+        if (data.section === 'head') {
+          if (
+            ['Price', 'cost_price (SGD)', 'stock', 'Orders', 'Total Qty'].includes(
+              columnKey
+            )
+          ) {
+            data.cell.styles.halign = 'right';
+          } else if (columnKey === 'Unit') {
+            data.cell.styles.halign = 'center';
+          }
+
+          return;
+        }
+
+        if (data.section !== 'body') return;
+
+        if (columnKey === 'Name') {
+          data.cell.styles.textColor = palette.navy;
+          data.cell.styles.fontSize = baseFont + 0.35;
+        }
+
+        if (
+          ['Supplier', 'Description', 'Last Ordered'].includes(columnKey)
+        ) {
+          data.cell.styles.textColor = palette.slate;
+        }
+
+        if (columnKey === 'Description') {
+          data.cell.styles.fontSize = Math.max(6.8, baseFont - 0.35);
+        }
+
+        if (columnKey === 'SKU') {
+          data.cell.styles.textColor = [51, 65, 85];
+        }
+
+        if (
+          ['Price', 'cost_price (SGD)'].includes(columnKey)
+        ) {
+          data.cell.styles.font = 'helvetica';
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.textColor =
+            columnKey === 'Price'
+              ? palette.blue
+              : palette.slate;
+          data.cell.styles.halign = 'right';
+        }
+
+        if (
+          ['stock', 'Orders', 'Total Qty'].includes(columnKey)
+        ) {
+          data.cell.styles.font = 'helvetica';
+          data.cell.styles.halign = 'right';
+        }
+
+        if (columnKey === 'Last Ordered') {
+          data.cell.styles.font = 'helvetica';
+        }
+      },
+      didDrawCell: (data) => {
+        if (data.section !== 'body') return;
+
+        document.setDrawColor(...palette.border);
+        document.setLineWidth(0.35);
+
+        document.line(
+          data.cell.x,
+          data.cell.y + data.cell.height,
+          data.cell.x + data.cell.width,
+          data.cell.y + data.cell.height
+        );
+      },
+      didDrawPage: (data) => {
+        const pageNumber =
+          document.internal.getCurrentPageInfo().pageNumber;
+
+        if (pageNumber > 1) {
+          drawContinuationHeader(pageNumber);
+        }
       },
     });
 
-    const prefix = sanitiseFilePart(options.filenamePrefix || 'inventory-catalogue') || 'inventory-catalogue';
-    document.save(`${prefix}-${new Date().toISOString().slice(0, 10)}.pdf`);
+    // A subtle closing summary makes a short final page feel intentional
+    // instead of visually unfinished.
+    const lastPage = document.getNumberOfPages();
+    const finalY = Number(document.lastAutoTable?.finalY || 0);
+
+    if (
+      finalY > 0 &&
+      pageHeight - finalY > 100
+    ) {
+      document.setPage(lastPage);
+
+      const summaryY = finalY + 18;
+      const summaryHeight = 42;
+
+      document.setFillColor(...palette.panel);
+      document.roundedRect(
+        marginX,
+        summaryY,
+        pageWidth - marginX * 2,
+        summaryHeight,
+        4,
+        4,
+        'F'
+      );
+
+      document.setFont('helvetica', 'bold');
+      document.setFontSize(7);
+      document.setTextColor(...palette.muted);
+      document.text(
+        customerCatalogue
+          ? 'CATALOGUE SUMMARY'
+          : 'EXPORT SUMMARY',
+        marginX + 13,
+        summaryY + 15
+      );
+
+      document.setFont(tableFont, 'normal');
+      document.setFontSize(8.2);
+      document.setTextColor(...palette.slate);
+
+      const summaryText = customerCatalogue
+        ? `${rows.length} products | ${
+            invoiceCount > 0
+              ? `${invoiceCount} invoice${invoiceCount === 1 ? '' : 's'}`
+              : 'customer order history'
+          }${
+            latestOrderDate
+              ? ` | Latest order ${latestOrderDate}`
+              : ''
+          }`
+        : `${rows.length} products included | Generated ${generatedDate}`;
+
+      document.text(
+        summaryText,
+        marginX + 13,
+        summaryY + 30,
+        {
+          maxWidth: pageWidth - marginX * 2 - 26,
+        }
+      );
+    }
+
+    // Add consistent footer after the table so total page count is known.
+    const totalPages = document.getNumberOfPages();
+
+    for (
+      let pageNumber = 1;
+      pageNumber <= totalPages;
+      pageNumber += 1
+    ) {
+      document.setPage(pageNumber);
+
+      document.setDrawColor(...palette.border);
+      document.setLineWidth(0.6);
+      document.line(
+        marginX,
+        pageHeight - 29,
+        pageWidth - marginX,
+        pageHeight - 29
+      );
+
+      document.setFont(tableFont, 'normal');
+      document.setFontSize(7.1);
+      document.setTextColor(...palette.muted);
+
+      const footerLeft = customerCatalogue
+        ? `Three Leaves | ${customerName || 'Customer Order Catalogue'}`
+        : 'Three Leaves | Inventory Catalogue';
+
+      const footerLines = document.splitTextToSize(
+        footerLeft,
+        pageWidth * 0.62
+      );
+
+      document.text(
+        footerLines.slice(0, 1),
+        marginX,
+        pageHeight - 14
+      );
+
+      document.setFont('helvetica', 'normal');
+      document.setFontSize(7.1);
+      document.text(
+        `Page ${pageNumber} of ${totalPages}`,
+        pageWidth - marginX,
+        pageHeight - 14,
+        { align: 'right' }
+      );
+    }
+
+    const prefix =
+      sanitiseFilePart(
+        options.filenamePrefix ||
+          'inventory-catalogue'
+      ) || 'inventory-catalogue';
+
+    document.save(
+      `${prefix}-${new Date()
+        .toISOString()
+        .slice(0, 10)}.pdf`
+    );
+
     return true;
   } catch (error) {
-    console.error('Inventory PDF export failed:', error);
-    window.alert(`Unable to generate the PDF: ${error?.message || 'Unknown error'}`);
+    console.error(
+      'Inventory PDF export failed:',
+      error
+    );
+
+    window.alert(
+      `Unable to generate the PDF: ${
+        error?.message || 'Unknown error'
+      }`
+    );
+
     return false;
   }
 }
-
 function Toast({ notification, onClose }) {
   if (!notification) return null;
   const tone = notification.type === 'error'
@@ -906,8 +1544,19 @@ function InventoryPdfColumnPicker({
     setExporting(true);
     try {
       await onExport({
-        rows, selectedColumns: columns, columnDefinitions: activeColumns,
-        mode, selectedCustomer,
+        rows,
+        selectedColumns: columns,
+        columnDefinitions: activeColumns,
+        mode,
+        selectedCustomer,
+        invoiceCount:
+          mode === 'customer-history'
+            ? history.invoiceCount
+            : 0,
+        latestOrderDate:
+          mode === 'customer-history'
+            ? history.latestOrderDate
+            : '',
       });
     } finally {
       setExporting(false);
@@ -980,7 +1629,11 @@ function InventoryPdfColumnPicker({
             <div className="mb-3 flex justify-between gap-3">
               <div>
                 <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">PDF Columns</p>
-                <p className="mt-1 text-xs text-slate-500">Cost price remains off by default.</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {mode === 'customer-history'
+                    ? 'Customer catalogues default to the essential columns for a cleaner external-facing layout. Supplier, Description and other fields remain optional.'
+                    : 'Choose the fields to include. Cost price remains off by default.'}
+                </p>
               </div>
               <div className="flex gap-2">
                 <button type="button" onClick={() => setColumns(activeColumns.map((column) => column.key))}
@@ -1999,19 +2652,44 @@ export function InventoryModule({ sys }) {
           invoices={invoices}
           inventory={inventory}
           onClose={() => setPdfOpen(false)}
-          onExport={async ({ rows, selectedColumns, columnDefinitions, mode, selectedCustomer }) => {
-            const customerName = selectedCustomer ? getCustomerName(selectedCustomer) : '';
-            const success = await exportInventoryToPDF(rows, selectedColumns, {
-              columnDefinitions,
-              catalogueTitle: mode === 'customer-history' ? 'Customer Order Catalogue' : 'Inventory Catalogue',
-              customerName,
-              customerAddress: selectedCustomer ? getCustomerAddress(selectedCustomer) : '',
-              filenamePrefix: mode === 'customer-history' && customerName
-                ? `customer-catalogue-${customerName}` : 'inventory-catalogue',
-              footerLabel: mode === 'customer-history' && customerName
-                ? `${customerName} · Previously Ordered Products`
-                : 'Three Leaves Inventory Catalogue',
-            });
+          onExport={async ({
+            rows,
+            selectedColumns,
+            columnDefinitions,
+            mode,
+            selectedCustomer,
+            invoiceCount,
+            latestOrderDate,
+          }) => {
+            const customerName = selectedCustomer
+              ? getCustomerName(selectedCustomer)
+              : '';
+
+            const success = await exportInventoryToPDF(
+              rows,
+              selectedColumns,
+              {
+                columnDefinitions,
+                catalogueTitle:
+                  mode === 'customer-history'
+                    ? 'Customer Order Catalogue'
+                    : 'Inventory Catalogue',
+                customerName,
+                customerAddress: selectedCustomer
+                  ? getCustomerAddress(selectedCustomer)
+                  : '',
+                invoiceCount,
+                latestOrderDate,
+                filenamePrefix:
+                  mode === 'customer-history' && customerName
+                    ? `customer-catalogue-${customerName}`
+                    : 'inventory-catalogue',
+                footerLabel:
+                  mode === 'customer-history' && customerName
+                    ? `${customerName} | Previously Ordered Products`
+                    : 'Three Leaves Inventory Catalogue',
+              }
+            );
             if (success) setPdfOpen(false);
             return success;
           }}
