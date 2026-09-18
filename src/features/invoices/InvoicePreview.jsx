@@ -477,9 +477,11 @@ export function InvoicePreview({
               width: 210mm !important;
               height: auto !important;
               min-height: 0 !important;
+              max-height: none !important;
               margin: 0 !important;
               padding: 0 !important;
               overflow: visible !important;
+              display: block !important;
               background: white !important;
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
@@ -492,18 +494,43 @@ export function InvoicePreview({
               width: 210mm !important;
               height: auto !important;
               min-height: 0 !important;
+              max-height: none !important;
               overflow: visible !important;
               margin: 0 !important;
               padding: 0 !important;
               background: white !important;
             }
 
-            body * {
-              visibility: hidden !important;
+            .invoice-preview-toolbar {
+              display: none !important;
             }
 
-            #printable-invoice-wrapper,
-            #printable-invoice-wrapper * {
+            .invoice-preview-layout {
+              display: block !important;
+              width: 210mm !important;
+              height: auto !important;
+              min-height: 0 !important;
+              max-height: none !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              overflow: visible !important;
+            }
+
+            /*
+             * The preview is portaled directly under <body>. Hide every other
+             * body-level application node completely during printing.
+             *
+             * IMPORTANT:
+             * Do NOT use visibility:hidden here. Hidden elements still occupy
+             * layout space, and the ERP root is h-screen. That reserved one
+             * whole blank sheet before the first invoice page.
+             */
+            body > *:not(.invoice-preview-root) {
+              display: none !important;
+            }
+
+            .invoice-preview-root,
+            .invoice-preview-root * {
               visibility: visible !important;
             }
 
@@ -521,26 +548,54 @@ export function InvoicePreview({
               box-sizing: border-box !important;
             }
 
+            /*
+             * IMPORTANT:
+             * Do not make a printable block exactly 297mm tall and then ask
+             * Chromium to keep the whole block together with break-inside:
+             * avoid. Due to px/mm rounding, Chromium can decide that the first
+             * 297mm block is a fraction too tall for the first A4 sheet and
+             * move the entire block to page 2, leaving page 1 blank.
+             *
+             * Keep the on-screen preview at true A4 (297mm). For print only,
+             * use a tiny 0.5mm safety allowance. Visually this is imperceptible
+             * but keeps the first page inside Chromium's printable A4 box.
+             */
             .invoice-print-page {
               position: relative !important;
               display: flex !important;
               width: 210mm !important;
-              height: 297mm !important;
-              min-height: 297mm !important;
-              max-height: 297mm !important;
-              flex: 0 0 297mm !important;
+              height: 296.5mm !important;
+              min-height: 296.5mm !important;
+              max-height: 296.5mm !important;
+              flex: none !important;
               padding: 15mm 10mm !important;
               margin: 0 !important;
               box-sizing: border-box !important;
               box-shadow: none !important;
               border-radius: 0 !important;
               page-break-before: auto !important;
-              page-break-after: always !important;
+              page-break-after: auto !important;
               break-before: auto !important;
-              break-after: page !important;
-              page-break-inside: avoid !important;
-              break-inside: avoid-page !important;
+              break-after: auto !important;
+              page-break-inside: auto !important;
+              break-inside: auto !important;
               overflow: hidden !important;
+            }
+
+            /*
+             * Only pages 2..N force a new physical sheet.
+             * The first invoice page has no forced break before or after it,
+             * so the browser cannot manufacture an empty leading sheet.
+             */
+            .invoice-print-page + .invoice-print-page {
+              page-break-before: always !important;
+              break-before: page !important;
+            }
+
+            .invoice-print-page:first-child {
+              page-break-before: auto !important;
+              break-before: auto !important;
+              margin-top: 0 !important;
             }
 
             .invoice-print-page:last-child {
@@ -560,8 +615,8 @@ export function InvoicePreview({
         `}
       </style>
 
-      <div className="flex min-h-full flex-col items-center py-12 print:m-0 print:block print:py-0">
-        <div className="flex w-full max-w-[210mm] shrink-0 items-center justify-between rounded-t-2xl border-b-4 border-blue-600 bg-slate-900 px-8 py-4 text-white shadow-2xl print:hidden">
+      <div className="invoice-preview-layout flex min-h-full flex-col items-center py-12 print:m-0 print:block print:min-h-0 print:h-auto print:p-0">
+        <div className="invoice-preview-toolbar flex w-full max-w-[210mm] shrink-0 items-center justify-between rounded-t-2xl border-b-4 border-blue-600 bg-slate-900 px-8 py-4 text-white shadow-2xl print:hidden">
           <div className="flex items-center">
             {mode === 'generator' ? (
               <Eye size={24} className="mr-3 text-blue-400" />
