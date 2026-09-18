@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ChevronLeft,
   Edit,
@@ -426,12 +427,14 @@ export function InvoicePreview({
     [safeItems]
   );
 
-  return (
-    <div className="fixed inset-0 z-[5000] overflow-y-auto bg-slate-950/90 print:static print:block print:bg-white print:p-0 print:backdrop-filter-none">
+  const previewContent = (
+    <div className="invoice-preview-root fixed inset-0 z-[5000] overflow-y-scroll overscroll-contain bg-slate-950/90 print:static print:block print:overflow-visible print:bg-white print:p-0 print:backdrop-filter-none">
       <style type="text/css">
         {`
           #printable-invoice-wrapper {
             width: 100%;
+            height: auto;
+            overflow: visible;
           }
 
           .invoice-print-page {
@@ -439,6 +442,9 @@ export function InvoicePreview({
             display: flex;
             width: 210mm;
             height: 297mm;
+            min-height: 297mm;
+            max-height: 297mm;
+            flex: 0 0 297mm;
             flex-direction: column;
             box-sizing: border-box;
             background: white;
@@ -468,11 +474,28 @@ export function InvoicePreview({
             @page { size: A4; margin: 0 !important; }
 
             html, body {
+              width: 210mm !important;
+              height: auto !important;
+              min-height: 0 !important;
               margin: 0 !important;
               padding: 0 !important;
+              overflow: visible !important;
               background: white !important;
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
+            }
+
+            .invoice-preview-root {
+              position: static !important;
+              inset: auto !important;
+              display: block !important;
+              width: 210mm !important;
+              height: auto !important;
+              min-height: 0 !important;
+              overflow: visible !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              background: white !important;
             }
 
             body * {
@@ -485,11 +508,13 @@ export function InvoicePreview({
             }
 
             #printable-invoice-wrapper {
-              position: absolute !important;
-              left: 0 !important;
-              top: 0 !important;
+              position: static !important;
+              display: block !important;
               width: 210mm !important;
               height: auto !important;
+              min-height: 0 !important;
+              max-height: none !important;
+              overflow: visible !important;
               padding: 0 !important;
               margin: 0 !important;
               background: white !important;
@@ -497,15 +522,24 @@ export function InvoicePreview({
             }
 
             .invoice-print-page {
+              position: relative !important;
+              display: flex !important;
               width: 210mm !important;
               height: 297mm !important;
               min-height: 297mm !important;
+              max-height: 297mm !important;
+              flex: 0 0 297mm !important;
               padding: 15mm 10mm !important;
               margin: 0 !important;
+              box-sizing: border-box !important;
               box-shadow: none !important;
               border-radius: 0 !important;
+              page-break-before: auto !important;
               page-break-after: always !important;
+              break-before: auto !important;
               break-after: page !important;
+              page-break-inside: avoid !important;
+              break-inside: avoid-page !important;
               overflow: hidden !important;
             }
 
@@ -605,7 +639,7 @@ export function InvoicePreview({
         <div
           id="printable-invoice-wrapper"
           lang="zh"
-          className="flex w-full flex-col items-center gap-8 print:block print:gap-0"
+          className="flex w-full flex-none flex-col items-center gap-8 overflow-visible print:block print:gap-0 print:overflow-visible"
           style={{ fontFamily: CJK_FONT }}
         >
           {itemPages.map((pageItems, pageIndex) => {
@@ -627,7 +661,7 @@ export function InvoicePreview({
             return (
               <div
                 key={`invoice-page-${pageIndex}`}
-                className="invoice-print-page rounded-b-2xl shadow-2xl print:rounded-none print:shadow-none"
+                className="invoice-print-page shrink-0 rounded-b-2xl shadow-2xl print:rounded-none print:shadow-none"
                 style={{ fontFamily: CJK_FONT }}
               >
                 <InvoiceHeader
@@ -847,6 +881,10 @@ export function InvoicePreview({
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined'
+    ? createPortal(previewContent, document.body)
+    : previewContent;
 }
 
 export function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
