@@ -557,6 +557,7 @@ const EMPTY_EMPLOYEE = {
   payBasis: 'monthly_salary',
   basicSalary: '',
   hourlyRate: '',
+  dailyTransportAllowance: '',
   paymentInterval: 'monthly',
   cpfEligible: true,
   levy: '',
@@ -665,6 +666,7 @@ function normaliseEmployee(row) {
     payBasis: String(row?.pay_basis ?? 'monthly_salary'),
     basicSalary: Number(row?.basic_salary ?? 0) || 0,
     hourlyRate: Number(row?.hourly_rate ?? 0) || 0,
+    dailyTransportAllowance: Number(row?.transport_allowance_per_day ?? 0) || 0,
     paymentInterval: String(row?.payment_interval ?? 'monthly'),
     cpfEligible: row?.cpf_eligible !== false,
     levy: Number(row?.levy ?? 0) || 0,
@@ -696,6 +698,7 @@ function employeePayload(employee) {
     pay_basis: isPartTime ? 'hourly' : (employee.payBasis || 'monthly_salary'),
     basic_salary: isPartTime ? 0 : (employee.payBasis === 'monthly_salary' ? Number(employee.basicSalary || 0) || 0 : 0),
     hourly_rate: isPartTime ? Number(employee.hourlyRate || 0) || 0 : (employee.payBasis === 'hourly' ? Number(employee.hourlyRate || 0) || 0 : 0),
+    transport_allowance_per_day: isPartTime ? Number(employee.dailyTransportAllowance || 0) || 0 : 0,
     payment_interval: employee.paymentInterval || (isPartTime ? 'weekly' : 'monthly'),
     cpf_eligible: isPartTime ? false : Boolean(employee.cpfEligible),
     levy: isPartTime ? 0 : (Number(employee.levy || 0) || 0),
@@ -742,6 +745,22 @@ function clockedHours(clockIn, clockOut, breakMinutes = 0) {
 
 function attendanceHours(row) {
   return Number(row?.regular_hours || 0) + Number(row?.overtime_hours || 0);
+}
+
+function durationLabel(hours) {
+  const safe = Math.max(0, Number(hours || 0));
+  const totalMinutes = Math.round(safe * 60);
+  const wholeHours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (!wholeHours && !minutes) return '—';
+  if (!minutes) return `${wholeHours}h 00m`;
+  return `${wholeHours}h ${String(minutes).padStart(2, '0')}m`;
+}
+
+function signedMoney(value) {
+  const amount = Number(value || 0);
+  const absolute = `$${formatMoney(Math.abs(amount))}`;
+  return amount < 0 ? `-${absolute}` : absolute;
 }
 
 function inclusiveDays(startValue, endValue) {
@@ -893,13 +912,14 @@ function EmployeeEditor({ employee, employees, onClose, onSave }) {
             <section>
               <p className="mb-3 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Part-Time Pay Setup</p>
               <div className="rounded-2xl border border-blue-100 bg-blue-50/50 p-4">
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
                   <Field label="Hourly Rate ($)"><input type="number" min="0" step="0.01" value={form.hourlyRate} onChange={(e) => update('hourlyRate', e.target.value)} className={`${inputClass} border-blue-200 bg-white text-right font-black text-blue-700`} /></Field>
+                  <Field label="Transport Allowance / Work Day ($)"><input type="number" min="0" step="0.01" value={form.dailyTransportAllowance} onChange={(e) => update('dailyTransportAllowance', e.target.value)} className={`${inputClass} bg-white text-right font-bold text-slate-700`} /></Field>
                   <Field label="Payment Interval"><select value={form.paymentInterval} onChange={(e) => update('paymentInterval', e.target.value)} className={inputClass}><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></Field>
                   <Field label="Payment Method"><select value={form.paymentMethod} onChange={(e) => update('paymentMethod', e.target.value)} className={inputClass}><option>Bank Transfer</option><option>PayNow</option><option>Cash</option><option>Cheque</option></select></Field>
                   <Field label="Payment Reference / Account"><input value={form.bankAccountNo} onChange={(e) => update('bankAccountNo', e.target.value)} placeholder="Optional" className={inputClass} /></Field>
                 </div>
-                <div className="mt-4 rounded-xl border border-blue-100 bg-white px-4 py-3 text-xs leading-5 text-slate-500">Daily working hours are entered in the <strong>Part-Time Hours</strong> spreadsheet. Unpaid intervals automatically appear as <strong>Brought Forward</strong> on the next interval page until settlement.</div>
+                <div className="mt-4 rounded-xl border border-blue-100 bg-white px-4 py-3 text-xs leading-5 text-slate-500">In <strong>Part-Time Hours</strong>, enter the start and end time for each work day. Shift duration, hourly pay, daily transport allowance, gross earnings and advances are calculated into a rolling payment balance. Unsettled balances carry forward automatically.</div>
               </div>
             </section>
           ) : <>
@@ -1011,13 +1031,13 @@ function PartTimeSettlementModal({ settlement, onClose, onConfirm }) {
   return (
     <ModalShell title={`Settle ${settlement.employee.name}`} eyebrow="Part-Time Payment Settlement" onClose={onClose} maxWidth="max-w-lg">
       <form onSubmit={submit} className="space-y-5 overflow-y-auto p-6">
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5"><p className="text-[10px] font-black uppercase tracking-wider text-emerald-600">Total Outstanding Through {settlement.bounds.end}</p><p className="mt-2 text-3xl font-black text-emerald-900">${formatMoney(settlement.totalDue)}</p><p className="mt-2 text-xs text-emerald-700">{settlement.rows.length} unpaid interval{settlement.rows.length === 1 ? '' : 's'} will be settled together.</p></div>
-        <div className="grid grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4"><div><p className="text-[9px] font-black uppercase text-slate-400">Brought Forward</p><p className="mt-1 text-lg font-black">${formatMoney(settlement.broughtForward)}</p></div><div><p className="text-[9px] font-black uppercase text-slate-400">Current Interval</p><p className="mt-1 text-lg font-black">${formatMoney(settlement.currentDue)}</p></div></div>
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5"><p className="text-[10px] font-black uppercase tracking-wider text-emerald-600">Rolling Balance Through {settlement.bounds.end}</p><p className="mt-2 text-3xl font-black text-emerald-900">{signedMoney(settlement.totalDue)}</p><p className="mt-2 text-xs text-emerald-700">{settlement.rows.length} unsettled interval{settlement.rows.length === 1 ? '' : 's'} will be closed together.</p></div>
+        <div className="grid grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4"><div><p className="text-[9px] font-black uppercase text-slate-400">Brought Forward</p><p className="mt-1 text-lg font-black">{signedMoney(settlement.broughtForward)}</p></div><div><p className="text-[9px] font-black uppercase text-slate-400">Current Interval</p><p className="mt-1 text-lg font-black">{signedMoney(settlement.currentDue)}</p></div></div>
         <label><span className="mb-1.5 block text-xs font-bold">Payment Date</span><input type="date" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} className="w-full rounded-xl border border-slate-200 p-3 text-sm" /></label>
         <label><span className="mb-1.5 block text-xs font-bold">Payment Method</span><select value={method} onChange={(e) => setMethod(e.target.value)} className="w-full rounded-xl border border-slate-200 p-3 text-sm"><option>Bank Transfer</option><option>PayNow</option><option>Cash</option><option>Cheque</option></select></label>
         <label><span className="mb-1.5 block text-xs font-bold">Payment Reference</span><input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Optional" className="w-full rounded-xl border border-slate-200 p-3 text-sm" /></label>
-        <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800">This clears all unpaid part-time intervals up to the selected period end. Future intervals are untouched.</div>
-        <div className="flex justify-end gap-3 border-t border-slate-100 pt-4"><button type="button" onClick={onClose} className="rounded-xl px-5 py-2.5 text-sm font-bold text-slate-500">Cancel</button><button type="submit" disabled={saving} className="inline-flex items-center rounded-xl bg-emerald-600 px-6 py-2.5 text-sm font-black text-white disabled:opacity-50"><CreditCard size={15} className="mr-2" />{saving ? 'Settling…' : 'Settle Outstanding'}</button></div>
+        <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800">This closes all unsettled part-time intervals up to the selected period end. Positive balances are pay due to the employee; negative balances are advances still owed back to the company. Future intervals are untouched.</div>
+        <div className="flex justify-end gap-3 border-t border-slate-100 pt-4"><button type="button" onClick={onClose} className="rounded-xl px-5 py-2.5 text-sm font-bold text-slate-500">Cancel</button><button type="submit" disabled={saving} className="inline-flex items-center rounded-xl bg-emerald-600 px-6 py-2.5 text-sm font-black text-white disabled:opacity-50"><CreditCard size={15} className="mr-2" />{saving ? 'Settling…' : 'Settle Through Interval'}</button></div>
       </form>
     </ModalShell>
   );
@@ -1089,6 +1109,189 @@ function PayslipPreview({ payroll, employee, onClose, onMarkPaid }) {
   </>;
 }
 
+function PartTimeDayRow({
+  date,
+  employee,
+  attendanceRow,
+  timesheetAdvance,
+  otherAdvanceAmount,
+  locked,
+  saving,
+  onSave,
+}) {
+  const legacyHours = attendanceHours(attendanceRow);
+  const hasStoredTiming = Boolean(attendanceRow?.clock_in && attendanceRow?.clock_out);
+
+  const [clockIn, setClockIn] = useState(
+    attendanceRow?.clock_in ? String(attendanceRow.clock_in).slice(0, 5) : ''
+  );
+  const [clockOut, setClockOut] = useState(
+    attendanceRow?.clock_out ? String(attendanceRow.clock_out).slice(0, 5) : ''
+  );
+  const [breakMinutes, setBreakMinutes] = useState(Number(attendanceRow?.break_minutes || 0));
+  const [allowance, setAllowance] = useState(
+    attendanceRow
+      ? Number(attendanceRow.transport_allowance || 0)
+      : Number(employee.dailyTransportAllowance || 0)
+  );
+  const [advance, setAdvance] = useState(Number(timesheetAdvance?.amount || 0));
+
+  useEffect(() => {
+    setClockIn(attendanceRow?.clock_in ? String(attendanceRow.clock_in).slice(0, 5) : '');
+    setClockOut(attendanceRow?.clock_out ? String(attendanceRow.clock_out).slice(0, 5) : '');
+    setBreakMinutes(Number(attendanceRow?.break_minutes || 0));
+    setAllowance(
+      attendanceRow
+        ? Number(attendanceRow.transport_allowance || 0)
+        : Number(employee.dailyTransportAllowance || 0)
+    );
+    setAdvance(Number(timesheetAdvance?.amount || 0));
+  }, [attendanceRow?.id, attendanceRow?.updated_at, timesheetAdvance?.id, timesheetAdvance?.updated_at, employee.dailyTransportAllowance]);
+
+  const hasTiming = Boolean(clockIn && clockOut);
+  const computedHours = hasTiming
+    ? clockedHours(clockIn, clockOut, breakMinutes)
+    : !clockIn && !clockOut
+      ? legacyHours
+      : 0;
+
+  const hourlyPay = computedHours * Number(employee.hourlyRate || 0);
+  const dayAllowance = computedHours > 0 ? Number(allowance || 0) : 0;
+  const gross = hourlyPay + dayAllowance;
+  const totalAdvance = Number(advance || 0) + Number(otherAdvanceAmount || 0);
+  const dayBalance = gross - totalAdvance;
+
+  const save = () => {
+    onSave({
+      date,
+      clockIn,
+      clockOut,
+      breakMinutes: Number(breakMinutes || 0),
+      allowance: Number(allowance || 0),
+      advance: Number(advance || 0),
+      legacyHours,
+      hadStoredTiming: hasStoredTiming,
+    });
+  };
+
+  return (
+    <tr className="border-b border-slate-100 align-middle hover:bg-slate-50/70">
+      <td className="sticky left-0 z-10 bg-white px-3 py-3 shadow-[1px_0_0_0_#e2e8f0]">
+        <p className="whitespace-nowrap text-xs font-black text-slate-800">{shortDayLabel(date)}</p>
+        <p className="mt-0.5 font-mono text-[9px] text-slate-400">{date}</p>
+      </td>
+
+      <td className="min-w-[250px] px-2 py-2">
+        <div className="flex items-center gap-1.5">
+          <input
+            type="time"
+            value={clockIn}
+            disabled={locked || saving}
+            onChange={(event) => setClockIn(event.target.value)}
+            className="min-w-[104px] rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-400"
+          />
+          <span className="text-slate-300">→</span>
+          <input
+            type="time"
+            value={clockOut}
+            disabled={locked || saving}
+            onChange={(event) => setClockOut(event.target.value)}
+            className="min-w-[104px] rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-400"
+          />
+        </div>
+        <div className="mt-1 flex items-center gap-2">
+          <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Break</span>
+          <input
+            type="number"
+            min="0"
+            step="5"
+            value={breakMinutes}
+            disabled={locked || saving}
+            onChange={(event) => setBreakMinutes(event.target.value)}
+            className="w-16 rounded-md border border-slate-200 px-1.5 py-1 text-right text-[10px] outline-none disabled:bg-slate-100"
+          />
+          <span className="text-[9px] text-slate-400">min</span>
+          {!hasStoredTiming && legacyHours > 0 && !hasTiming && (
+            <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-700">
+              Legacy {legacyHours.toFixed(2)}h
+            </span>
+          )}
+        </div>
+      </td>
+
+      <td className="min-w-[105px] px-3 py-3 text-right">
+        <p className="font-mono text-xs font-black text-slate-800">{durationLabel(computedHours)}</p>
+        <p className="mt-0.5 font-mono text-[9px] text-slate-400">{computedHours.toFixed(2)} hrs</p>
+      </td>
+
+      <td className="min-w-[120px] px-3 py-3 text-right font-mono text-xs font-black text-slate-700">
+        ${formatMoney(hourlyPay)}
+      </td>
+
+      <td className="min-w-[130px] px-2 py-2">
+        <div className="relative ml-auto w-[104px]">
+          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">$</span>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={allowance}
+            disabled={locked || saving}
+            onChange={(event) => setAllowance(event.target.value)}
+            className="w-full rounded-lg border border-slate-200 py-2 pl-6 pr-2 text-right font-mono text-xs font-bold outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-400"
+          />
+        </div>
+        <p className="mt-1 text-right text-[9px] text-slate-400">applies when hours &gt; 0</p>
+      </td>
+
+      <td className="min-w-[120px] bg-emerald-50/40 px-3 py-3 text-right font-mono text-xs font-black text-emerald-800">
+        ${formatMoney(gross)}
+      </td>
+
+      <td className="min-w-[130px] px-2 py-2">
+        <div className="relative ml-auto w-[104px]">
+          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">$</span>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={advance}
+            disabled={locked || saving}
+            onChange={(event) => setAdvance(event.target.value)}
+            className="w-full rounded-lg border border-amber-200 bg-amber-50/50 py-2 pl-6 pr-2 text-right font-mono text-xs font-bold text-amber-800 outline-none focus:border-amber-300 focus:ring-2 focus:ring-amber-100 disabled:bg-slate-100 disabled:text-slate-400"
+          />
+        </div>
+        {otherAdvanceAmount > 0 && (
+          <p className="mt-1 text-right text-[9px] font-bold text-amber-600">
+            + ${formatMoney(otherAdvanceAmount)} other ledger
+          </p>
+        )}
+      </td>
+
+      <td className={`min-w-[120px] px-3 py-3 text-right font-mono text-xs font-black ${dayBalance < 0 ? 'text-red-700' : 'text-blue-700'}`}>
+        {signedMoney(dayBalance)}
+      </td>
+
+      <td className="min-w-[92px] px-3 py-3 text-center">
+        {locked ? (
+          <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-[9px] font-black text-slate-500">
+            <Lock size={10} className="mr-1" /> LOCKED
+          </span>
+        ) : (
+          <button
+            type="button"
+            disabled={saving}
+            onClick={save}
+            className="rounded-lg bg-blue-600 px-3 py-2 text-[10px] font-black text-white disabled:opacity-50"
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        )}
+      </td>
+    </tr>
+  );
+}
+
 // ==========================================
 // MAIN COMPONENT
 // ==========================================
@@ -1108,6 +1311,7 @@ export function EmployeeModule() {
   const [payrollEditor, setPayrollEditor] = useState(false);
   const [payslip, setPayslip] = useState(null);
   const [partTimeCycle, setPartTimeCycle] = useState('weekly');
+  const [partTimeEmployeeId, setPartTimeEmployeeId] = useState('');
   const [partTimeAnchor, setPartTimeAnchor] = useState(localDateString());
   const [partTimeSavingKey, setPartTimeSavingKey] = useState('');
   const [partTimeSettlement, setPartTimeSettlement] = useState(null);
@@ -1150,6 +1354,18 @@ export function EmployeeModule() {
   useEffect(() => { void reload(); }, []);
 
   const employeeById = useMemo(() => new Map(employees.map((employee) => [String(employee.id), employee])), [employees]);
+  useEffect(() => {
+    const eligible = employees.filter(
+      (employee) =>
+        employee.status === 'Active' &&
+        employee.employmentType === 'Part-Time' &&
+        employee.paymentInterval === partTimeCycle
+    );
+
+    if (!eligible.some((employee) => String(employee.id) === String(partTimeEmployeeId))) {
+      setPartTimeEmployeeId(eligible[0]?.id || '');
+    }
+  }, [employees, partTimeCycle, partTimeEmployeeId]);
   const today = localDateString();
   const week = weekBounds();
   const month = monthBounds();
@@ -1180,7 +1396,7 @@ export function EmployeeModule() {
       partTime: active.filter((employee) => employee.employmentType === 'Part-Time').length,
       weeklyHours: weekRows.reduce((sum, row) => sum + attendanceHours(row), 0),
       weeklyOt: weekRows.reduce((sum, row) => sum + Number(row.overtime_hours || 0), 0),
-      payrollDue: unpaid.reduce((sum, row) => sum + Number(row.net_pay || 0), 0),
+      payrollDue: unpaid.reduce((sum, row) => sum + Math.max(0, Number(row.net_pay || 0)), 0),
       unpaid,
       outstandingAdvances,
       advanceAmount: outstandingAdvances.reduce((sum, row) => sum + Number(row.amount || 0), 0),
@@ -1320,7 +1536,6 @@ export function EmployeeModule() {
   };
 
   const syncPartTimeInterval = async (employee, dateValue) => {
-    if (!employee || employee.employmentType !== 'Part-Time') return null;
     const bounds = intervalBounds(employee.paymentInterval, dateValue);
 
     const existingResult = await supabase
@@ -1336,20 +1551,60 @@ export function EmployeeModule() {
     const existing = existingResult.data || null;
 
     if (existing?.status === 'paid') {
-      throw new Error('This payment interval has already been paid and is locked.');
+      throw new Error('This payment interval has already been settled and is locked.');
     }
 
-    const attendanceResult = await supabase.from('employee_attendance').select('id,employee_id,work_date,regular_hours,overtime_hours').eq('employee_id', employee.id).gte('work_date', bounds.start).lte('work_date', bounds.end);
+    const [attendanceResult, advancesResult] = await Promise.all([
+      supabase
+        .from('employee_attendance')
+        .select('id,employee_id,work_date,clock_in,clock_out,break_minutes,regular_hours,overtime_hours,transport_allowance,status,notes,updated_at')
+        .eq('employee_id', employee.id)
+        .gte('work_date', bounds.start)
+        .lte('work_date', bounds.end),
+      supabase
+        .from('employee_advances')
+        .select('*')
+        .eq('employee_id', employee.id)
+        .gte('advance_date', bounds.start)
+        .lte('advance_date', bounds.end)
+        .neq('status', 'deducted'),
+    ]);
+
     if (attendanceResult.error) throw attendanceResult.error;
-    const rows = attendanceResult.data || [];
-    if (!rows.length && !existing) return null;
-    const totalHours = rows.reduce((sum, row) => sum + attendanceHours(row), 0);
-    const rateSnapshot = Number(existing?.rate_snapshot || 0) > 0 ? Number(existing.rate_snapshot) : Number(employee.hourlyRate || 0);
+    if (advancesResult.error) throw advancesResult.error;
+
+    const attendanceRows = attendanceResult.data || [];
+    const advanceRows = advancesResult.data || [];
+
+    if (!attendanceRows.length && !advanceRows.length && !existing) {
+      return null;
+    }
+
+    const totalHours = attendanceRows.reduce(
+      (sum, row) => sum + attendanceHours(row),
+      0
+    );
+
+    const transportAllowance = attendanceRows.reduce(
+      (sum, row) => sum + Number(row.transport_allowance || 0),
+      0
+    );
+
+    const rateSnapshot =
+      Number(existing?.rate_snapshot || 0) > 0
+        ? Number(existing.rate_snapshot)
+        : Number(employee.hourlyRate || 0);
+
     const hourlyPay = totalHours * rateSnapshot;
-    const allowances = Number(existing?.allowances || 0);
-    const advanceDeductions = Number(existing?.advance_deductions || 0);
+    const advanceDeductions = advanceRows.reduce(
+      (sum, row) => sum + Number(row.amount || 0),
+      0
+    );
+
     const otherDeductions = Number(existing?.other_deductions || 0);
-    const grossPay = hourlyPay + allowances;
+    const grossPay = hourlyPay + transportAllowance;
+    const netPay = grossPay - advanceDeductions - otherDeductions;
+
     const payload = {
       employee_id: employee.id,
       period_start: bounds.start,
@@ -1363,23 +1618,58 @@ export function EmployeeModule() {
       basic_pay: 0,
       hourly_pay: hourlyPay,
       overtime_pay: 0,
-      allowances,
+      allowances: transportAllowance,
       gross_pay: grossPay,
       advance_deductions: advanceDeductions,
       other_deductions: otherDeductions,
-      net_pay: Math.max(0, grossPay - advanceDeductions - otherDeductions),
+      net_pay: netPay,
       status: existing?.status === 'ready' ? 'ready' : 'draft',
-      notes: existing?.notes || 'Auto-recorded from Part-Time Hours spreadsheet',
+      notes: existing?.notes || 'Auto-calculated from Part-Time Timesheet',
     };
-    const result = await supabase.from('employee_payroll').upsert([payload], { onConflict: 'employee_id,period_start,period_end' }).select().single();
+
+    const result = await supabase
+      .from('employee_payroll')
+      .upsert([payload], {
+        onConflict: 'employee_id,period_start,period_end',
+      })
+      .select()
+      .single();
+
     if (result.error) throw result.error;
-    setPayroll((current) => [result.data, ...current.filter((row) => row.id !== result.data.id)].sort((a, b) => String(b.period_end).localeCompare(String(a.period_end))));
+
+    if (advanceRows.length > 0) {
+      const allocate = await supabase
+        .from('employee_advances')
+        .update({
+          status: 'allocated',
+          payroll_id: result.data.id,
+        })
+        .in('id', advanceRows.map((row) => row.id))
+        .neq('status', 'deducted');
+
+      if (allocate.error) throw allocate.error;
+    }
+
+    setPayroll((current) => [
+      result.data,
+      ...current.filter((row) => row.id !== result.data.id),
+    ].sort((a, b) => String(b.period_end).localeCompare(String(a.period_end))));
+
+    if (advanceRows.length > 0) {
+      const ids = new Set(advanceRows.map((row) => String(row.id)));
+      setAdvances((current) => current.map((row) =>
+        ids.has(String(row.id))
+          ? { ...row, status: 'allocated', payroll_id: result.data.id }
+          : row
+      ));
+    }
+
     return result.data;
   };
 
-  const savePartTimeHours = async (employee, dateValue, rawValue) => {
-    const key = `${employee.id}|${dateValue}`;
-    const bounds = intervalBounds(employee.paymentInterval, dateValue);
+  const savePartTimeDay = async (employee, draft) => {
+    const key = `${employee.id}|${draft.date}`;
+    const bounds = intervalBounds(employee.paymentInterval, draft.date);
 
     const paidResult = await supabase
       .from('employee_payroll')
@@ -1391,80 +1681,244 @@ export function EmployeeModule() {
       .maybeSingle();
 
     if (paidResult.error) {
-      notify('Unable to verify payment lock', 'error', paidResult.error.message);
+      notify('Unable to verify settlement lock', 'error', paidResult.error.message);
       return;
     }
 
     if (paidResult.data) {
-      notify('Paid interval is locked', 'error', 'Historical paid hours cannot be edited.');
+      notify('Settled interval is locked', 'error', 'Historical paid hours cannot be edited.');
       return;
     }
 
-    const trimmed = String(rawValue ?? '').trim();
-    const hours = trimmed === '' ? null : Number(trimmed);
-    if (hours !== null && (!Number.isFinite(hours) || hours < 0 || hours > 24)) return notify('Invalid hours', 'error', 'Daily hours must be between 0 and 24.');
+    const hasStart = Boolean(draft.clockIn);
+    const hasEnd = Boolean(draft.clockOut);
+
+    if (hasStart !== hasEnd) {
+      notify('Complete the timing', 'warning', 'Enter both start and end time before saving the day.');
+      return;
+    }
+
+    const computedHours = hasStart && hasEnd
+      ? clockedHours(draft.clockIn, draft.clockOut, draft.breakMinutes)
+      : Number(draft.legacyHours || 0);
+
+    if (computedHours > 24) {
+      notify('Invalid shift', 'error', 'The calculated shift cannot exceed 24 hours.');
+      return;
+    }
+
+    if (Number(draft.allowance || 0) < 0 || Number(draft.advance || 0) < 0) {
+      notify('Invalid amount', 'error', 'Allowance and advance values cannot be negative.');
+      return;
+    }
+
     setPartTimeSavingKey(key);
+
     try {
-      const existing = attendance.find((row) => String(row.employee_id) === String(employee.id) && row.work_date === dateValue);
-      if (hours === null) {
-        if (existing) {
-          const remove = await supabase.from('employee_attendance').delete().eq('id', existing.id);
-          if (remove.error) throw remove.error;
-          setAttendance((current) => current.filter((row) => row.id !== existing.id));
-        }
-      } else {
-        const result = await supabase.from('employee_attendance').upsert([{
+      const existingAttendance = attendance.find(
+        (row) =>
+          String(row.employee_id) === String(employee.id) &&
+          row.work_date === draft.date
+      );
+
+      const shouldKeepAttendance =
+        computedHours > 0 ||
+        (hasStart && hasEnd);
+
+      if (shouldKeepAttendance) {
+        const attendancePayload = {
           employee_id: employee.id,
-          work_date: dateValue,
-          clock_in: null,
-          clock_out: null,
-          break_minutes: 0,
-          regular_hours: hours,
+          work_date: draft.date,
+          clock_in: hasStart ? draft.clockIn : null,
+          clock_out: hasEnd ? draft.clockOut : null,
+          break_minutes: Number(draft.breakMinutes || 0),
+          regular_hours: computedHours,
           overtime_hours: 0,
-          status: hours > 0 ? 'Present' : 'Off',
-          notes: 'Part-Time Hours spreadsheet entry',
-        }], { onConflict: 'employee_id,work_date' }).select().single();
-        if (result.error) throw result.error;
-        setAttendance((current) => [result.data, ...current.filter((row) => row.id !== result.data.id)].sort((a, b) => String(b.work_date).localeCompare(String(a.work_date))));
+          transport_allowance: computedHours > 0 ? Number(draft.allowance || 0) : 0,
+          status: computedHours > 0 ? 'Present' : 'Off',
+          notes: hasStart && hasEnd
+            ? 'Part-Time Timesheet entry'
+            : 'Legacy part-time hours retained',
+        };
+
+        const attendanceSave = await supabase
+          .from('employee_attendance')
+          .upsert([attendancePayload], {
+            onConflict: 'employee_id,work_date',
+          })
+          .select()
+          .single();
+
+        if (attendanceSave.error) throw attendanceSave.error;
+
+        setAttendance((current) => [
+          attendanceSave.data,
+          ...current.filter((row) => row.id !== attendanceSave.data.id),
+        ].sort((a, b) => String(b.work_date).localeCompare(String(a.work_date))));
+      } else if (existingAttendance) {
+        const removeAttendance = await supabase
+          .from('employee_attendance')
+          .delete()
+          .eq('id', existingAttendance.id);
+
+        if (removeAttendance.error) throw removeAttendance.error;
+
+        setAttendance((current) =>
+          current.filter((row) => row.id !== existingAttendance.id)
+        );
       }
-      await syncPartTimeInterval(employee, dateValue);
+
+      const sourceKey = `pt-timesheet:${employee.id}:${draft.date}`;
+      const existingAdvance = advances.find((row) => row.source_key === sourceKey);
+      const advanceAmount = Number(draft.advance || 0);
+
+      if (advanceAmount > 0) {
+        const advancePayload = {
+          employee_id: employee.id,
+          advance_date: draft.date,
+          amount: advanceAmount,
+          reason: 'Part-Time Timesheet Advance',
+          status: 'pending',
+          payroll_id: null,
+          source_key: sourceKey,
+          notes: 'Entered from Part-Time Timesheet',
+        };
+
+        const advanceSave = await supabase
+          .from('employee_advances')
+          .upsert([advancePayload], { onConflict: 'source_key' })
+          .select()
+          .single();
+
+        if (advanceSave.error) throw advanceSave.error;
+
+        setAdvances((current) => [
+          advanceSave.data,
+          ...current.filter((row) => row.id !== advanceSave.data.id),
+        ].sort((a, b) => String(b.advance_date).localeCompare(String(a.advance_date))));
+      } else if (existingAdvance) {
+        const removeAdvance = await supabase
+          .from('employee_advances')
+          .delete()
+          .eq('id', existingAdvance.id);
+
+        if (removeAdvance.error) throw removeAdvance.error;
+
+        setAdvances((current) =>
+          current.filter((row) => row.id !== existingAdvance.id)
+        );
+      }
+
+      await syncPartTimeInterval(employee, draft.date);
+      notify('Timesheet day saved', 'success', `${employee.name} · ${draft.date}`);
     } catch (error) {
-      console.error('Part-time hours save failed:', error);
-      notify('Hours could not be saved', 'error', error?.message || 'Unknown error');
-    } finally { setPartTimeSavingKey(''); }
+      console.error('Part-time day save failed:', error);
+      notify('Timesheet could not be saved', 'error', error?.message || 'Unknown error');
+    } finally {
+      setPartTimeSavingKey('');
+    }
   };
 
   const preparePartTimeSettlement = async (employee, bounds) => {
     const loadingKey = `${employee.id}|${bounds.end}`;
     setPartTimeSettlementLoading(loadingKey);
+
     try {
       await syncPartTimeInterval(employee, bounds.end);
-      const dueResult = await supabase.from('employee_payroll').select('*').eq('employee_id', employee.id).lte('period_end', bounds.end).neq('status', 'paid').order('period_end', { ascending: true });
+
+      const dueResult = await supabase
+        .from('employee_payroll')
+        .select('*')
+        .eq('employee_id', employee.id)
+        .lte('period_end', bounds.end)
+        .neq('status', 'paid')
+        .order('period_end', { ascending: true });
+
       if (dueResult.error) throw dueResult.error;
+
       const rows = dueResult.data || [];
-      if (!rows.length) return notify('Nothing to settle', 'warning', 'There is no outstanding part-time pay through this interval.');
-      const broughtForward = rows.filter((row) => row.period_end < bounds.start).reduce((sum, row) => sum + Number(row.net_pay || 0), 0);
-      const currentDue = rows.filter((row) => row.period_start === bounds.start && row.period_end === bounds.end).reduce((sum, row) => sum + Number(row.net_pay || 0), 0);
-      setPartTimeSettlement({ employee, bounds, rows, broughtForward, currentDue, totalDue: broughtForward + currentDue });
+
+      if (!rows.length) {
+        notify('Nothing to settle', 'warning', 'There is no outstanding balance through this interval.');
+        return;
+      }
+
+      const broughtForwardRows = rows.filter((row) => row.period_end < bounds.start);
+      const currentRows = rows.filter(
+        (row) => row.period_start === bounds.start && row.period_end === bounds.end
+      );
+
+      const broughtForward = broughtForwardRows.reduce(
+        (sum, row) => sum + Number(row.net_pay || 0),
+        0
+      );
+
+      const currentDue = currentRows.reduce(
+        (sum, row) => sum + Number(row.net_pay || 0),
+        0
+      );
+
+      setPartTimeSettlement({
+        employee,
+        bounds,
+        rows,
+        broughtForward,
+        currentDue,
+        totalDue: broughtForward + currentDue,
+      });
     } catch (error) {
+      console.error('Part-time settlement preparation failed:', error);
       notify('Settlement could not be prepared', 'error', error?.message || 'Unknown error');
-    } finally { setPartTimeSettlementLoading(''); }
+    } finally {
+      setPartTimeSettlementLoading('');
+    }
   };
 
   const settlePartTimeOutstanding = async (payment) => {
     if (!partTimeSettlement) return;
     const ids = partTimeSettlement.rows.map((row) => row.id);
+
     try {
-      const result = await supabase.from('employee_payroll').update({ status: 'paid', paid_at: payment.paidAt, payment_method: payment.method, payment_reference: String(payment.reference || '').trim() || null }).in('id', ids).select();
+      const result = await supabase
+        .from('employee_payroll')
+        .update({
+          status: 'paid',
+          paid_at: payment.paidAt,
+          payment_method: payment.method,
+          payment_reference: String(payment.reference || '').trim() || null,
+        })
+        .in('id', ids)
+        .select();
+
       if (result.error) throw result.error;
-      const advanceResult = await supabase.from('employee_advances').update({ status: 'deducted' }).in('payroll_id', ids).eq('status', 'allocated');
-      if (advanceResult.error) throw advanceResult.error;
+
+      const advanceUpdate = await supabase
+        .from('employee_advances')
+        .update({ status: 'deducted' })
+        .in('payroll_id', ids)
+        .eq('status', 'allocated');
+
+      if (advanceUpdate.error) throw advanceUpdate.error;
+
       const paidMap = new Map((result.data || []).map((row) => [String(row.id), row]));
       setPayroll((current) => current.map((row) => paidMap.get(String(row.id)) || row));
-      setAdvances((current) => current.map((row) => ids.includes(row.payroll_id) && row.status === 'allocated' ? { ...row, status: 'deducted' } : row));
-      notify('Part-time payment settled', 'success', `${partTimeSettlement.employee.name}: $${formatMoney(partTimeSettlement.totalDue)} marked paid.`);
+      setAdvances((current) => current.map((row) =>
+        ids.includes(row.payroll_id) && row.status === 'allocated'
+          ? { ...row, status: 'deducted' }
+          : row
+      ));
+
+      notify(
+        'Part-time balance settled',
+        'success',
+        `${partTimeSettlement.employee.name}: ${signedMoney(partTimeSettlement.totalDue)} closed through ${partTimeSettlement.bounds.end}.`
+      );
       setPartTimeSettlement(null);
-    } catch (error) { notify('Payment settlement failed', 'error', error?.message || 'Unknown error'); throw error; }
+    } catch (error) {
+      console.error('Part-time settlement failed:', error);
+      notify('Settlement failed', 'error', error?.message || 'Unknown error');
+      throw error;
+    }
   };
 
   const currentHours = (employee) => {
@@ -1485,7 +1939,7 @@ export function EmployeeModule() {
   const Overview = () => {
     const alerts = [
       overview.missingClockOut.length && [`${overview.missingClockOut.length} missing clock-out${overview.missingClockOut.length === 1 ? '' : 's'}`, 'Review full-time attendance before payroll.', 'Attendance & OT'],
-      overview.partTimeUnpaid.length && [`$${formatMoney(overview.partTimeOutstanding)} part-time pay outstanding`, `${overview.partTimeUnpaid.length} unpaid interval${overview.partTimeUnpaid.length === 1 ? '' : 's'} will carry forward until settled.`, 'Part-Time Hours'],
+      overview.partTimeUnpaid.length && [`${signedMoney(overview.partTimeOutstanding)} part-time rolling balance`, `${overview.partTimeUnpaid.length} unsettled interval${overview.partTimeUnpaid.length === 1 ? '' : 's'} will carry forward until closed.`, 'Part-Time Hours'],
       overview.unpaid.length && [`${overview.unpaid.length} payroll period${overview.unpaid.length === 1 ? '' : 's'} unpaid`, `$${formatMoney(overview.payrollDue)} remains outstanding.`, 'Payroll & Payslips'],
       overview.outstandingAdvances.length && [`$${formatMoney(overview.advanceAmount)} salary advances outstanding`, `${overview.outstandingAdvances.length} record(s) pending or allocated.`, 'Payroll & Payslips'],
       overview.passExpiring.length && [`${overview.passExpiring.length} work pass${overview.passExpiring.length === 1 ? '' : 'es'} expiring within 60 days`, 'Review affected full-time employee records.', 'Directory'],
@@ -1515,39 +1969,407 @@ export function EmployeeModule() {
   };
 
   const PartTimeHours = () => {
+    const partTimers = employees
+      .filter(
+        (employee) =>
+          employee.status === 'Active' &&
+          employee.employmentType === 'Part-Time'
+      )
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    const cycleWorkers = partTimers.filter(
+      (employee) => employee.paymentInterval === partTimeCycle
+    );
+
+    const selectedEmployee = cycleWorkers.find(
+      (employee) => String(employee.id) === String(partTimeEmployeeId)
+    ) || cycleWorkers[0] || null;
+
     const bounds = intervalBounds(partTimeCycle, partTimeAnchor);
     const dates = dateRange(bounds.start, bounds.end);
-    const workers = employees.filter((employee) => employee.status === 'Active' && employee.employmentType === 'Part-Time' && employee.paymentInterval === partTimeCycle).sort((a, b) => a.name.localeCompare(b.name));
-    const rows = workers.map((employee) => {
-      const intervalAttendance = attendance.filter((row) => String(row.employee_id) === String(employee.id) && inRange(row.work_date, bounds.start, bounds.end));
-      const intervalHours = intervalAttendance.reduce((sum, row) => sum + attendanceHours(row), 0);
-      const currentPayroll = payroll.find((row) => String(row.employee_id) === String(employee.id) && row.period_start === bounds.start && row.period_end === bounds.end);
-      const rate = Number(currentPayroll?.rate_snapshot || 0) > 0 ? Number(currentPayroll.rate_snapshot) : Number(employee.hourlyRate || 0);
-      const currentDue = currentPayroll ? Number(currentPayroll.net_pay || 0) : intervalHours * rate;
-      const broughtForward = payroll.filter((row) => String(row.employee_id) === String(employee.id) && row.status !== 'paid' && row.period_end < bounds.start).reduce((sum, row) => sum + Number(row.net_pay || 0), 0);
-      const totalDue = broughtForward + (currentPayroll?.status === 'paid' ? 0 : currentDue);
-      const pendingAdvances = advances.filter((advance) => String(advance.employee_id) === String(employee.id) && ['pending', 'allocated'].includes(advance.status)).reduce((sum, advance) => sum + Number(advance.amount || 0), 0);
-      return { employee, intervalAttendance, intervalHours, currentPayroll, rate, currentDue, broughtForward, totalDue, pendingAdvances };
-    });
-    const totalHours = rows.reduce((sum, row) => sum + row.intervalHours, 0);
-    const currentEarned = rows.reduce((sum, row) => sum + (row.currentPayroll?.status === 'paid' ? 0 : row.currentDue), 0);
-    const broughtForwardTotal = rows.reduce((sum, row) => sum + row.broughtForward, 0);
-    const isCurrent = today >= bounds.start && today <= bounds.end;
-    const tableMinWidth = partTimeCycle === 'monthly' ? Math.max(1500, 580 + dates.length * 70) : 1280;
 
-    return <div className="space-y-5">
-      <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:flex-row lg:items-center lg:justify-between"><div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Part-Time Working Hours</p><h2 className="mt-1 text-xl font-black">Payment Interval Spreadsheet</h2><p className="mt-1 max-w-3xl text-xs leading-5 text-slate-500">Enter daily hours directly into the grid. Pay is calculated from each employee’s hourly-rate snapshot. Any unpaid interval automatically appears as brought-forward balance on later interval pages.</p></div><div className="flex flex-wrap items-center gap-2"><div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">{[['weekly', 'Weekly'], ['monthly', 'Monthly']].map(([value, label]) => <button key={value} type="button" onClick={() => { setPartTimeCycle(value); setPartTimeAnchor(today); }} className={`rounded-lg px-3 py-2 text-xs font-black ${partTimeCycle === value ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}>{label}</button>)}</div><button type="button" onClick={() => setPartTimeAnchor(today)} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-black text-slate-600">Current</button></div></div>
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4"><SummaryCard label="Part-Time Staff" value={workers.length} detail={`${partTimeCycle === 'weekly' ? 'Weekly' : 'Monthly'} payment cycle`} icon={Users} /><SummaryCard label="Hours This Interval" value={`${totalHours.toFixed(1)} hrs`} detail={intervalLabel(bounds.start, bounds.end, partTimeCycle)} icon={Clock} tone="violet" /><SummaryCard label="Current Interval Pay" value={`$${formatMoney(currentEarned)}`} detail="Unpaid current-interval earnings" icon={DollarSign} tone="emerald" /><SummaryCard label="Brought Forward" value={`$${formatMoney(broughtForwardTotal)}`} detail="Unsettled earlier intervals" icon={Gift} tone={broughtForwardTotal > 0 ? 'amber' : 'blue'} /></div>
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 px-4 py-4 lg:flex-row lg:items-center lg:justify-between"><div className="flex items-center gap-2"><button type="button" onClick={() => setPartTimeAnchor((current) => shiftInterval(current, partTimeCycle, -1))} className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500"><ChevronLeft size={17} /></button><div className="min-w-[230px] rounded-xl border border-slate-200 bg-white px-4 py-2 text-center"><p className="text-sm font-black">{intervalLabel(bounds.start, bounds.end, partTimeCycle)}</p><p className="mt-0.5 text-[9px] font-black uppercase tracking-wider text-slate-400">{isCurrent ? 'Current Interval' : `${bounds.start} → ${bounds.end}`}</p></div><button type="button" onClick={() => setPartTimeAnchor((current) => shiftInterval(current, partTimeCycle, 1))} className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500"><ChevronRight size={17} /></button></div><div className="flex items-center gap-2 text-[10px] font-bold text-slate-500"><span className="rounded-md bg-blue-50 px-2 py-1 text-blue-700">Editable</span><span>Unpaid</span><span className="ml-2 rounded-md bg-slate-200 px-2 py-1 text-slate-600">Locked</span><span>Paid</span></div></div>
-        <div className="overflow-x-auto"><table className="border-collapse text-left" style={{ minWidth: `${tableMinWidth}px`, width: '100%' }}><thead className="sticky top-0 z-20 bg-white"><tr className="border-b border-slate-200 text-[9px] font-black uppercase tracking-[0.08em] text-slate-400"><th className="sticky left-0 z-30 min-w-[190px] bg-white px-4 py-3 shadow-[1px_0_0_0_#e2e8f0]">Employee</th>{dates.map((date) => <th key={date} className="min-w-[68px] px-1.5 py-3 text-center"><span className="block whitespace-nowrap normal-case tracking-normal text-slate-500">{shortDayLabel(date)}</span></th>)}<th className="min-w-[76px] px-2 py-3 text-right">Hours</th><th className="min-w-[82px] px-2 py-3 text-right">Rate</th><th className="min-w-[96px] px-2 py-3 text-right">Current</th><th className="min-w-[96px] bg-amber-50 px-2 py-3 text-right text-amber-700">B/F</th><th className="min-w-[106px] bg-emerald-50 px-2 py-3 text-right text-emerald-700">Total Due</th><th className="min-w-[94px] px-2 py-3 text-center">Status</th><th className="min-w-[112px] px-3 py-3 text-center">Settlement</th></tr></thead><tbody className="divide-y divide-slate-100 text-xs">{rows.map((row) => { const intervalLocked = row.currentPayroll?.status === 'paid'; const status = intervalLocked && row.broughtForward === 0 ? 'Paid' : row.totalDue > 0 ? row.broughtForward > 0 ? 'Carry Forward' : 'Due' : row.intervalHours > 0 ? 'Recorded' : 'No Hours'; return <tr key={row.employee.id} className="hover:bg-slate-50/70"><td className="sticky left-0 z-10 bg-white px-4 py-3 shadow-[1px_0_0_0_#e2e8f0]"><p className="font-black text-slate-800">{row.employee.name}</p><p className="mt-0.5 text-[9px] text-slate-400">{row.employee.employeeNo} · ${formatMoney(row.employee.hourlyRate)}/hr</p>{row.pendingAdvances > 0 && <p className="mt-1 text-[9px] font-bold text-amber-600">Advance ledger: ${formatMoney(row.pendingAdvances)}</p>}</td>{dates.map((date) => { const attendanceRow = row.intervalAttendance.find((item) => item.work_date === date); const hours = attendanceRow ? attendanceHours(attendanceRow) : 0; const cellKey = `${row.employee.id}|${date}`; const isSaving = partTimeSavingKey === cellKey; return <td key={date} className="px-1.5 py-2 text-center"><div className="relative"><input key={`${cellKey}-${hours}`} type="number" min="0" max="24" step="0.25" defaultValue={hours > 0 ? hours.toFixed(2) : ''} disabled={intervalLocked || isSaving} onBlur={(event) => savePartTimeHours(row.employee, date, event.currentTarget.value)} className={`w-[58px] rounded-lg border px-1.5 py-2 text-center font-mono text-[11px] outline-none ${intervalLocked ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400' : 'border-slate-200 bg-white text-slate-800 focus:border-blue-300 focus:ring-2 focus:ring-blue-100'}`} />{intervalLocked && <Lock size={10} className="absolute -right-1 -top-1 text-slate-400" />}</div></td>; })}<td className="px-2 py-3 text-right font-mono font-black">{row.intervalHours.toFixed(2)}</td><td className="px-2 py-3 text-right font-mono text-slate-600">${formatMoney(row.rate)}</td><td className="px-2 py-3 text-right font-mono font-black text-blue-700">${formatMoney(row.currentPayroll?.status === 'paid' ? 0 : row.currentDue)}</td><td className={`px-2 py-3 text-right font-mono font-black ${row.broughtForward > 0 ? 'bg-amber-50 text-amber-700' : 'bg-amber-50/40 text-slate-300'}`}>${formatMoney(row.broughtForward)}</td><td className="bg-emerald-50 px-2 py-3 text-right font-mono font-black text-emerald-800">${formatMoney(row.totalDue)}</td><td className="px-2 py-3 text-center"><StatusBadge status={status} /></td><td className="px-3 py-3 text-center">{row.totalDue > 0 ? <button type="button" disabled={partTimeSettlementLoading === `${row.employee.id}|${bounds.end}`} onClick={() => preparePartTimeSettlement(row.employee, bounds)} className="rounded-lg bg-emerald-600 px-3 py-2 text-[10px] font-black text-white disabled:opacity-50">{partTimeSettlementLoading === `${row.employee.id}|${bounds.end}` ? 'Loading…' : row.broughtForward > 0 ? 'Settle Due' : 'Settle'}</button> : <span className="text-[10px] font-bold text-slate-300">—</span>}</td></tr>; })}{!rows.length && <tr><td colSpan={dates.length + 8} className="px-6 py-14 text-center"><Table2 size={24} className="mx-auto text-slate-300" /><p className="mt-3 text-sm font-black text-slate-600">No {partTimeCycle} part-time employees</p><p className="mt-1 text-xs text-slate-400">Add a part-time employee and assign this payment interval.</p></td></tr>}</tbody></table></div>
-        <div className="border-t border-slate-200 bg-slate-50 px-4 py-3"><p className="text-[10px] leading-5 text-slate-500"><strong>Carry-forward rule:</strong> any draft or ready interval that is not Paid remains outstanding. On the next interval page it appears automatically in the B/F column until settlement. Paid intervals are locked to protect historical hours and hourly-rate snapshots.</p></div>
+    const employeeAttendance = selectedEmployee
+      ? attendance.filter(
+          (row) =>
+            String(row.employee_id) === String(selectedEmployee.id) &&
+            inRange(row.work_date, bounds.start, bounds.end)
+        )
+      : [];
+
+    const allEmployeeAdvances = selectedEmployee
+      ? advances.filter(
+          (row) =>
+            String(row.employee_id) === String(selectedEmployee.id) &&
+            inRange(row.advance_date, bounds.start, bounds.end)
+        )
+      : [];
+
+    const currentPayroll = selectedEmployee
+      ? payroll.find(
+          (row) =>
+            String(row.employee_id) === String(selectedEmployee.id) &&
+            row.period_start === bounds.start &&
+            row.period_end === bounds.end
+        )
+      : null;
+
+    const intervalLocked = currentPayroll?.status === 'paid';
+
+    const employeeAdvances = allEmployeeAdvances.filter(
+      (row) => intervalLocked || row.status !== 'deducted'
+    );
+
+    const rate =
+      Number(currentPayroll?.rate_snapshot || 0) > 0
+        ? Number(currentPayroll.rate_snapshot)
+        : Number(selectedEmployee?.hourlyRate || 0);
+
+    const totalHours = employeeAttendance.reduce(
+      (sum, row) => sum + attendanceHours(row),
+      0
+    );
+
+    const hourlyPay = totalHours * rate;
+    const transportTotal = employeeAttendance.reduce(
+      (sum, row) => sum + Number(row.transport_allowance || 0),
+      0
+    );
+
+    const grossEarnings = hourlyPay + transportTotal;
+    const advancesThisInterval = employeeAdvances.reduce(
+      (sum, row) => sum + Number(row.amount || 0),
+      0
+    );
+
+    const currentBalance = currentPayroll
+      ? Number(currentPayroll.net_pay || 0)
+      : grossEarnings - advancesThisInterval;
+
+    const broughtForwardRows = selectedEmployee
+      ? payroll.filter(
+          (row) =>
+            String(row.employee_id) === String(selectedEmployee.id) &&
+            row.status !== 'paid' &&
+            row.period_end < bounds.start
+        )
+      : [];
+
+    const broughtForward = broughtForwardRows.reduce(
+      (sum, row) => sum + Number(row.net_pay || 0),
+      0
+    );
+
+    const rollingBalance =
+      broughtForward + (intervalLocked ? 0 : currentBalance);
+
+    const totalOutstandingIntervals =
+      broughtForwardRows.length + (currentPayroll && !intervalLocked ? 1 : 0);
+
+    const switchCycle = (cycle) => {
+      setPartTimeCycle(cycle);
+      setPartTimeAnchor(localDateString());
+      const first = partTimers.find((employee) => employee.paymentInterval === cycle);
+      setPartTimeEmployeeId(first?.id || '');
+    };
+
+    const chooseEmployee = (employeeId) => {
+      const chosen = partTimers.find((employee) => String(employee.id) === String(employeeId));
+      if (!chosen) return;
+      setPartTimeEmployeeId(chosen.id);
+      setPartTimeCycle(chosen.paymentInterval || 'weekly');
+      setPartTimeAnchor(localDateString());
+    };
+
+    return (
+      <div className="space-y-5">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                Part-Time Timesheet & Settlement
+              </p>
+              <h2 className="mt-1 text-xl font-black tracking-tight text-slate-900">
+                Daily Hours, Allowances & Advances
+              </h2>
+              <p className="mt-1 max-w-4xl text-xs leading-5 text-slate-500">
+                Enter start/end time for each day. Shift duration, hourly earnings, transport allowance, gross earnings and advances are calculated automatically. Any unsettled interval balance rolls into the next payment interval.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="min-w-[240px]">
+                <span className="mb-1.5 block text-[9px] font-black uppercase tracking-wider text-slate-400">
+                  Part-Time Employee
+                </span>
+                <select
+                  value={selectedEmployee?.id || ''}
+                  onChange={(event) => chooseEmployee(event.target.value)}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-black text-slate-700 outline-none focus:border-blue-300"
+                >
+                  {partTimers.map((employee) => (
+                    <option key={employee.id} value={employee.id}>
+                      {employee.name} · ${formatMoney(employee.hourlyRate)}/hr · {employee.paymentInterval}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <div>
+                <span className="mb-1.5 block text-[9px] font-black uppercase tracking-wider text-slate-400">
+                  Payment Interval
+                </span>
+                <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
+                  {[
+                    ['weekly', 'Weekly'],
+                    ['monthly', 'Monthly'],
+                  ].map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => switchCycle(value)}
+                      className={`rounded-lg px-3 py-2 text-xs font-black ${
+                        partTimeCycle === value
+                          ? 'bg-white text-blue-600 shadow-sm'
+                          : 'text-slate-500'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setPartTimeAnchor(localDateString())}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-black text-slate-600"
+              >
+                Current
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {!selectedEmployee ? (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
+            <Table2 size={28} className="mx-auto text-slate-300" />
+            <p className="mt-3 text-sm font-black text-slate-700">
+              No {partTimeCycle} part-time employee configured
+            </p>
+            <p className="mt-1 text-xs text-slate-400">
+              Add or edit a Part-Time employee and set the matching payment interval.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+              <SummaryCard
+                label="Hours"
+                value={`${totalHours.toFixed(2)} hrs`}
+                detail={intervalLabel(bounds.start, bounds.end, partTimeCycle)}
+                icon={Clock}
+                tone="violet"
+              />
+              <SummaryCard
+                label="Gross Earnings"
+                value={`$${formatMoney(grossEarnings)}`}
+                detail={`Hourly $${formatMoney(hourlyPay)} + transport $${formatMoney(transportTotal)}`}
+                icon={DollarSign}
+                tone="emerald"
+              />
+              <SummaryCard
+                label="Advances This Interval"
+                value={`$${formatMoney(advancesThisInterval)}`}
+                detail="Advances entered against this payment interval"
+                icon={Gift}
+                tone="amber"
+              />
+              <SummaryCard
+                label="Brought Forward"
+                value={signedMoney(broughtForward)}
+                detail={`${broughtForwardRows.length} unsettled earlier interval${broughtForwardRows.length === 1 ? '' : 's'}`}
+                icon={TrendingUp}
+                tone={broughtForward < 0 ? 'amber' : 'blue'}
+              />
+            </div>
+
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="flex flex-col gap-4 border-b border-slate-200 bg-slate-50 px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPartTimeAnchor((current) => shiftInterval(current, partTimeCycle, -1))}
+                    className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 hover:text-slate-900"
+                  >
+                    <ChevronLeft size={17} />
+                  </button>
+
+                  <div className="min-w-[240px] rounded-xl border border-slate-200 bg-white px-4 py-2 text-center">
+                    <p className="text-sm font-black text-slate-900">
+                      {intervalLabel(bounds.start, bounds.end, partTimeCycle)}
+                    </p>
+                    <p className="mt-0.5 text-[9px] font-black uppercase tracking-wider text-slate-400">
+                      {selectedEmployee.name} · ${formatMoney(rate)}/hr
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setPartTimeAnchor((current) => shiftInterval(current, partTimeCycle, 1))}
+                    className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 hover:text-slate-900"
+                  >
+                    <ChevronRight size={17} />
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {intervalLocked ? (
+                    <span className="inline-flex items-center rounded-lg bg-slate-200 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-600">
+                      <Lock size={12} className="mr-1.5" /> Settled & Locked
+                    </span>
+                  ) : (
+                    <span className="rounded-lg bg-blue-50 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-blue-700">
+                      Editable Interval
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[1480px] border-collapse text-left">
+                  <thead className="bg-white">
+                    <tr className="border-b border-slate-200 text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">
+                      <th className="sticky left-0 z-20 min-w-[125px] bg-white px-3 py-3 shadow-[1px_0_0_0_#e2e8f0]">Date</th>
+                      <th className="min-w-[250px] px-2 py-3">Timing</th>
+                      <th className="min-w-[105px] px-3 py-3 text-right">Shift Duration</th>
+                      <th className="min-w-[120px] px-3 py-3 text-right">Hourly Pay</th>
+                      <th className="min-w-[130px] px-3 py-3 text-right">Transport Allowance</th>
+                      <th className="min-w-[120px] bg-emerald-50/40 px-3 py-3 text-right">Gross Earnings</th>
+                      <th className="min-w-[130px] px-3 py-3 text-right">Advance Taken</th>
+                      <th className="min-w-[120px] px-3 py-3 text-right">Daily Balance</th>
+                      <th className="min-w-[92px] px-3 py-3 text-center">Save</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {dates.map((date) => {
+                      const attendanceRow = employeeAttendance.find((row) => row.work_date === date) || null;
+                      const dateAdvances = employeeAdvances.filter((row) => row.advance_date === date);
+                      const sourceKey = `pt-timesheet:${selectedEmployee.id}:${date}`;
+                      const timesheetAdvance = dateAdvances.find((row) => row.source_key === sourceKey) || null;
+                      const otherAdvanceAmount = dateAdvances
+                        .filter((row) => row.source_key !== sourceKey)
+                        .reduce((sum, row) => sum + Number(row.amount || 0), 0);
+
+                      return (
+                        <PartTimeDayRow
+                          key={`${selectedEmployee.id}-${date}-${attendanceRow?.updated_at || ''}-${timesheetAdvance?.updated_at || ''}`}
+                          date={date}
+                          employee={selectedEmployee}
+                          attendanceRow={attendanceRow}
+                          timesheetAdvance={timesheetAdvance}
+                          otherAdvanceAmount={otherAdvanceAmount}
+                          locked={intervalLocked}
+                          saving={partTimeSavingKey === `${selectedEmployee.id}|${date}`}
+                          onSave={(draft) => savePartTimeDay(selectedEmployee, draft)}
+                        />
+                      );
+                    })}
+                  </tbody>
+
+                  <tfoot className="border-t-2 border-slate-300 bg-slate-50">
+                    <tr className="text-xs font-black text-slate-800">
+                      <td className="sticky left-0 z-10 bg-slate-50 px-3 py-4 shadow-[1px_0_0_0_#cbd5e1]">INTERVAL TOTAL</td>
+                      <td className="px-2 py-4 text-slate-400">—</td>
+                      <td className="px-3 py-4 text-right font-mono">{durationLabel(totalHours)}</td>
+                      <td className="px-3 py-4 text-right font-mono">${formatMoney(hourlyPay)}</td>
+                      <td className="px-3 py-4 text-right font-mono">${formatMoney(transportTotal)}</td>
+                      <td className="bg-emerald-50 px-3 py-4 text-right font-mono text-emerald-800">${formatMoney(grossEarnings)}</td>
+                      <td className="px-3 py-4 text-right font-mono text-amber-800">${formatMoney(advancesThisInterval)}</td>
+                      <td className={`px-3 py-4 text-right font-mono ${currentBalance < 0 ? 'text-red-700' : 'text-blue-700'}`}>{signedMoney(currentBalance)}</td>
+                      <td className="px-3 py-4"></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-7">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                  Interval Calculation
+                </p>
+                <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
+                  {[
+                    ['Hourly Earnings', hourlyPay],
+                    ['Transport Allowance', transportTotal],
+                    ['Gross Earnings', grossEarnings],
+                    ['Advance Taken', -advancesThisInterval],
+                    ['Current Interval Balance', currentBalance],
+                    ['Brought Forward', broughtForward],
+                  ].map(([label, amount], index) => (
+                    <div
+                      key={label}
+                      className={`flex items-center justify-between px-4 py-3 text-sm ${index < 5 ? 'border-b border-slate-100' : ''}`}
+                    >
+                      <span className="text-slate-600">{label}</span>
+                      <span className={`font-mono font-black ${Number(amount) < 0 ? 'text-red-700' : 'text-slate-900'}`}>
+                        {signedMoney(amount)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className={`rounded-2xl border p-5 shadow-sm xl:col-span-5 ${rollingBalance < 0 ? 'border-red-200 bg-red-50' : 'border-emerald-200 bg-emerald-50'}`}>
+                <p className={`text-[10px] font-black uppercase tracking-[0.18em] ${rollingBalance < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                  Rolling Balance Through {bounds.end}
+                </p>
+                <p className={`mt-2 text-4xl font-black tracking-tight ${rollingBalance < 0 ? 'text-red-900' : 'text-emerald-900'}`}>
+                  {signedMoney(rollingBalance)}
+                </p>
+                <p className={`mt-2 text-xs leading-5 ${rollingBalance < 0 ? 'text-red-700' : 'text-emerald-700'}`}>
+                  {rollingBalance < 0
+                    ? `Advances exceed earned pay by $${formatMoney(Math.abs(rollingBalance))}. This negative balance carries forward until recovered or settled.`
+                    : rollingBalance > 0
+                      ? `Amount payable to ${selectedEmployee.name}, including any brought-forward balance.`
+                      : 'The account is fully balanced through this interval.'}
+                </p>
+
+                <div className="mt-5 flex flex-wrap items-center gap-3">
+                  {rollingBalance !== 0 && !intervalLocked && (
+                    <button
+                      type="button"
+                      disabled={partTimeSettlementLoading === `${selectedEmployee.id}|${bounds.end}`}
+                      onClick={() => preparePartTimeSettlement(selectedEmployee, bounds)}
+                      className={`inline-flex items-center rounded-xl px-5 py-3 text-sm font-black text-white disabled:opacity-50 ${rollingBalance < 0 ? 'bg-red-700' : 'bg-emerald-600'}`}
+                    >
+                      <CreditCard size={16} className="mr-2" />
+                      {partTimeSettlementLoading === `${selectedEmployee.id}|${bounds.end}`
+                        ? 'Loading…'
+                        : 'Settle Through Interval'}
+                    </button>
+                  )}
+
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    {totalOutstandingIntervals} open interval{totalOutstandingIntervals === 1 ? '' : 's'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-[10px] leading-5 text-slate-500">
+              <strong>Rolling rule:</strong> each interval stores its own hours, hourly-rate snapshot, transport allowance and advances. If the interval is not settled, its signed balance carries forward. A negative balance means advances exceed earned pay; a positive balance means the company still owes the employee. Settled intervals are locked.
+            </div>
+          </>
+        )}
       </div>
-    </div>;
+    );
   };
 
   const Leave = () => <div className="space-y-5"><div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="flex items-center justify-between border-b border-slate-200 p-4"><div><p className="text-[10px] font-black uppercase text-slate-400">Leave Entitlement</p><h2 className="mt-1 text-lg font-black">Employee Leave Position</h2></div><button type="button" onClick={() => setRecordModal('leave')} className="inline-flex items-center rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-black text-white"><Plus size={16} className="mr-2" />Leave Record</button></div><div className="overflow-x-auto"><table className="w-full min-w-[850px] text-left"><thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400"><tr><th className="px-5 py-3">Employee</th><th className="px-4 py-3 text-right">Annual Entitlement</th><th className="px-4 py-3 text-right">Annual Taken</th><th className="px-4 py-3 text-right">Balance</th><th className="px-4 py-3 text-right">Sick Taken</th></tr></thead><tbody className="divide-y divide-slate-100 text-sm">{employees.filter((employee) => employee.status === 'Active' && employee.employmentType !== 'Part-Time').map((employee) => { const rows = leaveRecords.filter((row) => String(row.employee_id) === String(employee.id) && String(row.start_date || '').startsWith(String(new Date().getFullYear())) && String(row.status).toLowerCase() === 'approved'); const annual = rows.filter((row) => row.leave_type === 'Annual').reduce((sum, row) => sum + Number(row.days || 0), 0); const sick = rows.filter((row) => row.leave_type === 'Sick').reduce((sum, row) => sum + Number(row.days || 0), 0); return <tr key={employee.id}><td className="px-5 py-3"><p className="font-black">{employee.name}</p><p className="text-[10px] text-slate-400">{employee.role}</p></td><td className="px-4 py-3 text-right font-black">{employee.leaveEntitlement}</td><td className="px-4 py-3 text-right">{annual}</td><td className="px-4 py-3 text-right font-black text-emerald-700">{Math.max(0, employee.leaveEntitlement - annual)}</td><td className="px-4 py-3 text-right">{sick}</td></tr>; })}</tbody></table></div></div><div className="rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-200 p-4 text-[10px] font-black uppercase text-slate-400">Recent Leave Records</div><div className="divide-y divide-slate-100">{leaveRecords.slice(0, 12).map((row) => <div key={row.id} className="flex items-center justify-between gap-4 px-5 py-4"><div><p className="text-sm font-black">{employeeById.get(String(row.employee_id))?.name || 'Unknown'}</p><p className="mt-1 text-xs text-slate-500">{row.leave_type} · {row.start_date} to {row.end_date} · {row.days} day(s)</p></div><StatusBadge status={row.status} /></div>)}{!leaveRecords.length && <div className="p-10 text-center text-sm text-slate-400">No leave records yet.</div>}</div></div></div>;
 
-  const Payroll = () => <div className="space-y-5"><div className="grid grid-cols-1 gap-4 sm:grid-cols-3"><SummaryCard label="Unpaid Payroll" value={`$${formatMoney(overview.payrollDue)}`} detail={`${overview.unpaid.length} payroll period(s)`} icon={DollarSign} tone="emerald" /><SummaryCard label="Part-Time B/F" value={`$${formatMoney(overview.partTimeOutstanding)}`} detail={`${overview.partTimeUnpaid.length} unpaid part-time interval(s)`} icon={Table2} tone="amber" onClick={() => setActiveTab('Part-Time Hours')} /><SummaryCard label="Paid This Month" value={`$${formatMoney(overview.paidThisMonth)}`} detail="Net payroll payments" icon={CheckCircle2} /></div><div className="grid grid-cols-1 gap-5 xl:grid-cols-12"><div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm xl:col-span-8"><div className="flex items-center justify-between border-b border-slate-200 p-4"><div><p className="text-[10px] font-black uppercase text-slate-400">Payroll History</p><h2 className="mt-1 text-lg font-black">Payroll Periods</h2></div><button type="button" onClick={() => setPayrollEditor(true)} className="inline-flex items-center rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-black text-white"><Plus size={16} className="mr-2" />Full-Time Payroll</button></div><div className="overflow-x-auto"><table className="w-full min-w-[930px] text-left"><thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400"><tr><th className="px-5 py-3">Employee</th><th className="px-4 py-3">Period</th><th className="px-4 py-3">Type</th><th className="px-4 py-3 text-right">Gross</th><th className="px-4 py-3 text-right">Net</th><th className="px-4 py-3 text-center">Status</th><th className="px-5 py-3 text-right">Action</th></tr></thead><tbody className="divide-y divide-slate-100 text-sm">{payroll.map((row) => { const employee = employeeById.get(String(row.employee_id)); const isPT = employee?.employmentType === 'Part-Time'; return <tr key={row.id}><td className="px-5 py-3"><p className="font-black">{employee?.name || 'Unknown'}</p><p className="text-[10px] text-slate-400">{employee?.employeeNo || ''}</p></td><td className="px-4 py-3 font-mono text-xs">{row.period_start} → {row.period_end}</td><td className="px-4 py-3"><span className={`rounded-md px-2 py-1 text-[9px] font-black ${isPT ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-600'}`}>{isPT ? 'PART-TIME' : 'FULL-TIME'}</span></td><td className="px-4 py-3 text-right font-mono">${formatMoney(row.gross_pay || 0)}</td><td className="px-4 py-3 text-right font-mono font-black">${formatMoney(row.net_pay || 0)}</td><td className="px-4 py-3 text-center"><StatusBadge status={row.status} /></td><td className="px-5 py-3 text-right"><div className="inline-flex gap-2"><button type="button" onClick={() => setPayslip(row)} className="rounded-lg border border-slate-200 px-2.5 py-2 text-[10px] font-black">Payslip</button>{row.status !== 'paid' && (isPT ? <button type="button" onClick={() => { setPartTimeCycle(employee.paymentInterval || 'weekly'); setPartTimeAnchor(row.period_end); setActiveTab('Part-Time Hours'); }} className="rounded-lg bg-blue-600 px-2.5 py-2 text-[10px] font-black text-white">Manage Hours</button> : <button type="button" onClick={() => markPayrollPaid(row)} className="rounded-lg bg-emerald-600 px-2.5 py-2 text-[10px] font-black text-white">Mark Paid</button>)}</div></td></tr>; })}{!payroll.length && <tr><td colSpan="7" className="p-12 text-center text-sm text-slate-400">No payroll periods generated yet.</td></tr>}</tbody></table></div></div><div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm xl:col-span-4"><div className="flex items-center justify-between border-b border-slate-200 p-4"><div><p className="text-[10px] font-black uppercase text-slate-400">Salary Advances</p><h2 className="mt-1 text-lg font-black">Advance Ledger</h2></div><button type="button" onClick={() => setRecordModal('advance')} className="rounded-lg bg-amber-600 p-2 text-white"><Plus size={16} /></button></div><div className="max-h-[600px] divide-y divide-slate-100 overflow-y-auto">{advances.map((row) => <div key={row.id} className="px-4 py-4"><div className="flex justify-between gap-3"><div><p className="text-sm font-black">{employeeById.get(String(row.employee_id))?.name || 'Unknown'}</p><p className="mt-1 text-xs text-slate-500">{row.advance_date} · {row.reason || 'Salary advance'}</p></div><p className="font-mono font-black text-amber-700">${formatMoney(row.amount || 0)}</p></div><div className="mt-2"><StatusBadge status={row.status} /></div></div>)}{!advances.length && <div className="p-10 text-center text-sm text-slate-400">No salary advances recorded.</div>}</div></div></div></div>;
+  const Payroll = () => <div className="space-y-5"><div className="grid grid-cols-1 gap-4 sm:grid-cols-3"><SummaryCard label="Unpaid Payroll" value={`$${formatMoney(overview.payrollDue)}`} detail={`${overview.unpaid.length} payroll period(s)`} icon={DollarSign} tone="emerald" /><SummaryCard label="Part-Time B/F" value={signedMoney(overview.partTimeOutstanding)} detail={`${overview.partTimeUnpaid.length} unsettled part-time interval(s)`} icon={Table2} tone="amber" onClick={() => setActiveTab('Part-Time Hours')} /><SummaryCard label="Paid This Month" value={`$${formatMoney(overview.paidThisMonth)}`} detail="Net payroll payments" icon={CheckCircle2} /></div><div className="grid grid-cols-1 gap-5 xl:grid-cols-12"><div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm xl:col-span-8"><div className="flex items-center justify-between border-b border-slate-200 p-4"><div><p className="text-[10px] font-black uppercase text-slate-400">Payroll History</p><h2 className="mt-1 text-lg font-black">Payroll Periods</h2></div><button type="button" onClick={() => setPayrollEditor(true)} className="inline-flex items-center rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-black text-white"><Plus size={16} className="mr-2" />Full-Time Payroll</button></div><div className="overflow-x-auto"><table className="w-full min-w-[930px] text-left"><thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400"><tr><th className="px-5 py-3">Employee</th><th className="px-4 py-3">Period</th><th className="px-4 py-3">Type</th><th className="px-4 py-3 text-right">Gross</th><th className="px-4 py-3 text-right">Net</th><th className="px-4 py-3 text-center">Status</th><th className="px-5 py-3 text-right">Action</th></tr></thead><tbody className="divide-y divide-slate-100 text-sm">{payroll.map((row) => { const employee = employeeById.get(String(row.employee_id)); const isPT = employee?.employmentType === 'Part-Time'; return <tr key={row.id}><td className="px-5 py-3"><p className="font-black">{employee?.name || 'Unknown'}</p><p className="text-[10px] text-slate-400">{employee?.employeeNo || ''}</p></td><td className="px-4 py-3 font-mono text-xs">{row.period_start} → {row.period_end}</td><td className="px-4 py-3"><span className={`rounded-md px-2 py-1 text-[9px] font-black ${isPT ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-600'}`}>{isPT ? 'PART-TIME' : 'FULL-TIME'}</span></td><td className="px-4 py-3 text-right font-mono">${formatMoney(row.gross_pay || 0)}</td><td className="px-4 py-3 text-right font-mono font-black">${formatMoney(row.net_pay || 0)}</td><td className="px-4 py-3 text-center"><StatusBadge status={row.status} /></td><td className="px-5 py-3 text-right"><div className="inline-flex gap-2"><button type="button" onClick={() => setPayslip(row)} className="rounded-lg border border-slate-200 px-2.5 py-2 text-[10px] font-black">Payslip</button>{row.status !== 'paid' && (isPT ? <button type="button" onClick={() => { setPartTimeCycle(employee.paymentInterval || 'weekly'); setPartTimeAnchor(row.period_end); setActiveTab('Part-Time Hours'); }} className="rounded-lg bg-blue-600 px-2.5 py-2 text-[10px] font-black text-white">Manage Hours</button> : <button type="button" onClick={() => markPayrollPaid(row)} className="rounded-lg bg-emerald-600 px-2.5 py-2 text-[10px] font-black text-white">Mark Paid</button>)}</div></td></tr>; })}{!payroll.length && <tr><td colSpan="7" className="p-12 text-center text-sm text-slate-400">No payroll periods generated yet.</td></tr>}</tbody></table></div></div><div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm xl:col-span-4"><div className="flex items-center justify-between border-b border-slate-200 p-4"><div><p className="text-[10px] font-black uppercase text-slate-400">Salary Advances</p><h2 className="mt-1 text-lg font-black">Advance Ledger</h2></div><button type="button" onClick={() => setRecordModal('advance')} className="rounded-lg bg-amber-600 p-2 text-white"><Plus size={16} /></button></div><div className="max-h-[600px] divide-y divide-slate-100 overflow-y-auto">{advances.map((row) => <div key={row.id} className="px-4 py-4"><div className="flex justify-between gap-3"><div><p className="text-sm font-black">{employeeById.get(String(row.employee_id))?.name || 'Unknown'}</p><p className="mt-1 text-xs text-slate-500">{row.advance_date} · {row.reason || 'Salary advance'}</p></div><p className="font-mono font-black text-amber-700">${formatMoney(row.amount || 0)}</p></div><div className="mt-2"><StatusBadge status={row.status} /></div></div>)}{!advances.length && <div className="p-10 text-center text-sm text-slate-400">No salary advances recorded.</div>}</div></div></div></div>;
 
   if (loading) return <div className="flex h-full items-center justify-center bg-slate-50 p-8"><div className="text-center"><RefreshCw size={24} className="mx-auto animate-spin text-blue-600" /><p className="mt-3 text-sm font-bold text-slate-500">Loading employee records…</p></div></div>;
   if (loadError) return <div className="h-full overflow-y-auto bg-slate-50 p-8"><div className="mx-auto max-w-2xl rounded-3xl border border-red-200 bg-white p-6 shadow-sm"><AlertCircle size={30} className="text-red-600" /><h2 className="mt-4 text-xl font-black">Employee database setup required</h2><p className="mt-2 text-sm leading-6 text-slate-500">Run the Employee Supabase setup SQL once, then retry.</p><pre className="mt-4 overflow-x-auto rounded-xl bg-red-50 p-4 text-xs text-red-700">{loadError}</pre><button type="button" onClick={() => void reload()} className="mt-5 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-black text-white">Retry</button></div></div>;
