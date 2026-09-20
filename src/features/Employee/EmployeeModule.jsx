@@ -919,7 +919,11 @@ function EmployeeEditor({ employee, employees, onClose, onSave }) {
                   <Field label="Payment Method"><select value={form.paymentMethod} onChange={(e) => update('paymentMethod', e.target.value)} className={inputClass}><option>Bank Transfer</option><option>PayNow</option><option>Cash</option><option>Cheque</option></select></Field>
                   <Field label="Payment Reference / Account"><input value={form.bankAccountNo} onChange={(e) => update('bankAccountNo', e.target.value)} placeholder="Optional" className={inputClass} /></Field>
                 </div>
-                <div className="mt-4 rounded-xl border border-blue-100 bg-white px-4 py-3 text-xs leading-5 text-slate-500">In <strong>Part-Time Hours</strong>, enter the start and end time for each work day. Shift duration, hourly pay, daily transport allowance, gross earnings and advances are calculated into a rolling payment balance. Unsettled balances carry forward automatically.</div>
+                <div className="mt-4 rounded-xl border border-blue-100 bg-white px-4 py-3 text-xs leading-5 text-slate-500">
+                  The hourly rate above is the <strong>default rate</strong> for new work-day entries.
+                  In <strong>Part-Time Hours</strong>, each date has its own editable hourly rate, so revised or temporary rates can apply only to the relevant day(s).
+                  Saved daily rates are retained in historical calculations, while unsettled balances continue to carry forward automatically.
+                </div>
               </div>
             </section>
           ) : <>
@@ -1129,6 +1133,11 @@ function PartTimeDayRow({
     attendanceRow?.clock_out ? String(attendanceRow.clock_out).slice(0, 5) : ''
   );
   const [breakMinutes, setBreakMinutes] = useState(Number(attendanceRow?.break_minutes || 0));
+  const [hourlyRate, setHourlyRate] = useState(
+    Number(attendanceRow?.hourly_rate_snapshot || 0) > 0
+      ? Number(attendanceRow.hourly_rate_snapshot)
+      : Number(employee.hourlyRate || 0)
+  );
   const [allowance, setAllowance] = useState(
     attendanceRow
       ? Number(attendanceRow.transport_allowance || 0)
@@ -1140,13 +1149,26 @@ function PartTimeDayRow({
     setClockIn(attendanceRow?.clock_in ? String(attendanceRow.clock_in).slice(0, 5) : '');
     setClockOut(attendanceRow?.clock_out ? String(attendanceRow.clock_out).slice(0, 5) : '');
     setBreakMinutes(Number(attendanceRow?.break_minutes || 0));
+    setHourlyRate(
+      Number(attendanceRow?.hourly_rate_snapshot || 0) > 0
+        ? Number(attendanceRow.hourly_rate_snapshot)
+        : Number(employee.hourlyRate || 0)
+    );
     setAllowance(
       attendanceRow
         ? Number(attendanceRow.transport_allowance || 0)
         : Number(employee.dailyTransportAllowance || 0)
     );
     setAdvance(Number(timesheetAdvance?.amount || 0));
-  }, [attendanceRow?.id, attendanceRow?.updated_at, timesheetAdvance?.id, timesheetAdvance?.updated_at, employee.dailyTransportAllowance]);
+  }, [
+    attendanceRow?.id,
+    attendanceRow?.updated_at,
+    attendanceRow?.hourly_rate_snapshot,
+    timesheetAdvance?.id,
+    timesheetAdvance?.updated_at,
+    employee.hourlyRate,
+    employee.dailyTransportAllowance,
+  ]);
 
   const hasTiming = Boolean(clockIn && clockOut);
   const computedHours = hasTiming
@@ -1155,7 +1177,7 @@ function PartTimeDayRow({
       ? legacyHours
       : 0;
 
-  const hourlyPay = computedHours * Number(employee.hourlyRate || 0);
+  const hourlyPay = computedHours * Number(hourlyRate || 0);
   const dayAllowance = computedHours > 0 ? Number(allowance || 0) : 0;
   const gross = hourlyPay + dayAllowance;
   const totalAdvance = Number(advance || 0) + Number(otherAdvanceAmount || 0);
@@ -1167,6 +1189,7 @@ function PartTimeDayRow({
       clockIn,
       clockOut,
       breakMinutes: Number(breakMinutes || 0),
+      hourlyRate: Number(hourlyRate || 0),
       allowance: Number(allowance || 0),
       advance: Number(advance || 0),
       legacyHours,
@@ -1222,6 +1245,22 @@ function PartTimeDayRow({
       <td className="min-w-[105px] px-3 py-3 text-right">
         <p className="font-mono text-xs font-black text-slate-800">{durationLabel(computedHours)}</p>
         <p className="mt-0.5 font-mono text-[9px] text-slate-400">{computedHours.toFixed(2)} hrs</p>
+      </td>
+
+      <td className="min-w-[105px] px-2 py-2">
+        <div className="relative ml-auto w-[88px]">
+          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">$</span>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={hourlyRate}
+            disabled={locked || saving}
+            onChange={(event) => setHourlyRate(event.target.value)}
+            className="w-full rounded-lg border border-blue-200 bg-blue-50/40 py-2 pl-6 pr-2 text-right font-mono text-xs font-black text-blue-800 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-400"
+          />
+        </div>
+        <p className="mt-1 text-right text-[9px] text-slate-400">daily rate</p>
       </td>
 
       <td className="min-w-[120px] px-3 py-3 text-right font-mono text-xs font-black text-slate-700">
@@ -1557,7 +1596,7 @@ export function EmployeeModule() {
     const [attendanceResult, advancesResult] = await Promise.all([
       supabase
         .from('employee_attendance')
-        .select('id,employee_id,work_date,clock_in,clock_out,break_minutes,regular_hours,overtime_hours,transport_allowance,status,notes,updated_at')
+        .select('id,employee_id,work_date,clock_in,clock_out,break_minutes,regular_hours,overtime_hours,hourly_rate_snapshot,transport_allowance,status,notes,updated_at')
         .eq('employee_id', employee.id)
         .gte('work_date', bounds.start)
         .lte('work_date', bounds.end),
@@ -1590,12 +1629,24 @@ export function EmployeeModule() {
       0
     );
 
-    const rateSnapshot =
-      Number(existing?.rate_snapshot || 0) > 0
-        ? Number(existing.rate_snapshot)
-        : Number(employee.hourlyRate || 0);
+    const hourlyPay = attendanceRows.reduce((sum, row) => {
+      const rowHours = attendanceHours(row);
+      const rowRate =
+        Number(row.hourly_rate_snapshot || 0) > 0
+          ? Number(row.hourly_rate_snapshot)
+          : Number(employee.hourlyRate || 0);
 
-    const hourlyPay = totalHours * rateSnapshot;
+      return sum + rowHours * rowRate;
+    }, 0);
+
+    // employee_payroll.rate_snapshot stays as an interval reference.
+    // With mixed daily rates it stores the weighted-average hourly rate.
+    // Historical earnings are sourced from the daily hourly_rate_snapshot rows.
+    const rateSnapshot =
+      totalHours > 0
+        ? hourlyPay / totalHours
+        : Number(existing?.rate_snapshot || employee.hourlyRate || 0);
+
     const advanceDeductions = advanceRows.reduce(
       (sum, row) => sum + Number(row.amount || 0),
       0
@@ -1624,7 +1675,7 @@ export function EmployeeModule() {
       other_deductions: otherDeductions,
       net_pay: netPay,
       status: existing?.status === 'ready' ? 'ready' : 'draft',
-      notes: existing?.notes || 'Auto-calculated from Part-Time Timesheet',
+      notes: existing?.notes || 'Auto-calculated from Part-Time Timesheet using daily hourly-rate snapshots',
     };
 
     const result = await supabase
@@ -1707,8 +1758,17 @@ export function EmployeeModule() {
       return;
     }
 
-    if (Number(draft.allowance || 0) < 0 || Number(draft.advance || 0) < 0) {
-      notify('Invalid amount', 'error', 'Allowance and advance values cannot be negative.');
+    if (
+      Number(draft.hourlyRate || 0) < 0 ||
+      Number(draft.allowance || 0) < 0 ||
+      Number(draft.advance || 0) < 0
+    ) {
+      notify('Invalid amount', 'error', 'Hourly rate, allowance and advance values cannot be negative.');
+      return;
+    }
+
+    if (computedHours > 0 && !(Number(draft.hourlyRate || 0) > 0)) {
+      notify('Hourly rate required', 'warning', 'Enter the hourly rate that applies to this work date.');
       return;
     }
 
@@ -1734,6 +1794,7 @@ export function EmployeeModule() {
           break_minutes: Number(draft.breakMinutes || 0),
           regular_hours: computedHours,
           overtime_hours: 0,
+          hourly_rate_snapshot: computedHours > 0 ? Number(draft.hourlyRate || 0) : 0,
           transport_allowance: computedHours > 0 ? Number(draft.allowance || 0) : 0,
           status: computedHours > 0 ? 'Present' : 'Off',
           notes: hasStart && hasEnd
@@ -2019,17 +2080,40 @@ export function EmployeeModule() {
       (row) => intervalLocked || row.status !== 'deducted'
     );
 
-    const rate =
-      Number(currentPayroll?.rate_snapshot || 0) > 0
-        ? Number(currentPayroll.rate_snapshot)
-        : Number(selectedEmployee?.hourlyRate || 0);
-
     const totalHours = employeeAttendance.reduce(
       (sum, row) => sum + attendanceHours(row),
       0
     );
 
-    const hourlyPay = totalHours * rate;
+    const hourlyPay = employeeAttendance.reduce((sum, row) => {
+      const rowRate =
+        Number(row.hourly_rate_snapshot || 0) > 0
+          ? Number(row.hourly_rate_snapshot)
+          : Number(selectedEmployee?.hourlyRate || 0);
+
+      return sum + attendanceHours(row) * rowRate;
+    }, 0);
+
+    const usedRates = Array.from(
+      new Set(
+        employeeAttendance
+          .filter((row) => attendanceHours(row) > 0)
+          .map((row) =>
+            Number(row.hourly_rate_snapshot || 0) > 0
+              ? Number(row.hourly_rate_snapshot)
+              : Number(selectedEmployee?.hourlyRate || 0)
+          )
+          .filter((value) => value > 0)
+          .map((value) => value.toFixed(2))
+      )
+    );
+
+    const rateLabel =
+      usedRates.length === 0
+        ? `Default $${formatMoney(selectedEmployee?.hourlyRate || 0)}/hr`
+        : usedRates.length === 1
+          ? `$${formatMoney(Number(usedRates[0]))}/hr`
+          : `${usedRates.length} daily rates`;
     const transportTotal = employeeAttendance.reduce(
       (sum, row) => sum + Number(row.transport_allowance || 0),
       0
@@ -2092,7 +2176,7 @@ export function EmployeeModule() {
                 Daily Hours, Allowances & Advances
               </h2>
               <p className="mt-1 max-w-4xl text-xs leading-5 text-slate-500">
-                Enter start/end time for each day. Shift duration, hourly earnings, transport allowance, gross earnings and advances are calculated automatically. Any unsettled interval balance rolls into the next payment interval.
+                Enter start/end time and the hourly rate that applies to each work date. Shift duration, daily-rate earnings, transport allowance, gross earnings and advances are calculated automatically. Any unsettled interval balance rolls into the next payment interval.
               </p>
             </div>
 
@@ -2173,7 +2257,7 @@ export function EmployeeModule() {
               <SummaryCard
                 label="Gross Earnings"
                 value={`$${formatMoney(grossEarnings)}`}
-                detail={`Hourly $${formatMoney(hourlyPay)} + transport $${formatMoney(transportTotal)}`}
+                detail={`Daily-rate pay $${formatMoney(hourlyPay)} + transport $${formatMoney(transportTotal)}`}
                 icon={DollarSign}
                 tone="emerald"
               />
@@ -2209,7 +2293,7 @@ export function EmployeeModule() {
                       {intervalLabel(bounds.start, bounds.end, partTimeCycle)}
                     </p>
                     <p className="mt-0.5 text-[9px] font-black uppercase tracking-wider text-slate-400">
-                      {selectedEmployee.name} · ${formatMoney(rate)}/hr
+                      {selectedEmployee.name} · {rateLabel}
                     </p>
                   </div>
 
@@ -2236,12 +2320,13 @@ export function EmployeeModule() {
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[1480px] border-collapse text-left">
+                <table className="w-full min-w-[1590px] border-collapse text-left">
                   <thead className="bg-white">
                     <tr className="border-b border-slate-200 text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">
                       <th className="sticky left-0 z-20 min-w-[125px] bg-white px-3 py-3 shadow-[1px_0_0_0_#e2e8f0]">Date</th>
                       <th className="min-w-[250px] px-2 py-3">Timing</th>
                       <th className="min-w-[105px] px-3 py-3 text-right">Shift Duration</th>
+                      <th className="min-w-[105px] px-3 py-3 text-right">Hourly Rate</th>
                       <th className="min-w-[120px] px-3 py-3 text-right">Hourly Pay</th>
                       <th className="min-w-[130px] px-3 py-3 text-right">Transport Allowance</th>
                       <th className="min-w-[120px] bg-emerald-50/40 px-3 py-3 text-right">Gross Earnings</th>
@@ -2282,6 +2367,9 @@ export function EmployeeModule() {
                       <td className="sticky left-0 z-10 bg-slate-50 px-3 py-4 shadow-[1px_0_0_0_#cbd5e1]">INTERVAL TOTAL</td>
                       <td className="px-2 py-4 text-slate-400">—</td>
                       <td className="px-3 py-4 text-right font-mono">{durationLabel(totalHours)}</td>
+                      <td className="px-3 py-4 text-right text-[10px] font-black text-slate-500">
+                        {usedRates.length <= 1 ? rateLabel : 'VARIABLE'}
+                      </td>
                       <td className="px-3 py-4 text-right font-mono">${formatMoney(hourlyPay)}</td>
                       <td className="px-3 py-4 text-right font-mono">${formatMoney(transportTotal)}</td>
                       <td className="bg-emerald-50 px-3 py-4 text-right font-mono text-emerald-800">${formatMoney(grossEarnings)}</td>
@@ -2359,7 +2447,7 @@ export function EmployeeModule() {
             </div>
 
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-[10px] leading-5 text-slate-500">
-              <strong>Rolling rule:</strong> each interval stores its own hours, hourly-rate snapshot, transport allowance and advances. If the interval is not settled, its signed balance carries forward. A negative balance means advances exceed earned pay; a positive balance means the company still owes the employee. Settled intervals are locked.
+              <strong>Rolling rule:</strong> each work date stores its own hourly-rate snapshot together with timing and transport allowance. The interval payroll then totals the daily earnings and advances. If the interval is not settled, its signed balance carries forward. A negative balance means advances exceed earned pay; a positive balance means the company still owes the employee. Settled intervals are locked.
             </div>
           </>
         )}
