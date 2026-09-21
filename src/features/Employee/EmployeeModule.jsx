@@ -34,6 +34,8 @@ import { supabase } from '../../lib/supabaseClient';
 // ==========================================
 // MOCK DATA
 // ==========================================
+const DEFAULT_PART_TIME_TRANSPORT_ALLOWANCE = 5;
+
 const MOCK_EMPLOYEES = [
   { id: 'EMP-001', name: 'Yeo Min', role: 'Warehouse Manager', status: 'Active', type: 'Citizen', basicSalary: 3500, levy: 0, cpfEligible: true, leaveEntitlement: 14, leavesTaken: 2, sickLeavesTaken: 1, workPassExpiry: null },
   { id: 'EMP-002', name: 'Kyaw Zin', role: 'Delivery Driver', status: 'Active', type: 'WP', basicSalary: 1800, levy: 450, cpfEligible: false, leaveEntitlement: 7, leavesTaken: 0, sickLeavesTaken: 0, workPassExpiry: '2026-11-15' }
@@ -557,7 +559,7 @@ const EMPTY_EMPLOYEE = {
   payBasis: 'monthly_salary',
   basicSalary: '',
   hourlyRate: '',
-  dailyTransportAllowance: '',
+  dailyTransportAllowance: DEFAULT_PART_TIME_TRANSPORT_ALLOWANCE,
   paymentInterval: 'monthly',
   cpfEligible: true,
   levy: '',
@@ -666,7 +668,7 @@ function normaliseEmployee(row) {
     payBasis: String(row?.pay_basis ?? 'monthly_salary'),
     basicSalary: Number(row?.basic_salary ?? 0) || 0,
     hourlyRate: Number(row?.hourly_rate ?? 0) || 0,
-    dailyTransportAllowance: Number(row?.transport_allowance_per_day ?? 0) || 0,
+    dailyTransportAllowance: Number(row?.transport_allowance_per_day ?? DEFAULT_PART_TIME_TRANSPORT_ALLOWANCE) || DEFAULT_PART_TIME_TRANSPORT_ALLOWANCE,
     paymentInterval: String(row?.payment_interval ?? 'monthly'),
     cpfEligible: row?.cpf_eligible !== false,
     levy: Number(row?.levy ?? 0) || 0,
@@ -698,7 +700,7 @@ function employeePayload(employee) {
     pay_basis: isPartTime ? 'hourly' : (employee.payBasis || 'monthly_salary'),
     basic_salary: isPartTime ? 0 : (employee.payBasis === 'monthly_salary' ? Number(employee.basicSalary || 0) || 0 : 0),
     hourly_rate: isPartTime ? Number(employee.hourlyRate || 0) || 0 : (employee.payBasis === 'hourly' ? Number(employee.hourlyRate || 0) || 0 : 0),
-    transport_allowance_per_day: isPartTime ? Number(employee.dailyTransportAllowance || 0) || 0 : 0,
+    transport_allowance_per_day: isPartTime ? DEFAULT_PART_TIME_TRANSPORT_ALLOWANCE : 0,
     payment_interval: employee.paymentInterval || (isPartTime ? 'weekly' : 'monthly'),
     cpf_eligible: isPartTime ? false : Boolean(employee.cpfEligible),
     levy: isPartTime ? 0 : (Number(employee.levy || 0) || 0),
@@ -857,6 +859,7 @@ function EmployeeEditor({ employee, employees, onClose, onSave }) {
     employmentType: value,
     payBasis: value === 'Part-Time' ? 'hourly' : 'monthly_salary',
     paymentInterval: value === 'Part-Time' ? 'weekly' : 'monthly',
+    dailyTransportAllowance: value === 'Part-Time' ? DEFAULT_PART_TIME_TRANSPORT_ALLOWANCE : current.dailyTransportAllowance,
     cpfEligible: value === 'Part-Time' ? false : current.cpfEligible,
     levy: value === 'Part-Time' ? 0 : current.levy,
   }));
@@ -914,15 +917,24 @@ function EmployeeEditor({ employee, employees, onClose, onSave }) {
               <div className="rounded-2xl border border-blue-100 bg-blue-50/50 p-4">
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
                   <Field label="Hourly Rate ($)"><input type="number" min="0" step="0.01" value={form.hourlyRate} onChange={(e) => update('hourlyRate', e.target.value)} className={`${inputClass} border-blue-200 bg-white text-right font-black text-blue-700`} /></Field>
-                  <Field label="Transport Allowance / Work Day ($)"><input type="number" min="0" step="0.01" value={form.dailyTransportAllowance} onChange={(e) => update('dailyTransportAllowance', e.target.value)} className={`${inputClass} bg-white text-right font-bold text-slate-700`} /></Field>
+                  <div>
+                    <span className="mb-1.5 block text-xs font-bold text-slate-600">Transport Allowance</span>
+                    <div className="flex h-[46px] items-center justify-between rounded-xl border border-slate-200 bg-white px-3">
+                      <div>
+                        <p className="text-sm font-black text-slate-800">$5.00 / work day</p>
+                        <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Standard default</p>
+                      </div>
+                      <span className="rounded-md bg-slate-100 px-2 py-1 text-[9px] font-black text-slate-500">EDIT PER DAY</span>
+                    </div>
+                  </div>
                   <Field label="Payment Interval"><select value={form.paymentInterval} onChange={(e) => update('paymentInterval', e.target.value)} className={inputClass}><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></Field>
                   <Field label="Payment Method"><select value={form.paymentMethod} onChange={(e) => update('paymentMethod', e.target.value)} className={inputClass}><option>Bank Transfer</option><option>PayNow</option><option>Cash</option><option>Cheque</option></select></Field>
                   <Field label="Payment Reference / Account"><input value={form.bankAccountNo} onChange={(e) => update('bankAccountNo', e.target.value)} placeholder="Optional" className={inputClass} /></Field>
                 </div>
                 <div className="mt-4 rounded-xl border border-blue-100 bg-white px-4 py-3 text-xs leading-5 text-slate-500">
                   The hourly rate above is the <strong>default rate</strong> for new work-day entries.
-                  In <strong>Part-Time Hours</strong>, each date has its own editable hourly rate, so revised or temporary rates can apply only to the relevant day(s).
-                  Saved daily rates are retained in historical calculations, while unsettled balances continue to carry forward automatically.
+                  Transport allowance defaults automatically to <strong>$5.00 for every worked day</strong> and can be overridden only when a particular day requires a different amount.
+                  Daily timing, rate, allowance and advance entries auto-save to Supabase, while settled intervals remain locked for historical accuracy.
                 </div>
               </div>
             </section>
@@ -1122,9 +1134,14 @@ function PartTimeDayRow({
   locked,
   saving,
   onSave,
+  onDelete,
 }) {
   const legacyHours = attendanceHours(attendanceRow);
   const hasStoredTiming = Boolean(attendanceRow?.clock_in && attendanceRow?.clock_out);
+
+  const initialAllowance = attendanceRow && hasStoredTiming
+    ? Number(attendanceRow.transport_allowance || 0)
+    : DEFAULT_PART_TIME_TRANSPORT_ALLOWANCE;
 
   const [clockIn, setClockIn] = useState(
     attendanceRow?.clock_in ? String(attendanceRow.clock_in).slice(0, 5) : ''
@@ -1138,39 +1155,70 @@ function PartTimeDayRow({
       ? Number(attendanceRow.hourly_rate_snapshot)
       : Number(employee.hourlyRate || 0)
   );
-  const [allowance, setAllowance] = useState(
-    attendanceRow
-      ? Number(attendanceRow.transport_allowance || 0)
-      : Number(employee.dailyTransportAllowance || 0)
-  );
+  const [allowance, setAllowance] = useState(initialAllowance);
+  const [allowanceEditing, setAllowanceEditing] = useState(false);
   const [advance, setAdvance] = useState(Number(timesheetAdvance?.amount || 0));
+  const [saveState, setSaveState] = useState(
+    attendanceRow || timesheetAdvance ? 'saved' : 'idle'
+  );
+  const [deleteBusy, setDeleteBusy] = useState(false);
+
+  const initialisedRef = useRef(false);
+  const saveTimerRef = useRef(null);
+  const lastSavedSignatureRef = useRef('');
 
   useEffect(() => {
-    setClockIn(attendanceRow?.clock_in ? String(attendanceRow.clock_in).slice(0, 5) : '');
-    setClockOut(attendanceRow?.clock_out ? String(attendanceRow.clock_out).slice(0, 5) : '');
-    setBreakMinutes(Number(attendanceRow?.break_minutes || 0));
-    setHourlyRate(
-      Number(attendanceRow?.hourly_rate_snapshot || 0) > 0
-        ? Number(attendanceRow.hourly_rate_snapshot)
-        : Number(employee.hourlyRate || 0)
-    );
-    setAllowance(
-      attendanceRow
-        ? Number(attendanceRow.transport_allowance || 0)
-        : Number(employee.dailyTransportAllowance || 0)
-    );
-    setAdvance(Number(timesheetAdvance?.amount || 0));
+    const nextClockIn = attendanceRow?.clock_in
+      ? String(attendanceRow.clock_in).slice(0, 5)
+      : '';
+    const nextClockOut = attendanceRow?.clock_out
+      ? String(attendanceRow.clock_out).slice(0, 5)
+      : '';
+    const nextBreak = Number(attendanceRow?.break_minutes || 0);
+    const nextRate = Number(attendanceRow?.hourly_rate_snapshot || 0) > 0
+      ? Number(attendanceRow.hourly_rate_snapshot)
+      : Number(employee.hourlyRate || 0);
+    const nextAllowance = attendanceRow && Boolean(attendanceRow?.clock_in && attendanceRow?.clock_out)
+      ? Number(attendanceRow.transport_allowance || 0)
+      : DEFAULT_PART_TIME_TRANSPORT_ALLOWANCE;
+    const nextAdvance = Number(timesheetAdvance?.amount || 0);
+
+    setClockIn(nextClockIn);
+    setClockOut(nextClockOut);
+    setBreakMinutes(nextBreak);
+    setHourlyRate(nextRate);
+    setAllowance(nextAllowance);
+    setAdvance(nextAdvance);
+
+    lastSavedSignatureRef.current = JSON.stringify({
+      clockIn: nextClockIn,
+      clockOut: nextClockOut,
+      breakMinutes: nextBreak,
+      hourlyRate: nextRate,
+      allowance: nextAllowance,
+      advance: nextAdvance,
+    });
+
+    setSaveState(attendanceRow || timesheetAdvance ? 'saved' : 'idle');
+    initialisedRef.current = true;
   }, [
     attendanceRow?.id,
     attendanceRow?.updated_at,
     attendanceRow?.hourly_rate_snapshot,
+    attendanceRow?.transport_allowance,
     timesheetAdvance?.id,
     timesheetAdvance?.updated_at,
     employee.hourlyRate,
-    employee.dailyTransportAllowance,
   ]);
 
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+    };
+  }, []);
+
   const hasTiming = Boolean(clockIn && clockOut);
+  const partialTiming = Boolean(clockIn) !== Boolean(clockOut);
   const computedHours = hasTiming
     ? clockedHours(clockIn, clockOut, breakMinutes)
     : !clockIn && !clockOut
@@ -1182,62 +1230,190 @@ function PartTimeDayRow({
   const gross = hourlyPay + dayAllowance;
   const totalAdvance = Number(advance || 0) + Number(otherAdvanceAmount || 0);
   const dayBalance = gross - totalAdvance;
+  const hasStoredEntry = Boolean(attendanceRow || timesheetAdvance);
 
-  const save = () => {
-    onSave({
-      date,
-      clockIn,
-      clockOut,
-      breakMinutes: Number(breakMinutes || 0),
-      hourlyRate: Number(hourlyRate || 0),
-      allowance: Number(allowance || 0),
-      advance: Number(advance || 0),
-      legacyHours,
-      hadStoredTiming: hasStoredTiming,
-    });
+  const buildDraft = () => ({
+    date,
+    clockIn,
+    clockOut,
+    breakMinutes: Number(breakMinutes || 0),
+    hourlyRate: Number(hourlyRate || 0),
+    allowance: Number(allowance || 0),
+    advance: Number(advance || 0),
+    legacyHours,
+    hadStoredTiming: hasStoredTiming,
+  });
+
+  const signature = JSON.stringify({
+    clockIn,
+    clockOut,
+    breakMinutes: Number(breakMinutes || 0),
+    hourlyRate: Number(hourlyRate || 0),
+    allowance: Number(allowance || 0),
+    advance: Number(advance || 0),
+  });
+
+  useEffect(() => {
+    if (!initialisedRef.current || locked) return;
+    if (signature === lastSavedSignatureRef.current) return;
+
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
+    }
+
+    setSaveState(partialTiming ? 'incomplete' : 'dirty');
+
+    if (partialTiming) return;
+
+    const hasMeaningfulEntry =
+      hasTiming ||
+      legacyHours > 0 ||
+      Number(advance || 0) > 0 ||
+      hasStoredEntry;
+
+    if (!hasMeaningfulEntry) {
+      setSaveState('idle');
+      return;
+    }
+
+    saveTimerRef.current = window.setTimeout(async () => {
+      setSaveState('saving');
+      const ok = await onSave(buildDraft());
+
+      if (ok) {
+        lastSavedSignatureRef.current = signature;
+        setSaveState('saved');
+      } else {
+        setSaveState('error');
+      }
+    }, 450);
+  }, [signature, locked]);
+
+  const resetTransport = () => {
+    setAllowance(DEFAULT_PART_TIME_TRANSPORT_ALLOWANCE);
+    setAllowanceEditing(false);
   };
 
+  const requestDelete = async () => {
+    if (!hasStoredEntry || locked || deleteBusy) return;
+
+    const confirmed = window.confirm(
+      `Delete the ${shortDayLabel(date)} part-time entry? This removes the saved shift and the timesheet advance for this date.`
+    );
+
+    if (!confirmed) return;
+
+    setDeleteBusy(true);
+    setSaveState('saving');
+
+    try {
+      const ok = await onDelete(date);
+      if (!ok) {
+        setSaveState('error');
+      }
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+
+  const saveBadge = (() => {
+    if (locked) {
+      return (
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-slate-500">
+          <Lock size={10} /> Locked
+        </span>
+      );
+    }
+
+    if (saving || saveState === 'saving') {
+      return (
+        <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-blue-600">
+          <RefreshCw size={11} className="animate-spin" /> Saving
+        </span>
+      );
+    }
+
+    if (saveState === 'saved') {
+      return (
+        <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-emerald-600">
+          <CheckCircle2 size={12} /> Saved
+        </span>
+      );
+    }
+
+    if (saveState === 'incomplete') {
+      return <span className="text-[10px] font-bold text-amber-600">Complete shift</span>;
+    }
+
+    if (saveState === 'error') {
+      return <span className="text-[10px] font-bold text-red-600">Save failed</span>;
+    }
+
+    return <span className="text-[10px] font-bold text-slate-300">Not entered</span>;
+  })();
+
+  const controlBase =
+    'rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400';
+
   return (
-    <tr className="border-b border-slate-100 align-middle hover:bg-slate-50/70">
-      <td className="sticky left-0 z-10 bg-white px-3 py-3 shadow-[1px_0_0_0_#e2e8f0]">
-        <p className="whitespace-nowrap text-xs font-black text-slate-800">{shortDayLabel(date)}</p>
-        <p className="mt-0.5 font-mono text-[9px] text-slate-400">{date}</p>
+    <tr className="group border-b border-slate-100 align-middle transition hover:bg-slate-50/60">
+      <td className="sticky left-0 z-10 bg-white px-4 py-3 shadow-[1px_0_0_0_#e2e8f0] group-hover:bg-slate-50">
+        <p className="whitespace-nowrap text-xs font-black text-slate-800">
+          {dateFromIso(date).toLocaleDateString('en-SG', { weekday: 'short' })}
+        </p>
+        <p className="mt-0.5 whitespace-nowrap text-[10px] font-medium text-slate-400">
+          {dateFromIso(date).toLocaleDateString('en-SG', { day: '2-digit', month: 'short' })}
+        </p>
       </td>
 
-      <td className="min-w-[250px] px-2 py-2">
-        <div className="flex items-center gap-1.5">
-          <input
-            type="time"
-            value={clockIn}
-            disabled={locked || saving}
-            onChange={(event) => setClockIn(event.target.value)}
-            className="min-w-[104px] rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-400"
-          />
-          <span className="text-slate-300">→</span>
-          <input
-            type="time"
-            value={clockOut}
-            disabled={locked || saving}
-            onChange={(event) => setClockOut(event.target.value)}
-            className="min-w-[104px] rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-400"
-          />
-        </div>
-        <div className="mt-1 flex items-center gap-2">
-          <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Break</span>
-          <input
-            type="number"
-            min="0"
-            step="5"
-            value={breakMinutes}
-            disabled={locked || saving}
-            onChange={(event) => setBreakMinutes(event.target.value)}
-            className="w-16 rounded-md border border-slate-200 px-1.5 py-1 text-right text-[10px] outline-none disabled:bg-slate-100"
-          />
-          <span className="text-[9px] text-slate-400">min</span>
+      <td className="min-w-[260px] px-3 py-2.5">
+        <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-2">
+          <div className="flex items-center gap-2">
+            <label className="min-w-0 flex-1">
+              <span className="mb-1 block text-[8px] font-black uppercase tracking-wider text-slate-400">Start</span>
+              <input
+                type="time"
+                value={clockIn}
+                disabled={locked || saving}
+                onChange={(event) => setClockIn(event.target.value)}
+                className={`${controlBase} w-full px-2 py-2`}
+              />
+            </label>
+
+            <span className="mt-4 text-slate-300">→</span>
+
+            <label className="min-w-0 flex-1">
+              <span className="mb-1 block text-[8px] font-black uppercase tracking-wider text-slate-400">End</span>
+              <input
+                type="time"
+                value={clockOut}
+                disabled={locked || saving}
+                onChange={(event) => setClockOut(event.target.value)}
+                className={`${controlBase} w-full px-2 py-2`}
+              />
+            </label>
+
+            <label className="w-[70px]">
+              <span className="mb-1 block text-[8px] font-black uppercase tracking-wider text-slate-400">Break</span>
+              <div className="relative">
+                <input
+                  type="number"
+                  min="0"
+                  step="5"
+                  value={breakMinutes}
+                  disabled={locked || saving}
+                  onChange={(event) => setBreakMinutes(event.target.value)}
+                  className={`${controlBase} w-full px-2 py-2 pr-6 text-right`}
+                />
+                <span className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-[8px] font-bold text-slate-400">m</span>
+              </div>
+            </label>
+          </div>
+
           {!hasStoredTiming && legacyHours > 0 && !hasTiming && (
-            <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-700">
-              Legacy {legacyHours.toFixed(2)}h
-            </span>
+            <div className="mt-2 inline-flex rounded-md bg-amber-50 px-2 py-1 text-[9px] font-bold text-amber-700">
+              Legacy entry · {legacyHours.toFixed(2)}h
+            </div>
           )}
         </div>
       </td>
@@ -1247,49 +1423,84 @@ function PartTimeDayRow({
         <p className="mt-0.5 font-mono text-[9px] text-slate-400">{computedHours.toFixed(2)} hrs</p>
       </td>
 
-      <td className="min-w-[105px] px-2 py-2">
-        <div className="relative ml-auto w-[88px]">
-          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">$</span>
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            value={hourlyRate}
-            disabled={locked || saving}
-            onChange={(event) => setHourlyRate(event.target.value)}
-            className="w-full rounded-lg border border-blue-200 bg-blue-50/40 py-2 pl-6 pr-2 text-right font-mono text-xs font-black text-blue-800 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-400"
-          />
+      <td className="min-w-[155px] px-3 py-2.5">
+        <div className="ml-auto w-[130px] rounded-xl border border-blue-100 bg-blue-50/40 p-2">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] font-bold text-blue-500">$</span>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={hourlyRate}
+              disabled={locked || saving}
+              onChange={(event) => setHourlyRate(event.target.value)}
+              className="w-full bg-transparent text-right font-mono text-xs font-black text-blue-800 outline-none"
+            />
+            <span className="text-[9px] font-bold text-blue-400">/hr</span>
+          </div>
+          <div className="mt-1.5 border-t border-blue-100 pt-1.5 text-right">
+            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Pay </span>
+            <span className="font-mono text-xs font-black text-slate-800">${formatMoney(hourlyPay)}</span>
+          </div>
         </div>
-        <p className="mt-1 text-right text-[9px] text-slate-400">daily rate</p>
       </td>
 
-      <td className="min-w-[120px] px-3 py-3 text-right font-mono text-xs font-black text-slate-700">
-        ${formatMoney(hourlyPay)}
-      </td>
-
-      <td className="min-w-[130px] px-2 py-2">
-        <div className="relative ml-auto w-[104px]">
-          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">$</span>
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            value={allowance}
-            disabled={locked || saving}
-            onChange={(event) => setAllowance(event.target.value)}
-            className="w-full rounded-lg border border-slate-200 py-2 pl-6 pr-2 text-right font-mono text-xs font-bold outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-400"
-          />
+      <td className="min-w-[130px] px-3 py-2.5">
+        <div className="ml-auto w-[110px] text-right">
+          {allowanceEditing && !locked ? (
+            <div className="rounded-xl border border-slate-200 bg-white p-2">
+              <div className="flex items-center gap-1">
+                <span className="text-[10px] text-slate-400">$</span>
+                <input
+                  autoFocus
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={allowance}
+                  disabled={saving}
+                  onChange={(event) => setAllowance(event.target.value)}
+                  onBlur={() => setAllowanceEditing(false)}
+                  className="w-full bg-transparent text-right font-mono text-xs font-black text-slate-800 outline-none"
+                />
+              </div>
+              {Number(allowance) !== DEFAULT_PART_TIME_TRANSPORT_ALLOWANCE && (
+                <button
+                  type="button"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={resetTransport}
+                  className="mt-1 text-[8px] font-black uppercase tracking-wider text-blue-600"
+                >
+                  Reset $5
+                </button>
+              )}
+            </div>
+          ) : (
+            <button
+              type="button"
+              disabled={locked || saving}
+              onClick={() => setAllowanceEditing(true)}
+              className="w-full rounded-xl border border-slate-200 bg-white px-2 py-2 text-right transition hover:border-blue-200 hover:bg-blue-50 disabled:cursor-not-allowed disabled:bg-slate-100"
+              title="Click to edit this day's transport allowance"
+            >
+              <span className="block font-mono text-xs font-black text-slate-800">
+                ${formatMoney(computedHours > 0 ? dayAllowance : DEFAULT_PART_TIME_TRANSPORT_ALLOWANCE)}
+              </span>
+              <span className={`mt-0.5 block text-[8px] font-black uppercase tracking-wider ${Number(allowance) === DEFAULT_PART_TIME_TRANSPORT_ALLOWANCE ? 'text-slate-400' : 'text-blue-600'}`}>
+                {Number(allowance) === DEFAULT_PART_TIME_TRANSPORT_ALLOWANCE ? 'Standard · Edit' : 'Custom · Edit'}
+              </span>
+            </button>
+          )}
         </div>
-        <p className="mt-1 text-right text-[9px] text-slate-400">applies when hours &gt; 0</p>
       </td>
 
-      <td className="min-w-[120px] bg-emerald-50/40 px-3 py-3 text-right font-mono text-xs font-black text-emerald-800">
-        ${formatMoney(gross)}
+      <td className="min-w-[115px] bg-emerald-50/30 px-3 py-3 text-right">
+        <p className="font-mono text-xs font-black text-emerald-800">${formatMoney(gross)}</p>
+        <p className="mt-0.5 text-[8px] font-black uppercase tracking-wider text-emerald-600/60">Gross</p>
       </td>
 
-      <td className="min-w-[130px] px-2 py-2">
-        <div className="relative ml-auto w-[104px]">
-          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">$</span>
+      <td className="min-w-[130px] px-3 py-2.5">
+        <div className="relative ml-auto w-[108px]">
+          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-amber-500">$</span>
           <input
             type="number"
             min="0"
@@ -1297,35 +1508,37 @@ function PartTimeDayRow({
             value={advance}
             disabled={locked || saving}
             onChange={(event) => setAdvance(event.target.value)}
-            className="w-full rounded-lg border border-amber-200 bg-amber-50/50 py-2 pl-6 pr-2 text-right font-mono text-xs font-bold text-amber-800 outline-none focus:border-amber-300 focus:ring-2 focus:ring-amber-100 disabled:bg-slate-100 disabled:text-slate-400"
+            className="w-full rounded-xl border border-amber-100 bg-amber-50/60 py-2.5 pl-6 pr-2 text-right font-mono text-xs font-black text-amber-800 outline-none transition focus:border-amber-300 focus:ring-2 focus:ring-amber-100 disabled:bg-slate-100 disabled:text-slate-400"
           />
         </div>
         {otherAdvanceAmount > 0 && (
-          <p className="mt-1 text-right text-[9px] font-bold text-amber-600">
-            + ${formatMoney(otherAdvanceAmount)} other ledger
+          <p className="mt-1 text-right text-[8px] font-bold text-amber-600">
+            +${formatMoney(otherAdvanceAmount)} ledger
           </p>
         )}
       </td>
 
-      <td className={`min-w-[120px] px-3 py-3 text-right font-mono text-xs font-black ${dayBalance < 0 ? 'text-red-700' : 'text-blue-700'}`}>
-        {signedMoney(dayBalance)}
+      <td className="min-w-[118px] px-3 py-3 text-right">
+        <p className={`font-mono text-xs font-black ${dayBalance < 0 ? 'text-red-700' : 'text-blue-700'}`}>
+          {signedMoney(dayBalance)}
+        </p>
+        <p className="mt-0.5 text-[8px] font-black uppercase tracking-wider text-slate-400">Net day</p>
       </td>
 
-      <td className="min-w-[92px] px-3 py-3 text-center">
-        {locked ? (
-          <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-[9px] font-black text-slate-500">
-            <Lock size={10} className="mr-1" /> LOCKED
-          </span>
-        ) : (
+      <td className="min-w-[130px] px-3 py-3">
+        <div className="flex items-center justify-end gap-2">
+          <div className="min-w-[66px] text-right">{saveBadge}</div>
+
           <button
             type="button"
-            disabled={saving}
-            onClick={save}
-            className="rounded-lg bg-blue-600 px-3 py-2 text-[10px] font-black text-white disabled:opacity-50"
+            disabled={!hasStoredEntry || locked || saving || deleteBusy}
+            onClick={requestDelete}
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-400 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-25"
+            title={locked ? 'Settled rows cannot be deleted' : 'Delete this date entry'}
           >
-            {saving ? 'Saving…' : 'Save'}
+            {deleteBusy ? <RefreshCw size={13} className="animate-spin" /> : <Trash2 size={13} />}
           </button>
-        )}
+        </div>
       </td>
     </tr>
   );
@@ -1733,12 +1946,12 @@ export function EmployeeModule() {
 
     if (paidResult.error) {
       notify('Unable to verify settlement lock', 'error', paidResult.error.message);
-      return;
+      return false;
     }
 
     if (paidResult.data) {
       notify('Settled interval is locked', 'error', 'Historical paid hours cannot be edited.');
-      return;
+      return false;
     }
 
     const hasStart = Boolean(draft.clockIn);
@@ -1746,7 +1959,7 @@ export function EmployeeModule() {
 
     if (hasStart !== hasEnd) {
       notify('Complete the timing', 'warning', 'Enter both start and end time before saving the day.');
-      return;
+      return false;
     }
 
     const computedHours = hasStart && hasEnd
@@ -1755,7 +1968,7 @@ export function EmployeeModule() {
 
     if (computedHours > 24) {
       notify('Invalid shift', 'error', 'The calculated shift cannot exceed 24 hours.');
-      return;
+      return false;
     }
 
     if (
@@ -1764,12 +1977,12 @@ export function EmployeeModule() {
       Number(draft.advance || 0) < 0
     ) {
       notify('Invalid amount', 'error', 'Hourly rate, allowance and advance values cannot be negative.');
-      return;
+      return false;
     }
 
     if (computedHours > 0 && !(Number(draft.hourlyRate || 0) > 0)) {
       notify('Hourly rate required', 'warning', 'Enter the hourly rate that applies to this work date.');
-      return;
+      return false;
     }
 
     setPartTimeSavingKey(key);
@@ -1871,10 +2084,82 @@ export function EmployeeModule() {
       }
 
       await syncPartTimeInterval(employee, draft.date);
-      notify('Timesheet day saved', 'success', `${employee.name} · ${draft.date}`);
+      return true;
     } catch (error) {
       console.error('Part-time day save failed:', error);
       notify('Timesheet could not be saved', 'error', error?.message || 'Unknown error');
+      return false;
+    } finally {
+      setPartTimeSavingKey('');
+    }
+  };
+
+  const deletePartTimeDay = async (employee, dateValue) => {
+    const key = `${employee.id}|${dateValue}`;
+    const bounds = intervalBounds(employee.paymentInterval, dateValue);
+
+    const paidRow = payroll.find(
+      (row) =>
+        String(row.employee_id) === String(employee.id) &&
+        row.period_start === bounds.start &&
+        row.period_end === bounds.end &&
+        row.status === 'paid'
+    );
+
+    if (paidRow) {
+      notify('Settled interval is locked', 'error', 'Paid timesheet entries cannot be deleted.');
+      return false;
+    }
+
+    setPartTimeSavingKey(key);
+
+    try {
+      const attendanceRow = attendance.find(
+        (row) =>
+          String(row.employee_id) === String(employee.id) &&
+          row.work_date === dateValue
+      );
+
+      const sourceKey = `pt-timesheet:${employee.id}:${dateValue}`;
+      const timesheetAdvance = advances.find((row) => row.source_key === sourceKey);
+
+      if (attendanceRow) {
+        const attendanceDelete = await supabase
+          .from('employee_attendance')
+          .delete()
+          .eq('id', attendanceRow.id);
+
+        if (attendanceDelete.error) throw attendanceDelete.error;
+      }
+
+      if (timesheetAdvance) {
+        const advanceDelete = await supabase
+          .from('employee_advances')
+          .delete()
+          .eq('id', timesheetAdvance.id);
+
+        if (advanceDelete.error) throw advanceDelete.error;
+      }
+
+      if (attendanceRow) {
+        setAttendance((current) =>
+          current.filter((row) => row.id !== attendanceRow.id)
+        );
+      }
+
+      if (timesheetAdvance) {
+        setAdvances((current) =>
+          current.filter((row) => row.id !== timesheetAdvance.id)
+        );
+      }
+
+      await syncPartTimeInterval(employee, dateValue);
+      notify('Timesheet entry deleted', 'success', `${employee.name} · ${dateValue}`);
+      return true;
+    } catch (error) {
+      console.error('Part-time day delete failed:', error);
+      notify('Entry could not be deleted', 'error', error?.message || 'Unknown error');
+      return false;
     } finally {
       setPartTimeSavingKey('');
     }
@@ -2173,10 +2458,10 @@ export function EmployeeModule() {
                 Part-Time Timesheet & Settlement
               </p>
               <h2 className="mt-1 text-xl font-black tracking-tight text-slate-900">
-                Daily Hours, Allowances & Advances
+                Part-Time Pay Workspace
               </h2>
               <p className="mt-1 max-w-4xl text-xs leading-5 text-slate-500">
-                Enter start/end time and the hourly rate that applies to each work date. Shift duration, daily-rate earnings, transport allowance, gross earnings and advances are calculated automatically. Any unsettled interval balance rolls into the next payment interval.
+                Enter the shift timing, rate and any advance directly in the ledger. Every complete change auto-saves to Supabase, transport defaults to $5 per worked day, and unsettled balances continue rolling into the next payment interval.
               </p>
             </div>
 
@@ -2307,6 +2592,12 @@ export function EmployeeModule() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
+                  <span className="inline-flex items-center rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-emerald-700">
+                    <CheckCircle2 size={12} className="mr-1.5" /> Auto-Save On
+                  </span>
+                  <span className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                    $5 Transport Default
+                  </span>
                   {intervalLocked ? (
                     <span className="inline-flex items-center rounded-lg bg-slate-200 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-600">
                       <Lock size={12} className="mr-1.5" /> Settled & Locked
@@ -2320,19 +2611,18 @@ export function EmployeeModule() {
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[1590px] border-collapse text-left">
+                <table className="w-full min-w-[1330px] border-collapse text-left">
                   <thead className="bg-white">
                     <tr className="border-b border-slate-200 text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">
-                      <th className="sticky left-0 z-20 min-w-[125px] bg-white px-3 py-3 shadow-[1px_0_0_0_#e2e8f0]">Date</th>
-                      <th className="min-w-[250px] px-2 py-3">Timing</th>
-                      <th className="min-w-[105px] px-3 py-3 text-right">Shift Duration</th>
-                      <th className="min-w-[105px] px-3 py-3 text-right">Hourly Rate</th>
-                      <th className="min-w-[120px] px-3 py-3 text-right">Hourly Pay</th>
-                      <th className="min-w-[130px] px-3 py-3 text-right">Transport Allowance</th>
-                      <th className="min-w-[120px] bg-emerald-50/40 px-3 py-3 text-right">Gross Earnings</th>
-                      <th className="min-w-[130px] px-3 py-3 text-right">Advance Taken</th>
-                      <th className="min-w-[120px] px-3 py-3 text-right">Daily Balance</th>
-                      <th className="min-w-[92px] px-3 py-3 text-center">Save</th>
+                      <th className="sticky left-0 z-20 min-w-[105px] bg-white px-4 py-3 shadow-[1px_0_0_0_#e2e8f0]">Date</th>
+                      <th className="min-w-[260px] px-3 py-3">Work Shift</th>
+                      <th className="min-w-[105px] px-3 py-3 text-right">Duration</th>
+                      <th className="min-w-[155px] px-3 py-3 text-right">Rate / Hourly Pay</th>
+                      <th className="min-w-[130px] px-3 py-3 text-right">Transport</th>
+                      <th className="min-w-[115px] bg-emerald-50/30 px-3 py-3 text-right">Gross</th>
+                      <th className="min-w-[130px] px-3 py-3 text-right">Advance</th>
+                      <th className="min-w-[118px] px-3 py-3 text-right">Daily Balance</th>
+                      <th className="min-w-[130px] px-3 py-3 text-right">Database</th>
                     </tr>
                   </thead>
 
@@ -2348,7 +2638,7 @@ export function EmployeeModule() {
 
                       return (
                         <PartTimeDayRow
-                          key={`${selectedEmployee.id}-${date}-${attendanceRow?.updated_at || ''}-${timesheetAdvance?.updated_at || ''}`}
+                          key={`${selectedEmployee.id}-${date}`}
                           date={date}
                           employee={selectedEmployee}
                           attendanceRow={attendanceRow}
@@ -2357,6 +2647,7 @@ export function EmployeeModule() {
                           locked={intervalLocked}
                           saving={partTimeSavingKey === `${selectedEmployee.id}|${date}`}
                           onSave={(draft) => savePartTimeDay(selectedEmployee, draft)}
+                          onDelete={(dateValue) => deletePartTimeDay(selectedEmployee, dateValue)}
                         />
                       );
                     })}
@@ -2364,18 +2655,18 @@ export function EmployeeModule() {
 
                   <tfoot className="border-t-2 border-slate-300 bg-slate-50">
                     <tr className="text-xs font-black text-slate-800">
-                      <td className="sticky left-0 z-10 bg-slate-50 px-3 py-4 shadow-[1px_0_0_0_#cbd5e1]">INTERVAL TOTAL</td>
-                      <td className="px-2 py-4 text-slate-400">—</td>
+                      <td className="sticky left-0 z-10 bg-slate-50 px-4 py-4 shadow-[1px_0_0_0_#cbd5e1]">INTERVAL TOTAL</td>
+                      <td className="px-3 py-4 text-slate-400">{usedRates.length <= 1 ? rateLabel : `${usedRates.length} rates used`}</td>
                       <td className="px-3 py-4 text-right font-mono">{durationLabel(totalHours)}</td>
-                      <td className="px-3 py-4 text-right text-[10px] font-black text-slate-500">
-                        {usedRates.length <= 1 ? rateLabel : 'VARIABLE'}
+                      <td className="px-3 py-4 text-right">
+                        <p className="font-mono text-slate-800">${formatMoney(hourlyPay)}</p>
+                        <p className="mt-0.5 text-[8px] font-black uppercase tracking-wider text-slate-400">Hourly pay</p>
                       </td>
-                      <td className="px-3 py-4 text-right font-mono">${formatMoney(hourlyPay)}</td>
                       <td className="px-3 py-4 text-right font-mono">${formatMoney(transportTotal)}</td>
                       <td className="bg-emerald-50 px-3 py-4 text-right font-mono text-emerald-800">${formatMoney(grossEarnings)}</td>
                       <td className="px-3 py-4 text-right font-mono text-amber-800">${formatMoney(advancesThisInterval)}</td>
                       <td className={`px-3 py-4 text-right font-mono ${currentBalance < 0 ? 'text-red-700' : 'text-blue-700'}`}>{signedMoney(currentBalance)}</td>
-                      <td className="px-3 py-4"></td>
+                      <td className="px-3 py-4 text-right text-[9px] font-black uppercase tracking-wider text-slate-400">Auto-saved</td>
                     </tr>
                   </tfoot>
                 </table>
@@ -2447,7 +2738,7 @@ export function EmployeeModule() {
             </div>
 
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-[10px] leading-5 text-slate-500">
-              <strong>Rolling rule:</strong> each work date stores its own hourly-rate snapshot together with timing and transport allowance. The interval payroll then totals the daily earnings and advances. If the interval is not settled, its signed balance carries forward. A negative balance means advances exceed earned pay; a positive balance means the company still owes the employee. Settled intervals are locked.
+              <strong>Auto-save & rolling balance:</strong> complete timing/rate/advance edits are saved to Supabase automatically after a short pause. Transport defaults to $5 for every worked day and can be overridden per date. Delete removes only that date’s timesheet entry and its timesheet-linked advance. Unsettled signed balances continue carrying forward; settled intervals remain locked.
             </div>
           </>
         )}
