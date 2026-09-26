@@ -133,21 +133,6 @@ export function BillingModule({ sys }) {
       ? 'border-amber-200 bg-amber-50 text-amber-700'
       : 'border-emerald-200 bg-emerald-50 text-emerald-700';
 
-  // Never expose a partial dataset in the headline figures or the customer
-  // table. While the ERP is hydrating/settling, the screen shows a neutral
-  // loading state instead of a temporarily low sales number.
-  const visibleAnalytics = dataIsSyncing
-    ? {
-        totalRevenue: 0,
-        activeCustomers: 0,
-        totalInvoicesCount: 0,
-        aov: 0,
-        topCustomer: null,
-        displayList: [],
-        allCustomerStats: [],
-      }
-    : analytics;
-
   // ==========================================
   // FINANCIAL ANALYTICS & DATA ENGINE
   // ==========================================
@@ -270,6 +255,24 @@ export function BillingModule({ sys }) {
     searchTerm,
     termFilter,
   ]);
+
+
+  // Never expose a partial dataset in the headline figures or the customer
+  // table. While the ERP is hydrating/settling, the screen shows a neutral
+  // loading state instead of a temporarily low sales number.
+  // IMPORTANT: this must be declared after `analytics`, because it reads
+  // `analytics` during render.
+  const visibleAnalytics = dataIsSyncing
+    ? {
+        totalRevenue: 0,
+        activeCustomers: 0,
+        totalInvoicesCount: 0,
+        aov: 0,
+        topCustomer: null,
+        displayList: [],
+        allCustomerStats: [],
+      }
+    : analytics;
 
   const handleStatusChange = (customerId, newStatus) => {
     const updatedInvoices = safeInvoices.map((inv) => {
