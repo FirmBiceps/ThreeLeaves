@@ -1311,6 +1311,154 @@ function PayslipPreview({ payroll, employee, onClose, onMarkPaid }) {
   </>;
 }
 
+function parseTimeValue(value) {
+  if (!value) return { hour: 0, minute: 0, period: 'AM' };
+  const [rawHour, rawMinute] = String(value).split(':').map(Number);
+  if (!Number.isFinite(rawHour) || !Number.isFinite(rawMinute)) {
+    return { hour: 0, minute: 0, period: 'AM' };
+  }
+
+  const period = rawHour >= 12 ? 'PM' : 'AM';
+  const hour = rawHour % 12 || 12;
+  return { hour, minute: rawMinute, period };
+}
+
+function to24Hour(hour, minute, period) {
+  let hour24 = Number(hour) % 12;
+  if (period === 'PM') hour24 += 12;
+  return `${String(hour24).padStart(2, '0')}:${String(Number(minute)).padStart(2, '0')}`;
+}
+
+function formatTimeDisplay(value) {
+  if (!value) return '--:-- --';
+  const { hour, minute, period } = parseTimeValue(value);
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')} ${period}`;
+}
+
+function TimePickerField({ value, disabled, onChange, onCommit }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef(null);
+  const parsed = parseTimeValue(value);
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const handlePointerDown = (event) => {
+      if (!rootRef.current?.contains(event.target)) {
+        setOpen(false);
+        onCommit?.();
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [open, onCommit]);
+
+  const choose = (hour, minute, period) => {
+    onChange(to24Hour(hour, minute, period));
+  };
+
+  const hours = Array.from({ length: 12 }, (_, index) => index + 1);
+  const minutes = Array.from({ length: 60 }, (_, index) => index);
+
+  return (
+    <div ref={rootRef} className="relative min-w-0">
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((current) => !current)}
+        className="flex h-10 w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3 text-left transition hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+      >
+        <span className={`font-mono text-[13px] font-semibold tabular-nums ${value ? 'text-slate-800' : 'text-slate-400'}`}>
+          {formatTimeDisplay(value)}
+        </span>
+        <Clock size={15} className="shrink-0 text-slate-400" />
+      </button>
+
+      {open && !disabled && (
+        <div className="absolute left-0 top-[calc(100%+8px)] z-[80] w-[286px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-900/10">
+          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Work shift</p>
+              <p className="mt-0.5 text-sm font-black text-slate-800">{formatTimeDisplay(value)}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => { setOpen(false); onCommit?.(); }}
+              className="rounded-lg bg-slate-900 px-3 py-1.5 text-[11px] font-bold text-white transition hover:bg-slate-700"
+            >
+              Done
+            </button>
+          </div>
+
+          <div className="grid grid-cols-[72px_1fr_68px] gap-2 p-3">
+            <div>
+              <p className="mb-2 text-center text-[9px] font-black uppercase tracking-wider text-slate-400">Hour</p>
+              <div className="h-40 space-y-1 overflow-y-auto rounded-xl bg-slate-50 p-1">
+                {hours.map((hour) => {
+                  const active = parsed.hour === hour;
+                  return (
+                    <button
+                      key={hour}
+                      type="button"
+                      onClick={() => choose(hour, parsed.minute, parsed.period)}
+                      className={`w-full rounded-lg px-2 py-2 text-xs font-bold transition ${active ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-white hover:text-slate-900'}`}
+                    >
+                      {String(hour).padStart(2, '0')}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-2 text-center text-[9px] font-black uppercase tracking-wider text-slate-400">Minute</p>
+              <div className="h-40 space-y-1 overflow-y-auto rounded-xl bg-slate-50 p-1">
+                {minutes.map((minute) => {
+                  const active = parsed.minute === minute;
+                  return (
+                    <button
+                      key={minute}
+                      type="button"
+                      onClick={() => choose(parsed.hour, minute, parsed.period)}
+                      className={`w-full rounded-lg px-2 py-2 text-xs font-bold transition ${active ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-white hover:text-slate-900'}`}
+                    >
+                      {String(minute).padStart(2, '0')}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-2 text-center text-[9px] font-black uppercase tracking-wider text-slate-400">Period</p>
+              <div className="space-y-1 rounded-xl bg-slate-50 p-1">
+                {['AM', 'PM'].map((period) => {
+                  const active = parsed.period === period;
+                  return (
+                    <button
+                      key={period}
+                      type="button"
+                      onClick={() => choose(parsed.hour, parsed.minute, period)}
+                      className={`w-full rounded-lg px-2 py-2 text-xs font-bold transition ${active ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-white hover:text-slate-900'}`}
+                    >
+                      {period}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-100 bg-slate-50 px-4 py-2.5 text-[10px] font-medium text-slate-500">
+            Select the time, then tap outside to save.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PartTimeDayRow({
   date,
   employee,
@@ -1338,7 +1486,6 @@ function PartTimeDayRow({
   const [clockOut, setClockOut] = useState(
     attendanceRow?.clock_out ? String(attendanceRow.clock_out).slice(0, 5) : ''
   );
-  const [breakMinutes, setBreakMinutes] = useState(Number(attendanceRow?.break_minutes || 0));
   const [hourlyRate, setHourlyRate] = useState(
     Number(attendanceRow?.hourly_rate_snapshot || 0) > 0
       ? Number(attendanceRow.hourly_rate_snapshot)
@@ -1352,13 +1499,6 @@ function PartTimeDayRow({
   );
   const [deleteBusy, setDeleteBusy] = useState(false);
 
-  // Saving is intentionally blur-driven.
-  // Typing never writes to Supabase. A database write is queued only when the
-  // user physically leaves the field (onBlur), or chooses an explicit action
-  // such as Reset Transport / Delete.
-  //
-  // The queue preserves save order when a user moves quickly across fields,
-  // while local input state remains editable during an in-flight database save.
   const lastSavedSignatureRef = useRef(null);
   const latestSignatureRef = useRef('');
   const saveQueueRef = useRef(Promise.resolve());
@@ -1367,7 +1507,7 @@ function PartTimeDayRow({
   const hasTiming = Boolean(clockIn && clockOut);
   const partialTiming = Boolean(clockIn) !== Boolean(clockOut);
   const computedHours = hasTiming
-    ? clockedHours(clockIn, clockOut, breakMinutes)
+    ? clockedHours(clockIn, clockOut)
     : !clockIn && !clockOut
       ? legacyHours
       : 0;
@@ -1383,7 +1523,6 @@ function PartTimeDayRow({
     date,
     clockIn,
     clockOut,
-    breakMinutes: Number(breakMinutes || 0),
     hourlyRate: Number(hourlyRate || 0),
     allowance: Number(allowance || 0),
     advance: Number(advance || 0),
@@ -1394,7 +1533,6 @@ function PartTimeDayRow({
   const signature = JSON.stringify({
     clockIn,
     clockOut,
-    breakMinutes: Number(breakMinutes || 0),
     hourlyRate: Number(hourlyRate || 0),
     allowance: Number(allowance || 0),
     advance: Number(advance || 0),
@@ -1410,7 +1548,6 @@ function PartTimeDayRow({
     JSON.stringify({
       clockIn: draft.clockIn || '',
       clockOut: draft.clockOut || '',
-      breakMinutes: Number(draft.breakMinutes || 0),
       hourlyRate: Number(draft.hourlyRate || 0),
       allowance: Number(draft.allowance || 0),
       advance: Number(draft.advance || 0),
@@ -1418,13 +1555,7 @@ function PartTimeDayRow({
 
   const markDirty = () => {
     if (locked) return;
-
-    // Do not interrupt a visible "Saving" state while an earlier blur-save is
-    // still in flight. When that save finishes it will recognise that newer
-    // unsaved input exists and switch the row back to "Unsaved".
-    if (pendingSaveCountRef.current === 0) {
-      setSaveState('dirty');
-    }
+    if (pendingSaveCountRef.current === 0) setSaveState('dirty');
   };
 
   const queueBlurSave = (draft = buildDraft()) => {
@@ -1465,60 +1596,38 @@ function PartTimeDayRow({
 
     const executeSave = async () => {
       let ok = false;
-
       try {
         ok = await onSave(draft);
       } catch (error) {
         console.error('Part-time blur save failed:', error);
         ok = false;
       } finally {
-        pendingSaveCountRef.current = Math.max(
-          0,
-          pendingSaveCountRef.current - 1
-        );
+        pendingSaveCountRef.current = Math.max(0, pendingSaveCountRef.current - 1);
       }
 
       if (ok) {
         lastSavedSignatureRef.current = draftSignature;
-
-        if (pendingSaveCountRef.current > 0) {
-          setSaveState('saving');
-        } else if (latestSignatureRef.current === draftSignature) {
-          setSaveState('saved');
-        } else {
-          // A later field has been changed but not blurred yet.
-          setSaveState('dirty');
-        }
+        if (pendingSaveCountRef.current > 0) setSaveState('saving');
+        else if (latestSignatureRef.current === draftSignature) setSaveState('saved');
+        else setSaveState('dirty');
       } else if (pendingSaveCountRef.current > 0) {
         setSaveState('saving');
       } else {
         setSaveState('error');
       }
-
       return ok;
     };
 
-    // Always preserve write order. This prevents a slower earlier save from
-    // overwriting a newer blur-save when the user tabs through fields quickly.
-    saveQueueRef.current = saveQueueRef.current
-      .catch(() => false)
-      .then(executeSave);
+    saveQueueRef.current = saveQueueRef.current.catch(() => false).then(executeSave);
   };
 
-  const commitCurrentField = () => {
-    queueBlurSave(buildDraft());
-  };
+  const commitCurrentField = () => queueBlurSave(buildDraft());
 
   const resetTransport = () => {
     const nextAllowance = DEFAULT_PART_TIME_TRANSPORT_ALLOWANCE;
-
     setAllowance(nextAllowance);
     setAllowanceEditing(false);
-
-    queueBlurSave({
-      ...buildDraft(),
-      allowance: nextAllowance,
-    });
+    queueBlurSave({ ...buildDraft(), allowance: nextAllowance });
   };
 
   const requestDelete = async () => {
@@ -1527,147 +1636,111 @@ function PartTimeDayRow({
     const confirmed = window.confirm(
       `Delete the ${shortDayLabel(date)} part-time entry? This removes the saved shift and the timesheet advance for this date.`
     );
-
     if (!confirmed) return;
 
     setDeleteBusy(true);
     setSaveState('saving');
-
     try {
       const ok = await onDelete(date);
-      if (!ok) {
-        setSaveState('error');
-      }
+      if (!ok) setSaveState('error');
     } finally {
       setDeleteBusy(false);
     }
   };
 
   const saveBadge = (() => {
-    if (locked) {
-      return (
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-slate-500">
-          <Lock size={10} /> Locked
-        </span>
-      );
-    }
-
-    if (saving || saveState === 'saving') {
-      return (
-        <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-blue-600">
-          <RefreshCw size={11} className="animate-spin" /> Saving
-        </span>
-      );
-    }
-
-    if (saveState === 'saved') {
-      return (
-        <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-emerald-600">
-          <CheckCircle2 size={12} /> Saved
-        </span>
-      );
-    }
-
-    if (saveState === 'incomplete') {
-      return <span className="text-[10px] font-bold text-amber-600">Complete shift</span>;
-    }
-
-    if (saveState === 'error') {
-      return <span className="text-[10px] font-bold text-red-600">Save failed</span>;
-    }
-
-    if (saveState === 'dirty') {
-      return <span className="text-[10px] font-bold text-slate-500">Unsaved</span>;
-    }
-
+    if (locked) return <span className="text-[10px] font-bold text-slate-400">Locked</span>;
+    if (saving || saveState === 'saving') return <span className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600"><RefreshCw size={11} className="animate-spin" />Saving</span>;
+    if (saveState === 'saved') return <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600"><CheckCircle2 size={12} />Saved</span>;
+    if (saveState === 'incomplete') return <span className="text-[10px] font-bold text-amber-600">Complete shift</span>;
+    if (saveState === 'error') return <span className="text-[10px] font-bold text-red-600">Save failed</span>;
+    if (saveState === 'dirty') return <span className="text-[10px] font-bold text-slate-500">Unsaved</span>;
     return <span className="text-[10px] font-bold text-slate-300">Not entered</span>;
   })();
 
-  const controlBase =
-    'rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400';
-
   return (
     <tr className="group border-b border-slate-100 align-middle transition hover:bg-slate-50/60">
-      <td className="sticky left-0 z-10 bg-white px-4 py-3 shadow-[1px_0_0_0_#e2e8f0] group-hover:bg-slate-50">
-        <p className="whitespace-nowrap text-xs font-black text-slate-800">
-          {dateFromIso(date).toLocaleDateString('en-SG', { weekday: 'short' })}
-        </p>
-        <p className="mt-0.5 whitespace-nowrap text-[10px] font-medium text-slate-400">
-          {dateFromIso(date).toLocaleDateString('en-SG', { day: '2-digit', month: 'short' })}
-        </p>
+      <td className="sticky left-0 z-10 w-[92px] min-w-[92px] bg-white px-2.5 py-3 shadow-[1px_0_0_0_#e2e8f0] group-hover:bg-slate-50">
+        <p className="whitespace-nowrap text-xs font-black text-slate-800">{dateFromIso(date).toLocaleDateString('en-SG', { weekday: 'short' })}</p>
+        <p className="mt-0.5 whitespace-nowrap text-[10px] font-medium text-slate-400">{dateFromIso(date).toLocaleDateString('en-SG', { day: '2-digit', month: 'short' })}</p>
       </td>
 
-      <td className="min-w-[285px] px-4 py-4">
-        <div className="grid grid-cols-[1fr_auto_1fr_72px] items-end gap-3">
+      <td className="w-[245px] min-w-[245px] px-2.5 py-3">
+        <div className="grid grid-cols-[1fr_18px_1fr] items-end gap-1.5">
           <label className="min-w-0">
-            <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wide text-slate-400">Start</span>
-            <input type="time" value={clockIn} disabled={locked} onChange={(event) => { setClockIn(event.target.value); markDirty(); }} onBlur={commitCurrentField} className={`${controlBase} w-full border-0 border-b-2 border-slate-200 bg-transparent px-0 py-2 text-[13px] font-semibold focus:border-blue-500 focus:ring-0`} />
+            <span className="mb-1 block text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Start</span>
+            <TimePickerField
+              value={clockIn}
+              disabled={locked}
+              onChange={(value) => { setClockIn(value); markDirty(); }}
+              onCommit={commitCurrentField}
+            />
           </label>
-          <span className="pb-2 text-slate-300">→</span>
+          <span className="pb-2 text-center text-[12px] font-bold text-slate-300">→</span>
           <label className="min-w-0">
-            <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wide text-slate-400">End</span>
-            <input type="time" value={clockOut} disabled={locked} onChange={(event) => { setClockOut(event.target.value); markDirty(); }} onBlur={commitCurrentField} className={`${controlBase} w-full border-0 border-b-2 border-slate-200 bg-transparent px-0 py-2 text-[13px] font-semibold focus:border-blue-500 focus:ring-0`} />
-          </label>
-          <label className="w-[72px]">
-            <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wide text-slate-400">Break</span>
-            <div className="relative border-b-2 border-slate-200 focus-within:border-blue-500">
-              <input type="number" min="0" step="5" value={breakMinutes} disabled={locked} onChange={(event) => { setBreakMinutes(event.target.value); markDirty(); }} onBlur={commitCurrentField} className="w-full bg-transparent px-0 py-2 pr-4 text-right font-mono text-[13px] font-semibold text-slate-900 outline-none" />
-              <span className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-[9px] font-medium text-slate-400">m</span>
-            </div>
+            <span className="mb-1 block text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">End</span>
+            <TimePickerField
+              value={clockOut}
+              disabled={locked}
+              onChange={(value) => { setClockOut(value); markDirty(); }}
+              onCommit={commitCurrentField}
+            />
           </label>
         </div>
         {!hasStoredTiming && legacyHours > 0 && !hasTiming && (
-          <div className="mt-2 text-[10px] font-medium text-amber-700">Legacy entry · {legacyHours.toFixed(2)}h</div>
+          <div className="mt-1.5 text-[9px] font-medium text-amber-700">Legacy entry · {legacyHours.toFixed(2)}h</div>
         )}
       </td>
-      <td className="min-w-[115px] px-4 py-4 text-right">
-        <p className="font-mono text-xs font-black text-slate-800">{durationLabel(computedHours)}</p>
+
+      <td className="w-[92px] min-w-[92px] px-2 py-3 text-right">
+        <p className="font-mono text-xs font-black tabular-nums text-slate-800">{durationLabel(computedHours)}</p>
         <p className="mt-0.5 font-mono text-[9px] text-slate-400">{computedHours.toFixed(2)} hrs</p>
       </td>
 
-      <td className="min-w-[165px] px-4 py-4">
-        <div className="ml-auto w-[145px]">
+      <td className="w-[128px] min-w-[128px] px-2.5 py-3">
+        <div className="ml-auto w-[118px]">
           <div className="flex items-center border-b-2 border-blue-200 focus-within:border-blue-500">
-            <span className="pb-1 text-[12px] font-semibold text-blue-500">S$</span>
-            <input type="number" min="0" step="0.01" value={hourlyRate} disabled={locked} onChange={(event) => { setHourlyRate(event.target.value); markDirty(); }} onBlur={commitCurrentField} className="w-full bg-transparent px-1 pb-1 text-right font-mono text-[13px] font-semibold text-blue-900 outline-none" />
-            <span className="pb-1 text-[10px] font-medium text-blue-400">/hr</span>
+            <span className="pb-1 text-[11px] font-semibold text-blue-500">S$</span>
+            <input type="number" min="0" step="0.01" value={hourlyRate} disabled={locked} onChange={(event) => { setHourlyRate(event.target.value); markDirty(); }} onBlur={commitCurrentField} className="w-full bg-transparent px-1 pb-1 text-right font-mono text-[13px] font-semibold tabular-nums text-blue-900 outline-none" />
+            <span className="pb-1 text-[9px] font-medium text-blue-400">/hr</span>
           </div>
-          <p className="mt-1.5 text-right text-[11px] text-slate-500">Pay <span className="font-mono font-semibold text-slate-900">S${formatMoney(hourlyPay)}</span></p>
+          <p className="mt-1 text-right text-[10px] text-slate-500">Pay <span className="font-mono font-semibold text-slate-900">S${formatMoney(hourlyPay)}</span></p>
         </div>
       </td>
-      <td className="min-w-[140px] px-4 py-4">
-        <div className="ml-auto w-[125px] text-right">
+
+      <td className="w-[106px] min-w-[106px] px-2 py-3">
+        <div className="ml-auto w-[98px] text-right">
           {allowanceEditing && !locked ? (
             <div>
               <div className="flex items-center border-b-2 border-slate-300 focus-within:border-blue-500">
-                <span className="pb-1 text-[12px] font-semibold text-slate-400">S$</span>
-                <input autoFocus type="number" min="0" step="0.01" value={allowance} onChange={(event) => { setAllowance(event.target.value); markDirty(); }} onBlur={() => { setAllowanceEditing(false); commitCurrentField(); }} className="w-full bg-transparent px-1 pb-1 text-right font-mono text-[13px] font-semibold text-slate-900 outline-none" />
+                <span className="pb-1 text-[11px] font-semibold text-slate-400">S$</span>
+                <input autoFocus type="number" min="0" step="0.01" value={allowance} onChange={(event) => { setAllowance(event.target.value); markDirty(); }} onBlur={() => { setAllowanceEditing(false); commitCurrentField(); }} className="w-full bg-transparent px-1 pb-1 text-right font-mono text-[13px] font-semibold tabular-nums text-slate-900 outline-none" />
               </div>
-              {Number(allowance) !== DEFAULT_PART_TIME_TRANSPORT_ALLOWANCE && (
-                <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={resetTransport} className="mt-1 text-[10px] font-semibold text-blue-600">Reset S$5</button>
-              )}
+              {Number(allowance) !== DEFAULT_PART_TIME_TRANSPORT_ALLOWANCE && <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={resetTransport} className="mt-1 text-[9px] font-semibold text-blue-600">Reset S$5</button>}
             </div>
           ) : (
             <button type="button" disabled={locked} onClick={() => setAllowanceEditing(true)} className="w-full border-b-2 border-slate-200 pb-1 text-right transition hover:border-blue-500 disabled:cursor-not-allowed disabled:opacity-50" title="Click to edit this day's transport allowance">
-              <span className="block font-mono text-[13px] font-semibold text-slate-900">S${formatMoney(computedHours > 0 ? dayAllowance : DEFAULT_PART_TIME_TRANSPORT_ALLOWANCE)}</span>
-              <span className={`mt-1 block text-[10px] font-medium ${Number(allowance) === DEFAULT_PART_TIME_TRANSPORT_ALLOWANCE ? 'text-slate-400' : 'text-blue-600'}`}>{Number(allowance) === DEFAULT_PART_TIME_TRANSPORT_ALLOWANCE ? 'Standard · Edit' : 'Custom · Edit'}</span>
+              <span className="block font-mono text-[13px] font-semibold tabular-nums text-slate-900">S${formatMoney(computedHours > 0 ? dayAllowance : DEFAULT_PART_TIME_TRANSPORT_ALLOWANCE)}</span>
+              <span className={`mt-0.5 block text-[9px] font-medium ${Number(allowance) === DEFAULT_PART_TIME_TRANSPORT_ALLOWANCE ? 'text-slate-400' : 'text-blue-600'}`}>{Number(allowance) === DEFAULT_PART_TIME_TRANSPORT_ALLOWANCE ? 'Standard · Edit' : 'Custom · Edit'}</span>
             </button>
           )}
         </div>
       </td>
-      <td className="min-w-[125px] bg-emerald-50/50 px-4 py-4 text-right">
-        <p className="font-mono text-xs font-black text-emerald-800">${formatMoney(gross)}</p>
+
+      <td className="w-[106px] min-w-[106px] bg-emerald-50/50 px-2 py-3 text-right">
+        <p className="font-mono text-xs font-black tabular-nums text-emerald-800">${formatMoney(gross)}</p>
         <p className="mt-0.5 text-[8px] font-black uppercase tracking-wider text-emerald-600/60">Gross</p>
       </td>
 
-      <td className="min-w-[140px] px-4 py-4">
-        <div className="relative ml-auto w-[125px] border-b-2 border-amber-200 focus-within:border-amber-500">
-          <span className="absolute left-0 top-1/2 -translate-y-1/2 text-[12px] font-semibold text-amber-500">S$</span>
-          <input type="number" min="0" step="0.01" value={advance} disabled={locked} onChange={(event) => { setAdvance(event.target.value); markDirty(); }} onBlur={commitCurrentField} className="w-full bg-transparent py-2 pl-6 pr-0 text-right font-mono text-[13px] font-semibold text-amber-800 outline-none" />
+      <td className="w-[106px] min-w-[106px] px-2 py-3">
+        <div className="relative ml-auto w-[98px] border-b-2 border-amber-200 focus-within:border-amber-500">
+          <span className="absolute left-0 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-amber-500">S$</span>
+          <input type="number" min="0" step="0.01" value={advance} disabled={locked} onChange={(event) => { setAdvance(event.target.value); markDirty(); }} onBlur={commitCurrentField} className="w-full bg-transparent py-2 pl-6 pr-0 text-right font-mono text-[13px] font-semibold tabular-nums text-amber-800 outline-none" />
         </div>
-        {otherAdvanceAmount > 0 && <p className="mt-1 text-right text-[10px] font-medium text-amber-600">+S${formatMoney(otherAdvanceAmount)} ledger</p>}
+        {otherAdvanceAmount > 0 && <p className="mt-1 text-right text-[9px] font-medium text-amber-600">+S${formatMoney(otherAdvanceAmount)} ledger</p>}
       </td>
-      <td className="min-w-[150px] px-4 py-3 align-middle">
+
+      <td className="w-[112px] min-w-[112px] px-2 py-3 align-middle">
         <PartTimeSalaryIssuedCell
           value={salaryIssued}
           locked={locked}
@@ -1676,24 +1749,15 @@ function PartTimeDayRow({
         />
       </td>
 
-      <td className="min-w-[125px] px-4 py-3 text-right">
-        <p className={`font-mono text-[14px] font-semibold ${dayBalance < 0 ? 'text-red-700' : 'text-slate-900'}`}>
-          {signedMoney(dayBalance)}
-        </p>
-        <p className="mt-1 text-[10px] font-medium text-slate-400">After payment</p>
+      <td className="w-[105px] min-w-[105px] px-2 py-3 text-right">
+        <p className={`font-mono text-[13px] font-semibold tabular-nums ${dayBalance < 0 ? 'text-red-700' : 'text-slate-900'}`}>{signedMoney(dayBalance)}</p>
+        <p className="mt-1 text-[9px] font-medium text-slate-400">After payment</p>
       </td>
 
-      <td className="min-w-[130px] px-3 py-3">
-        <div className="flex items-center justify-end gap-2">
-          <div className="min-w-[66px] text-right">{saveBadge}</div>
-
-          <button
-            type="button"
-            disabled={!hasStoredEntry || locked || deleteBusy}
-            onClick={requestDelete}
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-400 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-25"
-            title={locked ? 'Locked rows cannot be deleted' : 'Delete this date entry'}
-          >
+      <td className="w-[108px] min-w-[108px] px-2 py-3">
+        <div className="flex items-center justify-end gap-1.5">
+          <div className="min-w-[58px] text-right">{saveBadge}</div>
+          <button type="button" disabled={!hasStoredEntry || locked || deleteBusy} onClick={requestDelete} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-400 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-25" title={locked ? 'Locked rows cannot be deleted' : 'Delete this date entry'}>
             {deleteBusy ? <RefreshCw size={13} className="animate-spin" /> : <Trash2 size={13} />}
           </button>
         </div>
@@ -2323,7 +2387,7 @@ export function EmployeeModule() {
     }
 
     const computedHours = hasStart && hasEnd
-      ? clockedHours(draft.clockIn, draft.clockOut, draft.breakMinutes)
+      ? clockedHours(draft.clockIn, draft.clockOut)
       : Number(draft.legacyHours || 0);
 
     if (computedHours > 24) {
@@ -2364,7 +2428,7 @@ export function EmployeeModule() {
           work_date: draft.date,
           clock_in: hasStart ? draft.clockIn : null,
           clock_out: hasEnd ? draft.clockOut : null,
-          break_minutes: Number(draft.breakMinutes || 0),
+          break_minutes: 0,
           regular_hours: computedHours,
           overtime_hours: 0,
           hourly_rate_snapshot: computedHours > 0 ? Number(draft.hourlyRate || 0) : 0,
@@ -2891,19 +2955,19 @@ export function EmployeeModule() {
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[1620px] border-collapse text-left">
+                <table className="w-full min-w-[1240px] border-collapse text-left">
                   <thead className="bg-white">
                     <tr className="border-b border-slate-200 bg-slate-50/70 text-[11px] font-semibold uppercase tracking-[0.06em] text-slate-500">
-                      <th className="sticky left-0 z-20 min-w-[120px] bg-slate-50/90 px-5 py-4 shadow-[1px_0_0_0_#e2e8f0]">Date</th>
-                      <th className="min-w-[285px] px-4 py-4">Work Shift</th>
-                      <th className="min-w-[105px] px-3 py-3 text-right">Duration</th>
-                      <th className="min-w-[165px] px-4 py-4 text-right">Rate / Hourly Pay</th>
-                      <th className="min-w-[140px] px-4 py-4 text-right">Transport</th>
-                      <th className="min-w-[115px] bg-emerald-50/30 px-3 py-3 text-right">Gross</th>
-                      <th className="min-w-[140px] px-4 py-4 text-right">Advance</th>
-                      <th className="min-w-[155px] px-4 py-3 text-right text-blue-700">Salary Issued<br /><span className="normal-case font-medium tracking-normal text-blue-400">paid on this date</span></th>
-                      <th className="min-w-[125px] px-4 py-3 text-right">Balance</th>
-                      <th className="min-w-[130px] px-3 py-3 text-right">Database</th>
+                      <th className="sticky left-0 z-20 w-[92px] min-w-[92px] bg-slate-50/90 px-2.5 py-3 shadow-[1px_0_0_0_#e2e8f0]">Date</th>
+                      <th className="w-[245px] min-w-[245px] px-2.5 py-3">Work Shift</th>
+                      <th className="w-[92px] min-w-[92px] px-2 py-3 text-right">Duration</th>
+                      <th className="w-[128px] min-w-[128px] px-2.5 py-3 text-right">Rate / hr</th>
+                      <th className="w-[106px] min-w-[106px] px-2 py-3 text-right">Transport</th>
+                      <th className="w-[106px] min-w-[106px] bg-emerald-50/30 px-2 py-3 text-right">Gross</th>
+                      <th className="w-[106px] min-w-[106px] px-2 py-3 text-right">Advance</th>
+                      <th className="w-[112px] min-w-[112px] px-2 py-3 text-right text-blue-700">Salary Issued<br /><span className="normal-case font-medium tracking-normal text-blue-400">paid on date</span></th>
+                      <th className="w-[105px] min-w-[105px] px-2 py-3 text-right">Balance</th>
+                      <th className="w-[108px] min-w-[108px] px-2 py-3 text-right">Database</th>
                     </tr>
                   </thead>
 
