@@ -23,7 +23,6 @@ import {
   ChevronRight,
   Lock,
   Table2,
-  CreditCard,
   CheckCircle2,
   RefreshCw,
   TrendingUp
@@ -93,3 +92,5 @@ function EmployeeContractForm({ employees }) {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [customContractHTML, setCustomContractHTML] = useState(null);
   const editorRef = useRef(null);
+
+  // --- Handlers ---
