@@ -2883,6 +2883,10 @@ export function EmployeeModule() {
 
     const salaryIssuedThisInterval = Number(currentSalaryPayment?.amount || 0);
 
+    // Positive = salary still owed to the employee for this interval.
+    // Negative = employee has received more than the interval amount and owes the company.
+    const intervalOutstanding = currentBalance - salaryIssuedThisInterval;
+
     const broughtForwardRows = selectedEmployee
       ? payroll.filter(
           (row) =>
@@ -2954,7 +2958,7 @@ export function EmployeeModule() {
                 Part-Time Pay Workspace
               </h2>
               <p className="mt-1 max-w-4xl text-xs leading-5 text-slate-500">
-                Enter the shift timing, rate and any advance directly in the ledger. Nothing is saved while you are typing; the completed value is written to Supabase only when you click, tap or tab away from that field. Transport defaults to $5 per worked day, and unsettled balances continue rolling into the next payment interval. Enter the amount actually paid in the Salary Issued column; the remaining balance rolls forward automatically.
+                Enter the shift timing, rate and any advance directly in the ledger. Enter the actual amount paid in the Salary Issued column for this payment interval. The system calculates the interval balance: a positive amount means salary is still owed to the employee; a negative amount means the employee has received more than the interval amount and owes the company.
               </p>
             </div>
 
@@ -3115,7 +3119,7 @@ export function EmployeeModule() {
                       <th className="min-w-[115px] bg-emerald-50/30 px-3 py-3 text-right">Gross</th>
                       <th className="min-w-[130px] px-3 py-3 text-right">Advance</th>
                       <th className="min-w-[150px] px-3 py-3 text-right">Salary Issued<br /><span className="normal-case font-semibold tracking-normal text-slate-300">interval total</span></th>
-                      <th className="min-w-[118px] px-3 py-3 text-right">Daily Balance</th>
+                      <th className="min-w-[155px] px-3 py-3 text-right">Outstanding After Payment</th>
                       <th className="min-w-[130px] px-3 py-3 text-right">Database</th>
                     </tr>
                   </thead>
@@ -3167,9 +3171,9 @@ export function EmployeeModule() {
                           onSave={(amount) => savePartTimeSalaryIssued(selectedEmployee, bounds, amount)}
                         />
                       </td>
-                      <td className={`px-3 py-4 text-right font-mono ${currentBalance < 0 ? 'text-red-700' : 'text-blue-700'}`}>
-                        <p>{signedMoney(currentBalance)}</p>
-                        <p className="mt-0.5 text-[8px] font-black uppercase tracking-wider text-slate-400">Before payment</p>
+                      <td className={`px-3 py-4 text-right font-mono ${intervalOutstanding < 0 ? 'text-red-700' : intervalOutstanding > 0 ? 'text-blue-700' : 'text-emerald-700'}`}>
+                        <p>{signedMoney(intervalOutstanding)}</p>
+                        <p className="mt-0.5 text-[8px] font-black uppercase tracking-wider text-slate-400">After salary issued</p>
                       </td>
                       <td className="px-3 py-4 text-right text-[9px] font-black uppercase tracking-wider text-slate-400">Salary issued saved on exit</td>
                     </tr>
@@ -3189,9 +3193,10 @@ export function EmployeeModule() {
                     ['Transport Allowance', transportTotal],
                     ['Gross Earnings', grossEarnings],
                     ['Advance Taken', -advancesThisInterval],
+                    ['Salary Due Before Payment', currentBalance],
                     ['Salary Issued', -salaryIssuedThisInterval],
-                    ['Current Interval Balance', currentBalance],
-                    ['Brought Forward', broughtForward],
+                    ['Outstanding / (Employee Owes)', intervalOutstanding],
+                    ['Brought Forward (separate)', broughtForward],
                   ].map(([label, amount], index) => (
                     <div
                       key={label}
@@ -3203,6 +3208,33 @@ export function EmployeeModule() {
                       </span>
                     </div>
                   ))}
+                </div>
+              </div>
+
+              <div className={`rounded-2xl border p-5 shadow-sm xl:col-span-7 ${intervalOutstanding < 0 ? 'border-red-200 bg-red-50' : intervalOutstanding > 0 ? 'border-blue-200 bg-blue-50' : 'border-emerald-200 bg-emerald-50'}`}>
+                <p className={`text-[10px] font-black uppercase tracking-[0.18em] ${intervalOutstanding < 0 ? 'text-red-600' : intervalOutstanding > 0 ? 'text-blue-600' : 'text-emerald-600'}`}>
+                  This Interval · Outstanding After Payment
+                </p>
+                <p className={`mt-2 text-4xl font-black tracking-tight ${intervalOutstanding < 0 ? 'text-red-900' : intervalOutstanding > 0 ? 'text-blue-900' : 'text-emerald-900'}`}>
+                  {signedMoney(intervalOutstanding)}
+                </p>
+                <p className={`mt-2 text-xs leading-5 ${intervalOutstanding < 0 ? 'text-red-700' : intervalOutstanding > 0 ? 'text-blue-700' : 'text-emerald-700'}`}>
+                  {intervalOutstanding < 0
+                    ? `Employee owes the company $${formatMoney(Math.abs(intervalOutstanding))} for this interval.`
+                    : intervalOutstanding > 0
+                      ? `You still owe ${selectedEmployee.name} $${formatMoney(intervalOutstanding)} for this interval.`
+                      : 'This interval is fully settled.'}
+                </p>
+
+                <div className="mt-5 grid grid-cols-2 gap-3">
+                  <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                    <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Salary Due</p>
+                    <p className="mt-1 font-mono text-lg font-black text-slate-900">${formatMoney(currentBalance)}</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                    <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Salary Issued</p>
+                    <p className="mt-1 font-mono text-lg font-black text-slate-900">${formatMoney(salaryIssuedThisInterval)}</p>
+                  </div>
                 </div>
               </div>
 
@@ -3234,7 +3266,7 @@ export function EmployeeModule() {
             </div>
 
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-[10px] leading-5 text-slate-500">
-              <strong>Save-on-exit & rolling balance:</strong> typing never triggers a database write. A completed timing/rate/advance edit is saved only when you leave that field by clicking, tapping or tabbing elsewhere. Transport defaults to $5 for every worked day and can be overridden per date. Delete removes only that date’s timesheet entry and its timesheet-linked advance. Salary issued is saved only when you leave the amount field. The remaining balance carries forward automatically; payment history is stored separately from payroll calculations, and historical paid payroll remains protected.
+              <strong>Salary issued & interval balance:</strong> enter the actual amount paid to the part-time employee in the Salary Issued field. The system calculates <strong>Salary Due Before Payment − Salary Issued</strong>. A positive balance means you still owe the employee; a negative balance means the employee owes the company. The value is saved when you leave the Salary Issued field. Historical paid intervals remain protected.
             </div>
           </>
         )}
