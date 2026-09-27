@@ -1817,65 +1817,71 @@ function PartTimeDayRow({
 }
 
 function PartTimeSalaryIssuedCell({
-  value,
   locked,
   saving,
   onSave,
 }) {
-  const [draft, setDraft] = useState(value > 0 ? Number(value).toFixed(2) : '');
-  const lastExternalValueRef = useRef(value);
-  const lastSavedRef = useRef(value > 0 ? Number(value).toFixed(2) : '');
-  const saveQueueRef = useRef(Promise.resolve());
+  const [draftAmount, setDraftAmount] = useState('');
+  const [paymentDate, setPaymentDate] = useState(localDateString());
 
-  useEffect(() => {
-    const next = Number(value || 0) > 0 ? Number(value).toFixed(2) : '';
-    if (Number(lastExternalValueRef.current || 0) !== Number(value || 0)) {
-      setDraft(next);
-      lastSavedRef.current = next;
-      lastExternalValueRef.current = value;
-    }
-  }, [value]);
+  const commit = async () => {
+    if (locked || saving) return;
 
-  const commit = () => {
-    if (locked) return;
-
-    const cleaned = String(draft || '').trim();
+    const cleaned = String(draftAmount || '').trim();
     const numeric = cleaned === '' ? 0 : Number(cleaned);
 
-    if (!Number.isFinite(numeric) || numeric < 0) {
-      setDraft(lastSavedRef.current);
+    if (!Number.isFinite(numeric) || numeric <= 0) {
       return;
     }
 
-    const normalised = numeric > 0 ? numeric.toFixed(2) : '';
-    if (normalised === lastSavedRef.current) return;
-
-    lastSavedRef.current = normalised;
-    saveQueueRef.current = saveQueueRef.current
-      .catch(() => false)
-      .then(() => onSave(numeric));
+    const ok = await onSave(numeric, paymentDate || localDateString());
+    if (ok) {
+      // Keep the field blank after recording a payment. The value displayed
+      // in the interval total is derived from the saved payment ledger.
+      setDraftAmount('');
+    }
   };
 
   return (
-    <div className="min-w-[150px]">
+    <div className="min-w-[180px] space-y-1.5">
       <div className="relative">
         <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400">
           $
         </span>
         <input
           type="number"
-          min="0"
+          min="0.01"
           step="0.01"
-          value={draft}
-          disabled={locked}
-          placeholder="0.00"
-          onChange={(event) => setDraft(event.target.value)}
-          onBlur={commit}
+          value={draftAmount}
+          disabled={locked || saving}
+          placeholder="Enter amount paid"
+          onChange={(event) => setDraftAmount(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              commit();
+            }
+          }}
           className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-7 pr-2 text-right font-mono text-xs font-black text-slate-800 outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-400"
         />
       </div>
-      <p className="mt-1 text-right text-[8px] font-black uppercase tracking-wider text-slate-400">
-        {saving ? 'Saving…' : locked ? 'Locked' : 'Save on exit'}
+      <input
+        type="date"
+        value={paymentDate}
+        disabled={locked || saving}
+        onChange={(event) => setPaymentDate(event.target.value)}
+        className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[10px] font-bold text-slate-600 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-400"
+      />
+      <button
+        type="button"
+        disabled={locked || saving || !(Number(draftAmount) > 0)}
+        onClick={commit}
+        className="w-full rounded-lg bg-emerald-600 px-2 py-1.5 text-[9px] font-black uppercase tracking-wider text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+      >
+        {saving ? 'Recording…' : 'Record Payment'}
+      </button>
+      <p className="text-right text-[8px] font-black uppercase tracking-wider text-slate-400">
+        Blank until you actually pay
       </p>
     </div>
   );
@@ -2283,24 +2289,28 @@ export function EmployeeModule() {
   };
 
   const salaryPaymentSourceKey = (employeeId, periodStart, periodEnd) =>
-    `pt-salary:${employeeId}:${periodStart}:${periodEnd}`;
+    `pt-salary:${employeeId}:${periodStart}:${periodEnd}:${crypto.randomUUID()}`;
 
-  const getPartTimeSalaryPayment = (employeeId, periodStart, periodEnd) =>
-    salaryPayments.find(
-      (row) =>
-        String(row.employee_id) === String(employeeId) &&
-        row.period_start === periodStart &&
-        row.period_end === periodEnd
-    ) || null;
+  const getPartTimeSalaryPayments = (employeeId, periodStart, periodEnd) =>
+    salaryPayments
+      .filter(
+        (row) =>
+          String(row.employee_id) === String(employeeId) &&
+          row.period_start === periodStart &&
+          row.period_end === periodEnd
+      )
+      .sort((a, b) => String(b.payment_date || '').localeCompare(String(a.payment_date || '')));
 
-  const savePartTimeSalaryIssued = async (employee, bounds, amountValue) => {
+  const getPartTimeSalaryIssuedTotal = (employeeId, periodStart, periodEnd) =>
+    getPartTimeSalaryPayments(employeeId, periodStart, periodEnd)
+      .reduce((sum, row) => sum + Number(row.amount || 0), 0);
+
+  const savePartTimeSalaryIssued = async (employee, bounds, amountValue, paymentDateValue) => {
     const amount = Number(amountValue || 0);
-    const sourceKey = salaryPaymentSourceKey(employee.id, bounds.start, bounds.end);
-    const existingPayment = salaryPayments.find((row) => row.source_key === sourceKey) ||
-      getPartTimeSalaryPayment(employee.id, bounds.start, bounds.end);
+    const paymentDate = String(paymentDateValue || localDateString());
 
-    if (amount < 0) {
-      notify('Invalid salary issued amount', 'error', 'The amount paid cannot be negative.');
+    if (!Number.isFinite(amount) || amount <= 0) {
+      notify('Enter a payment amount', 'warning', 'Salary Issued is an actual payment record. Enter the amount only when you have paid the employee.');
       return false;
     }
 
@@ -2312,7 +2322,7 @@ export function EmployeeModule() {
     );
 
     if (existingPayroll?.status === 'paid') {
-      notify('Paid interval is locked', 'error', 'Salary issued cannot be changed after the interval is locked.');
+      notify('Paid interval is locked', 'error', 'Salary payment records cannot be changed after the interval is locked.');
       return false;
     }
 
@@ -2320,29 +2330,8 @@ export function EmployeeModule() {
     setPartTimeSavingKey(savingKey);
 
     try {
-      // A zero value means "remove the interval payment" rather than storing
-      // an unnecessary zero-dollar payment record.
-      if (amount === 0) {
-        if (!existingPayment) {
-          return true;
-        }
-
-        const deletion = await supabase
-          .from('employee_salary_payments')
-          .delete()
-          .eq('id', existingPayment.id);
-
-        if (deletion.error) throw deletion.error;
-
-        setSalaryPayments((current) =>
-          current.filter((row) => row.id !== existingPayment.id)
-        );
-        return true;
-      }
-
-      // Make sure the interval payroll row exists and is synchronised before
-      // linking the payment to it. This keeps the payment record tied to the
-      // exact payroll interval used by the rolling calculation.
+      // Salary Issued is an actual payment ledger. Every time money is paid,
+      // create a new record instead of overwriting the previous payment.
       let payrollRow = existingPayroll || null;
       if (!payrollRow) {
         payrollRow = await syncPartTimeInterval(employee, bounds.end);
@@ -2352,7 +2341,7 @@ export function EmployeeModule() {
         notify(
           'Enter the salary calculation first',
           'warning',
-          'Record at least one work shift or advance for this interval before entering salary issued.'
+          'Record at least one work shift or advance for this interval before recording a salary payment.'
         );
         return false;
       }
@@ -2363,31 +2352,32 @@ export function EmployeeModule() {
         period_start: bounds.start,
         period_end: bounds.end,
         amount,
-        payment_date: existingPayment?.payment_date || localDateString(),
-        payment_method: existingPayment?.payment_method || employee.paymentMethod || 'Bank Transfer',
-        payment_reference: existingPayment?.payment_reference || null,
-        source_key: sourceKey,
-        notes: existingPayment?.notes || 'Part-Time salary issued for payment interval',
+        payment_date: paymentDate,
+        payment_method: employee.paymentMethod || 'Bank Transfer',
+        payment_reference: null,
+        source_key: salaryPaymentSourceKey(employee.id, bounds.start, bounds.end),
+        notes: 'Part-Time salary payment actually issued',
       };
 
       const result = await supabase
         .from('employee_salary_payments')
-        .upsert([paymentPayload], { onConflict: 'source_key' })
+        .insert(paymentPayload)
         .select()
         .single();
 
       if (result.error) throw result.error;
 
-      setSalaryPayments((current) => [
-        result.data,
-        ...current.filter((row) => row.id !== result.data.id),
-      ].sort((a, b) => String(b.payment_date || '').localeCompare(String(a.payment_date || ''))));
+      setSalaryPayments((current) =>
+        [result.data, ...current].sort((a, b) =>
+          String(b.payment_date || '').localeCompare(String(a.payment_date || ''))
+        )
+      );
 
-      notify('Salary issued updated', 'success', `${employee.name}: $${formatMoney(amount)}`);
+      notify('Salary payment recorded', 'success', `${employee.name}: $${formatMoney(amount)} paid on ${paymentDate}`);
       return true;
     } catch (error) {
-      console.error('Part-time salary issued save failed:', error);
-      notify('Salary issued could not be saved', 'error', error?.message || 'Unknown error');
+      console.error('Part-time salary payment save failed:', error);
+      notify('Salary payment could not be saved', 'error', error?.message || 'Unknown error');
       return false;
     } finally {
       setPartTimeSavingKey((current) => current === savingKey ? '' : current);
@@ -2877,11 +2867,14 @@ export function EmployeeModule() {
       ? Number(currentPayroll.net_pay || 0)
       : grossEarnings - advancesThisInterval;
 
-    const currentSalaryPayment = selectedEmployee
-      ? getPartTimeSalaryPayment(selectedEmployee.id, bounds.start, bounds.end)
-      : null;
+    const currentSalaryPayments = selectedEmployee
+      ? getPartTimeSalaryPayments(selectedEmployee.id, bounds.start, bounds.end)
+      : [];
 
-    const salaryIssuedThisInterval = Number(currentSalaryPayment?.amount || 0);
+    const salaryIssuedThisInterval = currentSalaryPayments.reduce(
+      (sum, payment) => sum + Number(payment.amount || 0),
+      0
+    );
 
     // Positive = salary still owed to the employee for this interval.
     // Negative = employee has received more than the interval amount and owes the company.
@@ -3118,7 +3111,7 @@ export function EmployeeModule() {
                       <th className="min-w-[130px] px-3 py-3 text-right">Transport</th>
                       <th className="min-w-[115px] bg-emerald-50/30 px-3 py-3 text-right">Gross</th>
                       <th className="min-w-[130px] px-3 py-3 text-right">Advance</th>
-                      <th className="min-w-[150px] px-3 py-3 text-right">Salary Issued<br /><span className="normal-case font-semibold tracking-normal text-slate-300">interval total</span></th>
+                      <th className="min-w-[180px] px-3 py-3 text-right">Salary Issued<br /><span className="normal-case font-semibold tracking-normal text-slate-300">actual payment record</span></th>
                       <th className="min-w-[155px] px-3 py-3 text-right">Outstanding After Payment</th>
                       <th className="min-w-[130px] px-3 py-3 text-right">Database</th>
                     </tr>
@@ -3165,17 +3158,16 @@ export function EmployeeModule() {
                       <td className="px-3 py-4 text-right font-mono text-amber-800">${formatMoney(advancesThisInterval)}</td>
                       <td className="px-3 py-4 text-right">
                         <PartTimeSalaryIssuedCell
-                          value={salaryIssuedThisInterval}
                           locked={intervalLocked}
                           saving={partTimeSavingKey === `${selectedEmployee.id}|salary|${bounds.start}|${bounds.end}`}
-                          onSave={(amount) => savePartTimeSalaryIssued(selectedEmployee, bounds, amount)}
+                          onSave={(amount, paymentDate) => savePartTimeSalaryIssued(selectedEmployee, bounds, amount, paymentDate)}
                         />
                       </td>
                       <td className={`px-3 py-4 text-right font-mono ${intervalOutstanding < 0 ? 'text-red-700' : intervalOutstanding > 0 ? 'text-blue-700' : 'text-emerald-700'}`}>
                         <p>{signedMoney(intervalOutstanding)}</p>
                         <p className="mt-0.5 text-[8px] font-black uppercase tracking-wider text-slate-400">After salary issued</p>
                       </td>
-                      <td className="px-3 py-4 text-right text-[9px] font-black uppercase tracking-wider text-slate-400">Salary issued saved on exit</td>
+                      <td className="px-3 py-4 text-right text-[9px] font-black uppercase tracking-wider text-slate-400">Each entry records an actual payment</td>
                     </tr>
                   </tfoot>
                 </table>
@@ -3238,6 +3230,44 @@ export function EmployeeModule() {
                 </div>
               </div>
 
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-12">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Actual Payment History</p>
+                    <p className="mt-1 text-sm font-black text-slate-900">Salary payments recorded for this interval</p>
+                  </div>
+                  <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-[9px] font-black uppercase tracking-wider text-slate-500">
+                    {currentSalaryPayments.length} payment{currentSalaryPayments.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+                {currentSalaryPayments.length ? (
+                  <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 text-[9px] font-black uppercase tracking-wider text-slate-400">
+                        <tr>
+                          <th className="px-4 py-2.5">Payment Date</th>
+                          <th className="px-4 py-2.5 text-right">Amount Paid</th>
+                          <th className="px-4 py-2.5">Method</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {currentSalaryPayments.map((payment) => (
+                          <tr key={payment.id}>
+                            <td className="px-4 py-2.5 font-mono font-bold text-slate-600">{payment.payment_date || '—'}</td>
+                            <td className="px-4 py-2.5 text-right font-mono font-black text-emerald-700">${formatMoney(payment.amount || 0)}</td>
+                            <td className="px-4 py-2.5 text-slate-500">{payment.payment_method || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-center text-[10px] font-bold text-slate-400">
+                    No salary payment has been recorded for this interval yet. The Salary Issued field remains blank until you actually pay the employee.
+                  </div>
+                )}
+              </div>
+
               <div className={`rounded-2xl border p-5 shadow-sm xl:col-span-5 ${rollingBalance < 0 ? 'border-red-200 bg-red-50' : 'border-emerald-200 bg-emerald-50'}`}>
                 <p className={`text-[10px] font-black uppercase tracking-[0.18em] ${rollingBalance < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
                   Rolling Balance Through {bounds.end}
@@ -3266,7 +3296,7 @@ export function EmployeeModule() {
             </div>
 
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-[10px] leading-5 text-slate-500">
-              <strong>Salary issued & interval balance:</strong> enter the actual amount paid to the part-time employee in the Salary Issued field. The system calculates <strong>Salary Due Before Payment − Salary Issued</strong>. A positive balance means you still owe the employee; a negative balance means the employee owes the company. The value is saved when you leave the Salary Issued field. Historical paid intervals remain protected.
+              <strong>Salary issued & interval balance:</strong> Salary Issued is an actual payment record, not a calculated payroll field. It stays blank until you pay the employee. Enter the amount actually paid and the payment date; every payment is stored separately so you can track how much and when you paid. The interval outstanding balance is <strong>Salary Due Before Payment − Total Actual Payments</strong>. A positive balance means you still owe the employee; a negative balance means the employee owes the company. Historical paid intervals remain protected.
             </div>
           </>
         )}
