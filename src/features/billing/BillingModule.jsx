@@ -19,6 +19,15 @@ import {
   ChevronLeft,
   ChevronRight,
   Filter,
+  BarChart3,
+  Package,
+  DollarSign,
+  Percent,
+  Target,
+  UsersRound,
+  X,
+  ArrowUpDown,
+  AlertTriangle,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import JSZip from 'jszip';
@@ -100,6 +109,18 @@ export function BillingModule({ sys: _sys }) {
   const [statementLoadedAt, setStatementLoadedAt] = useState(null);
   const [statementRefreshKey, setStatementRefreshKey] = useState(0);
 
+  // Product Sales Intelligence is deliberately isolated from the existing
+  // statement engine. If the optional product RPC is unavailable, the
+  // customer billing/statement functionality continues to work normally.
+  const [productSalesRows, setProductSalesRows] = useState([]);
+  const [productAnalyticsLoading, setProductAnalyticsLoading] = useState(false);
+  const [productAnalyticsError, setProductAnalyticsError] = useState(null);
+  const [selectedProductKey, setSelectedProductKey] = useState(null);
+  const [productSearchTerm, setProductSearchTerm] = useState('');
+  const [productRankingMetric, setProductRankingMetric] = useState('sales');
+  const [productCustomerFilter, setProductCustomerFilter] = useState('All');
+  const [productTopN, setProductTopN] = useState('20');
+
   const [printTarget, setPrintTarget] = useState(null);
   const [isZipping, setIsZipping] = useState(false);
 
@@ -173,6 +194,223 @@ export function BillingModule({ sys: _sys }) {
       cancelled = true;
     };
   }, [selectedMonth, termFilter, statementRefreshKey]);
+
+  // ==========================================
+  // PRODUCT SALES INTELLIGENCE DATA ENGINE
+  // ==========================================
+  // This is intentionally a separate RPC from billing_statement_rows.
+  // Expected RPC contract: billing_product_sales_rows(p_start_date, p_end_date)
+  // returning invoice/product/customer line-level data. The mapper below
+  // accepts common field aliases so minor backend naming differences do not
+  // require a UI rewrite. Missing product-cost data is treated as unavailable
+  // rather than guessed.
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadProductSales = async () => {
+      setProductAnalyticsLoading(true);
+      setProductAnalyticsError(null);
+
+      try {
+        const { startDate, endDate } = getStatementMonthBounds(selectedMonth);
+        const { data, error } = await supabase.rpc('billing_product_sales_rows', {
+          p_start_date: startDate,
+          p_end_date: endDate,
+        });
+
+        if (error) throw error;
+
+        if (!cancelled) {
+          setProductSalesRows(Array.isArray(data) ? data : []);
+          setSelectedProductKey(null);
+        }
+      } catch (error) {
+        console.warn(
+          'Product sales analytics is unavailable. Existing billing statements remain unaffected.',
+          error
+        );
+
+        if (!cancelled) {
+          setProductSalesRows([]);
+          setProductAnalyticsError(
+            error?.message ||
+              'Product analytics is not connected yet. Create the billing_product_sales_rows RPC to enable it.'
+          );
+        }
+      } finally {
+        if (!cancelled) setProductAnalyticsLoading(false);
+      }
+    };
+
+    loadProductSales();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedMonth]);
+
+  const productAnalytics = useMemo(() => {
+    const number = (value) => {
+      const n = Number(value);
+      return Number.isFinite(n) ? n : 0;
+    };
+
+    const first = (row, keys, fallback = null) => {
+      for (const key of keys) {
+        if (row?.[key] !== undefined && row?.[key] !== null && row?.[key] !== '') {
+          return row[key];
+        }
+      }
+      return fallback;
+    };
+
+    const normalized = productSalesRows.map((row, index) => {
+      const quantity = number(first(row, ['quantity', 'qty', 'units', 'unit_quantity']));
+      const unitPrice = number(first(row, ['unit_price', 'selling_price', 'price', 'sale_price']));
+      const sales = number(first(row, ['sales_amount', 'line_total', 'total', 'revenue', 'amount'], quantity * unitPrice));
+      const unitCostRaw = first(row, ['unit_cost', 'cost_price', 'purchase_price', 'cost_per_unit']);
+      const costAmountRaw = first(row, ['cost_amount', 'cogs', 'cost_of_goods_sold']);
+      const unitCost = unitCostRaw === null ? null : number(unitCostRaw);
+      const costAmount = costAmountRaw === null
+        ? (unitCostRaw === null ? null : quantity * unitCost)
+        : number(costAmountRaw);
+      const grossProfit = costAmount === null ? null : sales - costAmount;
+      const productId = String(first(row, ['product_id', 'product_uuid', 'item_id', 'sku', 'product_sku'], `row-${index}`));
+      const productName = String(first(row, ['product_name', 'item_name', 'name', 'description'], 'Unnamed Product'));
+      const customerId = String(first(row, ['customer_id', 'customer_uuid'], 'unknown'));
+      const customerName = String(first(row, ['customer_name', 'customer', 'customer_entity'], 'Unknown Customer'));
+      const category = String(first(row, ['category', 'product_category', 'category_name'], 'Uncategorised'));
+      const sku = String(first(row, ['sku', 'product_sku', 'item_sku'], ''));
+
+      return {
+        ...row,
+        productId,
+        productName,
+        customerId,
+        customerName,
+        category,
+        sku,
+        quantity,
+        unitPrice,
+        sales,
+        unitCost,
+        costAmount,
+        grossProfit,
+        hasKnownCost: costAmount !== null,
+        invoiceId: first(row, ['invoice_id', 'invoice_uuid']),
+        invoiceNumber: first(row, ['invoice_number', 'invoice_no', 'invoice']),
+      };
+    });
+
+    const productMap = new Map();
+    normalized.forEach((line) => {
+      const key = line.productId || line.productName;
+      if (!productMap.has(key)) {
+        productMap.set(key, {
+          key,
+          productId: line.productId,
+          productName: line.productName,
+          category: line.category,
+          sku: line.sku,
+          units: 0,
+          sales: 0,
+          cost: 0,
+          costKnown: true,
+          profit: null,
+          customers: new Map(),
+          invoiceIds: new Set(),
+        });
+      }
+
+      const product = productMap.get(key);
+      product.units += line.quantity;
+      product.sales += line.sales;
+      if (line.costAmount !== null) {
+        product.cost += line.costAmount;
+      } else {
+        product.costKnown = false;
+      }
+      product.profit = product.costKnown ? product.sales - product.cost : null;
+      if (line.customerId) {
+        if (!product.customers.has(line.customerId)) {
+          product.customers.set(line.customerId, {
+            customerId: line.customerId,
+            customerName: line.customerName,
+            units: 0,
+            sales: 0,
+          });
+        }
+        const customer = product.customers.get(line.customerId);
+        customer.units += line.quantity;
+        customer.sales += line.sales;
+      }
+      if (line.invoiceId) product.invoiceIds.add(line.invoiceId);
+    });
+
+    const products = Array.from(productMap.values()).map((product) => ({
+      ...product,
+      margin: !product.costKnown || product.sales === 0 ? null : (product.profit / product.sales) * 100,
+      contribution: 0,
+      customerList: Array.from(product.customers.values()).sort((a, b) => b.sales - a.sales),
+      invoiceCount: product.invoiceIds.size,
+    }));
+
+    const totalSales = products.reduce((sum, p) => sum + p.sales, 0);
+    const totalUnits = products.reduce((sum, p) => sum + p.units, 0);
+    const productsWithCost = products.filter((p) => p.costKnown);
+    const totalCost = products.length > 0 && productsWithCost.length === products.length
+      ? products.reduce((sum, p) => sum + p.cost, 0)
+      : null;
+    const totalProfit = totalCost === null ? null : totalSales - totalCost;
+
+    products.forEach((p) => {
+      p.contribution = totalSales > 0 ? (p.sales / totalSales) * 100 : 0;
+      p.topCustomerShare = p.sales > 0 && p.customerList[0]
+        ? (p.customerList[0].sales / p.sales) * 100
+        : 0;
+    });
+
+    const filteredProducts = products.filter((product) => {
+      const search = productSearchTerm.trim().toLowerCase();
+      const matchesSearch = !search ||
+        product.productName.toLowerCase().includes(search) ||
+        product.sku.toLowerCase().includes(search);
+      const matchesCustomer = productCustomerFilter === 'All' ||
+        product.customerList.some((customer) => customer.customerId === productCustomerFilter);
+      return matchesSearch && matchesCustomer;
+    });
+
+    const metricValue = (p) => {
+      if (productRankingMetric === 'units') return p.units;
+      if (productRankingMetric === 'profit') return p.profit ?? -Infinity;
+      if (productRankingMetric === 'margin') return p.margin ?? -Infinity;
+      return p.sales;
+    };
+
+    const rankedProducts = [...filteredProducts].sort((a, b) => metricValue(b) - metricValue(a));
+    const topN = productTopN === 'all' ? rankedProducts.length : Number(productTopN);
+    const topProducts = rankedProducts.slice(0, Number.isFinite(topN) ? topN : 20);
+
+    const customers = Array.from(
+      new Map(normalized.map((line) => [line.customerId, { customerId: line.customerId, customerName: line.customerName }])).values()
+    ).sort((a, b) => a.customerName.localeCompare(b.customerName));
+
+    const selectedProduct = products.find((p) => p.key === selectedProductKey) || topProducts[0] || null;
+
+    return {
+      products,
+      topProducts,
+      totalSales,
+      totalUnits,
+      totalCost,
+      totalProfit,
+      grossMargin: totalSales > 0 && totalProfit !== null ? (totalProfit / totalSales) * 100 : null,
+      customers,
+      selectedProduct,
+      hasRows: normalized.length > 0,
+      hasCostData: products.length > 0 && products.every((p) => p.costKnown),
+    };
+  }, [productSalesRows, productSearchTerm, productRankingMetric, productCustomerFilter, productTopN, selectedProductKey]);
 
   const dataIsSyncing = statementLoading || Boolean(statementError);
   const dataStatusLabel = statementError
@@ -1425,6 +1663,285 @@ export function BillingModule({ sys: _sys }) {
             </tbody>
           </table>
         </div>
+
+        {/* ================================================================
+            PRODUCT SALES INTELLIGENCE
+            Isolated from statement rendering so existing billing/printing
+            functionality remains unchanged.
+        ================================================================ */}
+        <section className="mt-6 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 bg-white px-5 py-5">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-700">
+                    <BarChart3 size={18} />
+                  </div>
+                  <div>
+                    <h2 className="text-[17px] font-semibold tracking-tight text-slate-900">Product Sales Intelligence</h2>
+                    <p className="mt-0.5 text-xs text-slate-500">Product contribution, customer demand and profitability for {displayMonth}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative flex h-9 min-w-[230px] items-center rounded-lg border border-slate-200 bg-white px-3">
+                  <Search size={15} className="mr-2 shrink-0 text-slate-400" />
+                  <input
+                    value={productSearchTerm}
+                    onChange={(e) => setProductSearchTerm(e.target.value)}
+                    placeholder="Search product or SKU…"
+                    className="w-full border-none bg-transparent text-xs outline-none placeholder:text-slate-400 focus:ring-0"
+                  />
+                </div>
+                <select
+                  value={productRankingMetric}
+                  onChange={(e) => setProductRankingMetric(e.target.value)}
+                  className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none"
+                >
+                  <option value="sales">Rank by Sales</option>
+                  <option value="units">Rank by Units</option>
+                  <option value="profit">Rank by Gross Profit</option>
+                  <option value="margin">Rank by Margin</option>
+                </select>
+                <select
+                  value={productTopN}
+                  onChange={(e) => setProductTopN(e.target.value)}
+                  className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none"
+                >
+                  <option value="10">Top 10</option>
+                  <option value="20">Top 20</option>
+                  <option value="50">Top 50</option>
+                  <option value="all">All Products</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {productAnalyticsLoading ? (
+            <div className="flex min-h-[220px] flex-col items-center justify-center border-b border-slate-200">
+              <Loader2 size={22} className="mb-3 animate-spin text-slate-400" />
+              <p className="text-sm font-semibold text-slate-700">Loading product sales</p>
+              <p className="mt-1 text-xs text-slate-400">Reading product-level invoice data for {displayMonth}</p>
+            </div>
+          ) : productAnalyticsError && !productAnalytics.hasRows ? (
+            <div className="m-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-4">
+              <div className="flex gap-3">
+                <AlertTriangle size={17} className="mt-0.5 shrink-0 text-amber-600" />
+                <div>
+                  <p className="text-sm font-semibold text-amber-900">Product analytics is not connected yet</p>
+                  <p className="mt-1 text-xs leading-5 text-amber-800">
+                    Your existing customer billing remains fully functional. Product analytics will appear once the Supabase <span className="font-mono font-semibold">billing_product_sales_rows</span> RPC is connected to your invoice line-item and product-cost data. No product figures are estimated.
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 divide-y divide-slate-200 border-b border-slate-200 md:grid-cols-5 md:divide-x md:divide-y-0">
+                {[
+                  ['Products Sold', formatDashboardInteger(productAnalytics.products.length), Package],
+                  ['Units Sold', formatDashboardInteger(productAnalytics.totalUnits), Target],
+                  ['Product Sales', formatDashboardMoney(productAnalytics.totalSales), DollarSign],
+                  ['Gross Profit', productAnalytics.totalProfit === null ? '—' : formatDashboardMoney(productAnalytics.totalProfit), TrendingUp],
+                  ['Gross Margin', productAnalytics.grossMargin === null ? '—' : `${productAnalytics.grossMargin.toFixed(1)}%`, Percent],
+                ].map(([label, value, Icon]) => (
+                  <div key={label} className="min-w-0 px-5 py-4">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</span>
+                      <Icon size={14} className="text-slate-400" />
+                    </div>
+                    <div className="text-[22px] font-semibold tracking-tight text-slate-950" style={{ fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+                  </div>
+                ))}
+              </div>
+
+              {!productAnalytics.hasCostData && productAnalytics.hasRows && (
+                <div className="border-b border-amber-100 bg-amber-50/70 px-5 py-2.5 text-[11px] text-amber-800">
+                  <span className="font-semibold">Profitability note:</span> product sales and contribution are available, but gross profit/margin are shown only where reliable product cost data is supplied. No cost is inferred from selling price.
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.65fr)_minmax(340px,0.75fr)]">
+                <div className="min-w-0 border-b border-slate-200 xl:border-b-0 xl:border-r">
+                  <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold text-slate-900">Top Products</h3>
+                      <p className="mt-0.5 text-[11px] text-slate-400">Ranked products for the selected month</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <UsersRound size={14} className="text-slate-400" />
+                      <select
+                        value={productCustomerFilter}
+                        onChange={(e) => setProductCustomerFilter(e.target.value)}
+                        className="max-w-[210px] rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 outline-none"
+                      >
+                        <option value="All">All Customers</option>
+                        {productAnalytics.customers.map((customer) => (
+                          <option key={customer.customerId} value={customer.customerId}>{customer.customerName}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[860px] border-collapse text-left" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                      <thead>
+                        <tr className="border-b border-slate-200 bg-slate-50/70 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                          <th className="w-10 px-4 py-3 text-center">#</th>
+                          <th className="px-3 py-3">Product</th>
+                          <th className="px-3 py-3 text-right">Units</th>
+                          <th className="px-3 py-3 text-right">Sales</th>
+                          <th className="px-3 py-3 text-right">Share</th>
+                          <th className="px-3 py-3 text-right">Profit</th>
+                          <th className="px-3 py-3 text-right">Margin</th>
+                          <th className="px-4 py-3 text-right">Top Customer</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-xs">
+                        {productAnalytics.topProducts.map((product, index) => {
+                          const isSelected = product.key === productAnalytics.selectedProduct?.key;
+                          return (
+                            <tr
+                              key={product.key}
+                              onClick={() => setSelectedProductKey(product.key)}
+                              className={`cursor-pointer transition-colors ${isSelected ? 'bg-slate-50' : 'hover:bg-slate-50/70'}`}
+                            >
+                              <td className="px-4 py-3 text-center font-semibold text-slate-400">{index + 1}</td>
+                              <td className="px-3 py-3">
+                                <div className="font-semibold text-slate-800">{product.productName}</div>
+                                <div className="mt-0.5 text-[10px] text-slate-400">{product.sku || product.category}</div>
+                              </td>
+                              <td className="px-3 py-3 text-right font-medium text-slate-700">{formatDashboardInteger(product.units)}</td>
+                              <td className="px-3 py-3 text-right font-semibold text-slate-950">{formatDashboardMoney(product.sales)}</td>
+                              <td className="px-3 py-3 text-right">
+                                <div className="flex items-center justify-end gap-2">
+                                  <div className="hidden h-1.5 w-14 overflow-hidden rounded-full bg-slate-100 sm:block"><div className="h-full rounded-full bg-slate-700" style={{ width: `${Math.min(product.contribution, 100)}%` }} /></div>
+                                  <span className="font-semibold text-slate-700">{product.contribution.toFixed(1)}%</span>
+                                </div>
+                              </td>
+                              <td className="px-3 py-3 text-right font-semibold">{product.profit === null ? '—' : formatDashboardMoney(product.profit)}</td>
+                              <td className="px-3 py-3 text-right">{product.margin === null ? '—' : `${product.margin.toFixed(1)}%`}</td>
+                              <td className="px-4 py-3 text-right">
+                                <div className="font-medium text-slate-700">{product.customerList[0]?.customerName || '—'}</div>
+                                {product.customerList[0] && <div className="mt-0.5 text-[10px] text-slate-400">{product.topCustomerShare.toFixed(1)}% of product sales</div>}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {productAnalytics.topProducts.length === 0 && (
+                          <tr><td colSpan="8" className="px-6 py-12 text-center text-sm text-slate-400">No product records match the current filters.</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <aside className="min-w-0 bg-slate-50/40">
+                  {productAnalytics.selectedProduct ? (
+                    <div>
+                      <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Selected Product</p>
+                          <h3 className="mt-1 truncate text-[15px] font-semibold text-slate-900">{productAnalytics.selectedProduct.productName}</h3>
+                          <p className="mt-0.5 text-[10px] text-slate-400">{productAnalytics.selectedProduct.sku || productAnalytics.selectedProduct.category}</p>
+                        </div>
+                        <button type="button" onClick={() => setSelectedProductKey(null)} className="rounded-md p-1.5 text-slate-400 hover:bg-white hover:text-slate-700" aria-label="Clear selected product"><X size={15} /></button>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-px border-b border-slate-200 bg-slate-200">
+                        <div className="bg-white px-4 py-3"><div className="text-[9px] uppercase tracking-widest text-slate-400">Sales</div><div className="mt-1 text-base font-semibold text-slate-900">{formatDashboardMoney(productAnalytics.selectedProduct.sales)}</div></div>
+                        <div className="bg-white px-4 py-3"><div className="text-[9px] uppercase tracking-widest text-slate-400">Units</div><div className="mt-1 text-base font-semibold text-slate-900">{formatDashboardInteger(productAnalytics.selectedProduct.units)}</div></div>
+                        <div className="bg-white px-4 py-3"><div className="text-[9px] uppercase tracking-widest text-slate-400">Contribution</div><div className="mt-1 text-base font-semibold text-slate-900">{productAnalytics.selectedProduct.contribution.toFixed(1)}%</div></div>
+                        <div className="bg-white px-4 py-3"><div className="text-[9px] uppercase tracking-widest text-slate-400">Margin</div><div className="mt-1 text-base font-semibold text-slate-900">{productAnalytics.selectedProduct.margin === null ? '—' : `${productAnalytics.selectedProduct.margin.toFixed(1)}%`}</div></div>
+                      </div>
+
+                      <div className="border-b border-slate-200 px-5 py-4">
+                        <div className="flex items-center justify-between">
+                          <div><h4 className="text-xs font-semibold text-slate-900">Top Customers</h4><p className="mt-0.5 text-[10px] text-slate-400">Customers driving this product's sales</p></div>
+                          <UsersRound size={14} className="text-slate-400" />
+                        </div>
+                        <div className="mt-3 space-y-2.5">
+                          {productAnalytics.selectedProduct.customerList.slice(0, 8).map((customer) => {
+                            const share = productAnalytics.selectedProduct.sales > 0 ? customer.sales / productAnalytics.selectedProduct.sales * 100 : 0;
+                            return (
+                              <div key={customer.customerId}>
+                                <div className="flex items-center justify-between gap-3 text-[11px]">
+                                  <span className="min-w-0 truncate font-medium text-slate-700">{customer.customerName}</span>
+                                  <span className="shrink-0 font-semibold text-slate-800">{formatDashboardMoney(customer.sales)}</span>
+                                </div>
+                                <div className="mt-1 flex items-center gap-2"><div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-slate-600" style={{ width: `${Math.min(share, 100)}%` }} /></div><span className="w-10 text-right text-[9px] text-slate-400">{share.toFixed(1)}%</span></div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="px-5 py-4">
+                        <div className="flex items-center justify-between text-[11px]"><span className="text-slate-500">Invoices containing product</span><span className="font-semibold text-slate-800">{formatDashboardInteger(productAnalytics.selectedProduct.invoiceCount)}</span></div>
+                        <div className="mt-2 flex items-center justify-between text-[11px]"><span className="text-slate-500">Top customer concentration</span><span className="font-semibold text-slate-800">{productAnalytics.selectedProduct.topCustomerShare.toFixed(1)}%</span></div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex min-h-[300px] items-center justify-center px-8 text-center"><div><Package size={24} className="mx-auto mb-2 text-slate-300" /><p className="text-sm font-semibold text-slate-700">Select a product</p><p className="mt-1 text-xs leading-5 text-slate-400">Choose a row to inspect its customer mix and contribution.</p></div></div>
+                  )}
+                </aside>
+              </div>
+
+              <div className="border-t border-slate-200 px-5 py-5">
+                <div className="mb-4 flex items-center justify-between">
+                  <div><h3 className="text-sm font-semibold text-slate-900">Product Performance</h3><p className="mt-0.5 text-[11px] text-slate-400">Sales volume versus gross margin. Each point represents a product.</p></div>
+                  <ArrowUpDown size={15} className="text-slate-400" />
+                </div>
+                <div className="relative mb-4 h-[280px] overflow-hidden rounded-lg border border-slate-200 bg-white">
+                  <div className="absolute inset-x-12 bottom-10 top-5 border-b border-l border-slate-200">
+                    {productAnalytics.products.filter((p) => p.margin !== null).slice(0, 80).map((product) => {
+                      const maxSales = Math.max(...productAnalytics.products.map((p) => p.sales), 1);
+                      const x = Math.min(98, Math.max(2, (product.sales / maxSales) * 100));
+                      const y = Math.min(98, Math.max(2, product.margin));
+                      return (
+                        <button
+                          key={`point-${product.key}`}
+                          type="button"
+                          title={`${product.productName}: ${formatDashboardMoney(product.sales)} sales, ${product.margin.toFixed(1)}% margin`}
+                          onClick={() => setSelectedProductKey(product.key)}
+                          className="absolute h-3 w-3 -translate-x-1/2 translate-y-1/2 rounded-full border-2 border-white bg-slate-700 shadow-sm transition-transform hover:scale-150"
+                          style={{ left: `${x}%`, bottom: `${y}%` }}
+                        />
+                      );
+                    })}
+                  </div>
+                  <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-[9px] font-semibold uppercase tracking-widest text-slate-400">Monthly Sales →</div>
+                  <div className="absolute left-2 top-1/2 -translate-y-1/2 -rotate-90 text-[9px] font-semibold uppercase tracking-widest text-slate-400">Gross Margin →</div>
+                  <div className="absolute right-3 top-2 text-[9px] text-slate-400">Higher margin</div>
+                  <div className="absolute bottom-12 right-3 text-[9px] text-slate-400">Higher sales</div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  {[
+                    ['High sales / high margin', productAnalytics.products.filter(p => p.sales >= productAnalytics.totalSales / Math.max(productAnalytics.products.length, 1) && (p.margin ?? 0) >= 25).length],
+                    ['High sales / low margin', productAnalytics.products.filter(p => p.sales >= productAnalytics.totalSales / Math.max(productAnalytics.products.length, 1) && p.margin !== null && p.margin < 25).length],
+                    ['Lower sales / high margin', productAnalytics.products.filter(p => p.sales < productAnalytics.totalSales / Math.max(productAnalytics.products.length, 1) && (p.margin ?? 0) >= 25).length],
+                    ['Lower sales / low margin', productAnalytics.products.filter(p => p.sales < productAnalytics.totalSales / Math.max(productAnalytics.products.length, 1) && p.margin !== null && p.margin < 25).length],
+                  ].map(([label, count]) => (
+                    <div key={label} className="rounded-lg border border-slate-200 bg-slate-50/50 px-4 py-3"><div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-500">{label}</div><div className="mt-1 text-lg font-semibold text-slate-900">{count}</div><div className="mt-0.5 text-[10px] text-slate-400">products</div></div>
+                  ))}
+                </div>
+                <div className="mt-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-[11px] leading-5 text-slate-500">
+                  The four-quadrant summary uses the average product sales level as the sales divider and 25% gross margin as the reference point. It is a descriptive management view, not a profitability recommendation.
+                </div>
+              </div>
+
+              <div className="border-t border-slate-200 bg-slate-50/50 px-5 py-4">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <div className="rounded-lg border border-slate-200 bg-white px-4 py-3"><p className="text-[9px] font-semibold uppercase tracking-widest text-slate-400">Top Revenue Driver</p><p className="mt-1 text-xs font-semibold text-slate-800">{productAnalytics.products.slice().sort((a,b) => b.sales-a.sales)[0]?.productName || '—'}</p><p className="mt-1 text-[10px] text-slate-400">{productAnalytics.products[0] ? `${formatDashboardMoney(productAnalytics.products.slice().sort((a,b) => b.sales-a.sales)[0].sales)} sales` : ''}</p></div>
+                  <div className="rounded-lg border border-slate-200 bg-white px-4 py-3"><p className="text-[9px] font-semibold uppercase tracking-widest text-slate-400">Highest Volume</p><p className="mt-1 text-xs font-semibold text-slate-800">{productAnalytics.products.slice().sort((a,b) => b.units-a.units)[0]?.productName || '—'}</p><p className="mt-1 text-[10px] text-slate-400">{productAnalytics.products[0] ? `${formatDashboardInteger(productAnalytics.products.slice().sort((a,b) => b.units-a.units)[0].units)} units` : ''}</p></div>
+                  <div className="rounded-lg border border-slate-200 bg-white px-4 py-3"><p className="text-[9px] font-semibold uppercase tracking-widest text-slate-400">Highest Margin</p><p className="mt-1 text-xs font-semibold text-slate-800">{productAnalytics.products.filter(p => p.margin !== null).sort((a,b) => b.margin-a.margin)[0]?.productName || '—'}</p><p className="mt-1 text-[10px] text-slate-400">{productAnalytics.products.filter(p => p.margin !== null).sort((a,b) => b.margin-a.margin)[0] ? `${productAnalytics.products.filter(p => p.margin !== null).sort((a,b) => b.margin-a.margin)[0].margin.toFixed(1)}% gross margin` : 'Cost data unavailable'}</p></div>
+                </div>
+              </div>
+            </>
+          )}
+        </section>
       </div>
 
       {/* RENDER THE SECURE PRINT PORTAL OUTSIDE THE REACT ROOT */}
