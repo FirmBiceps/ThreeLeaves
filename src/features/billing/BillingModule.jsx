@@ -1,103 +1,96 @@
-                              : '30 Days'}
-                          </span>
-                        </div>
+import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
+import {
+  FileText,
+  Printer,
+  Search,
+  Calendar,
+  Download,
+  Loader2,
+  Database,
+  RefreshCw,
+  Clock3,
+  TrendingUp,
+  Users,
+  Receipt,
+  CheckCircle,
+  AlertCircle,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Filter,
+} from 'lucide-react';
+import { formatMoney } from '../../utils/format';
+import JSZip from 'jszip';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 
-                        <div className="mt-0.5 text-[10px] uppercase tracking-widest text-slate-400">
-                          {row.invoices.length} Invoices
-                        </div>
-                      </td>
+// Re-use the logo and QR code from your invoices folder
+import logo from '../invoices/three_leaves_logo.png';
+import paynowQr from '../invoices/paynow_qr.jpg';
 
-                      <td
-                        className="px-5 py-4 text-right text-[15px] font-semibold text-slate-950"
-                        style={{ fontVariantNumeric: 'tabular-nums' }}
-                      >
-                        {formatDashboardMoney(row.totalBilled)}
-                      </td>
+const CJK_FONT =
+  '"Microsoft YaHei", "微软雅黑", "PingFang SC", "Hiragino Sans GB", "SimHei", "黑体", "SimSun", "宋体", serif';
 
-                      <td className="px-5 py-3.5 text-center">
-                        {row.invoices.length > 0 ? (
-                          <div className="relative inline-flex items-center">
-                            <select
-                              value={row.monthStatus}
-                              onChange={(e) =>
-                                handleStatusChange(
-                                  row.customer?.id,
-                                  e.target.value
-                                )
-                              }
-                              className={`cursor-pointer appearance-none rounded-lg py-1.5 pl-8 pr-8 text-[10px] font-black uppercase tracking-widest outline-none transition-all ${
-                                row.monthStatus === 'Paid'
-                                  ? 'border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                                  : 'border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'
-                              }`}
-                            >
-                              <option value="Paid">PAID</option>
-                              <option value="Unpaid">UNPAID</option>
-                            </select>
+const DASHBOARD_NUMBER_FORMAT = new Intl.NumberFormat('en-SG', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
 
-                            <div className="pointer-events-none absolute left-2.5">
-                              {row.monthStatus === 'Paid' ? (
-                                <CheckCircle
-                                  size={12}
-                                  className="text-emerald-600"
-                                />
-                              ) : (
-                                <AlertCircle
-                                  size={12}
-                                  className="text-amber-600"
-                                />
-                              )}
-                            </div>
+const DASHBOARD_INTEGER_FORMAT = new Intl.NumberFormat('en-SG', {
+  maximumFractionDigits: 0,
+});
 
-                            <div className="pointer-events-none absolute right-2.5">
-                              <ChevronDown
-                                size={12}
-                                className={
-                                  row.monthStatus === 'Paid'
-                                    ? 'text-emerald-600'
-                                    : 'text-amber-600'
-                                }
-                              />
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-xs font-medium italic text-slate-400">
-                            No new invoices
-                          </span>
-                        )}
-                      </td>
+const formatDashboardMoney = (value) =>
+  `S$ ${DASHBOARD_NUMBER_FORMAT.format(Number(value) || 0)}`;
 
-                      <td className="px-5 py-3.5 pr-6 text-right">
-                        <button
-                          onClick={() => handlePrint(row.customer?.id)}
-                          className="inline-flex items-center rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-600 transition-colors hover:bg-slate-900 hover:text-white"
-                        >
-                          <Printer size={12} className="mr-1" />
-                          Print
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+const formatDashboardInteger = (value) =>
+  DASHBOARD_INTEGER_FORMAT.format(Number(value) || 0);
 
-                  {visibleAnalytics.displayList.length === 0 && (
-                    <tr>
-                      <td
-                        className="p-12 text-center text-sm font-bold text-slate-400"
-                        colSpan="4"
-                      >
-                        No transactions or outstanding balances found.
-                      </td>
-                    </tr>
-                  )}
-                </>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+const getInvoiceDataSignature = (invoices) => {
+  let hash = 2166136261;
 
-      {/* RENDER THE SECURE PRINT PORTAL OUTSIDE THE REACT ROOT */}
-      {printTarget && createPortal(printContent, document.body)}
-    </div>
-  );
-}
+  for (const inv of invoices) {
+    const value = [
+      inv?.id,
+      inv?.number,
+      inv?.date,
+      inv?.customerId,
+      inv?.total,
+      inv?.status,
+    ].join('|');
+
+    for (let i = 0; i < value.length; i += 1) {
+      hash ^= value.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+  }
+
+  return `${invoices.length}:${hash >>> 0}`;
+};
+
+export function BillingModule({ sys }) {
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  });
+
+  const [searchTerm, setSearchTerm] = useState('');
+  const [termFilter, setTermFilter] = useState('All');
+
+  const [printTarget, setPrintTarget] = useState(null);
+  const [isZipping, setIsZipping] = useState(false);
+  const [dataSettled, setDataSettled] = useState(false);
+  const [dataSettledAt, setDataSettledAt] = useState(null);
+
+  const safeInvoices = Array.isArray(sys?.invoices) ? sys.invoices : [];
+  const safeCustomers = Array.isArray(sys?.customers) ? sys.customers : [];
+
+  // Statement totals are derived from sys.invoices. The BillingModule itself
+  // does not fetch invoices, so displaying a KPI while the ERP data layer is
+  // still hydrating can produce a misleading early total.
+  //
+  // We wait until the global ERP hydration has finished and the invoice
+  // collection has remained unchanged for a short settling window.
+  // When invoices legitimately change later, the dashboard briefly shows
+  // Updating and then settles on the new total.
