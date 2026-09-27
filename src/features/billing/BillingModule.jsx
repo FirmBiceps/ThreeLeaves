@@ -20,7 +20,7 @@ import {
   ChevronRight,
   Filter,
 } from 'lucide-react';
-import { formatMoney } from '../../utils/format';
+import { supabase } from '../../lib/supabaseClient';
 import JSZip from 'jszip';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
@@ -41,35 +41,51 @@ const DASHBOARD_INTEGER_FORMAT = new Intl.NumberFormat('en-SG', {
   maximumFractionDigits: 0,
 });
 
+// Statement amounts must follow exactly the same 2-decimal value that the
+// customer sees on each invoice. Never sum hidden 3+ decimal values.
+const STATEMENT_MONEY_FORMAT = new Intl.NumberFormat('en-SG', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+  useGrouping: true,
+});
+
+const toDisplayedCents = (value) => {
+  const numericValue = Number(value);
+
+  if (!Number.isFinite(numericValue)) return 0;
+
+  // Format first, then convert the already-rounded display value into integer
+  // cents. This avoids binary floating-point accumulation and guarantees that
+  // the statement total is the sum of the amounts the customer can see.
+  const displayed = STATEMENT_MONEY_FORMAT.format(numericValue);
+  const normalized = displayed.replace(/,/g, '');
+
+  return Math.round(Number(normalized) * 100);
+};
+
+const formatStatementMoney = (value) =>
+  STATEMENT_MONEY_FORMAT.format(Number(value) || 0);
+
+const formatStatementCents = (cents) =>
+  STATEMENT_MONEY_FORMAT.format((Number(cents) || 0) / 100);
+
 const formatDashboardMoney = (value) =>
   `S$ ${DASHBOARD_NUMBER_FORMAT.format(Number(value) || 0)}`;
 
 const formatDashboardInteger = (value) =>
   DASHBOARD_INTEGER_FORMAT.format(Number(value) || 0);
 
-const getInvoiceDataSignature = (invoices) => {
-  let hash = 2166136261;
+const getStatementMonthBounds = (yyyyMm) => {
+  const [year, month] = String(yyyyMm).split('-').map(Number);
+  const nextMonth = new Date(year, month, 1);
 
-  for (const inv of invoices) {
-    const value = [
-      inv?.id,
-      inv?.number,
-      inv?.date,
-      inv?.customerId,
-      inv?.total,
-      inv?.status,
-    ].join('|');
-
-    for (let i = 0; i < value.length; i += 1) {
-      hash ^= value.charCodeAt(i);
-      hash = Math.imul(hash, 16777619);
-    }
-  }
-
-  return `${invoices.length}:${hash >>> 0}`;
+  return {
+    startDate: `${year}-${String(month).padStart(2, '0')}-01`,
+    endDate: `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, '0')}-01`,
+  };
 };
 
-export function BillingModule({ sys }) {
+export function BillingModule({ sys: _sys }) {
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -78,140 +94,149 @@ export function BillingModule({ sys }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [termFilter, setTermFilter] = useState('All');
 
+  const [statementInvoices, setStatementInvoices] = useState([]);
+  const [statementLoading, setStatementLoading] = useState(true);
+  const [statementError, setStatementError] = useState(null);
+  const [statementLoadedAt, setStatementLoadedAt] = useState(null);
+  const [statementRefreshKey, setStatementRefreshKey] = useState(0);
+
   const [printTarget, setPrintTarget] = useState(null);
   const [isZipping, setIsZipping] = useState(false);
-  const [dataSettled, setDataSettled] = useState(false);
-  const [dataSettledAt, setDataSettledAt] = useState(null);
-
-  const safeInvoices = Array.isArray(sys?.invoices) ? sys.invoices : [];
-  const safeCustomers = Array.isArray(sys?.customers) ? sys.customers : [];
-
-  // Statement totals are derived from sys.invoices. The BillingModule itself
-  // does not fetch invoices, so displaying a KPI while the ERP data layer is
-  // still hydrating can produce a misleading early total.
-  //
-  // We wait until the global ERP hydration has finished and the invoice
-  // collection has remained unchanged for a short settling window.
-  // When invoices legitimately change later, the dashboard briefly shows
-  // Updating and then settles on the new total.
-  const invoiceDataSignature = useMemo(
-    () => getInvoiceDataSignature(safeInvoices),
-    [safeInvoices]
-  );
 
   useEffect(() => {
-    const isHydrating = sys?.isHydrating === true;
+    let cancelled = false;
 
-    if (isHydrating) {
-      setDataSettled(false);
-      setDataSettledAt(null);
-      return undefined;
-    }
+    const loadStatementData = async () => {
+      setStatementLoading(true);
+      setStatementError(null);
+      setStatementLoadedAt(null);
 
-    setDataSettled(false);
+      try {
+        const { startDate, endDate } = getStatementMonthBounds(selectedMonth);
 
-    const timer = window.setTimeout(() => {
-      setDataSettled(true);
-      setDataSettledAt(new Date());
-    }, 700);
+        const { data, error } = await supabase.rpc(
+          'billing_statement_rows',
+          {
+            p_start_date: startDate,
+            p_end_date: endDate,
+            p_payment_terms: termFilter || 'All',
+            p_status: 'All',
+          }
+        );
 
-    return () => window.clearTimeout(timer);
-  }, [invoiceDataSignature, sys?.isHydrating]);
+        if (error) throw error;
 
-  const dataIsSyncing = sys?.isHydrating === true || !dataSettled;
-  const dataStatusLabel = sys?.lastSyncError
+        const rows = (Array.isArray(data) ? data : []).map((row) => ({
+          id: row.invoice_id,
+          number: row.invoice_number,
+          date: row.invoice_date,
+          customerId: row.customer_id,
+          customer: row.customer_name,
+          total: Number(row.total ?? 0),
+          status: row.status || 'Paid',
+          statementCustomer: {
+            id: row.customer_id,
+            name: row.customer_name,
+            address: row.customer_address || '',
+            payment_terms: row.payment_terms || '30_days',
+          },
+        }));
+
+        if (!cancelled) {
+          setStatementInvoices(rows);
+          setStatementLoadedAt(new Date());
+        }
+      } catch (error) {
+        console.error('Statement data load failed:', error);
+
+        if (!cancelled) {
+          setStatementInvoices([]);
+          setStatementError(
+            error?.message || 'Unable to load statement data.'
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setStatementLoading(false);
+        }
+      }
+    };
+
+    loadStatementData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedMonth, termFilter, statementRefreshKey]);
+
+  const dataIsSyncing = statementLoading || Boolean(statementError);
+  const dataStatusLabel = statementError
     ? 'Sync issue'
-    : sys?.isHydrating
-      ? 'Syncing'
-      : dataIsSyncing
-        ? 'Updating'
-        : 'Live';
+    : statementLoading
+      ? 'Loading'
+      : 'Live';
 
-  const dataStatusClass = sys?.lastSyncError
+  const dataStatusClass = statementError
     ? 'border-red-200 bg-red-50 text-red-700'
-    : dataIsSyncing
+    : statementLoading
       ? 'border-amber-200 bg-amber-50 text-amber-700'
       : 'border-emerald-200 bg-emerald-50 text-emerald-700';
-
-  // Never expose a partial dataset in the headline figures or the customer
-  // table. While the ERP is hydrating/settling, the screen shows a neutral
-  // loading state instead of a temporarily low sales number.
-  const visibleAnalytics = dataIsSyncing
-    ? {
-        totalRevenue: 0,
-        activeCustomers: 0,
-        totalInvoicesCount: 0,
-        aov: 0,
-        topCustomer: null,
-        displayList: [],
-        allCustomerStats: [],
-      }
-    : analytics;
 
   // ==========================================
   // FINANCIAL ANALYTICS & DATA ENGINE
   // ==========================================
+  // IMPORTANT: this calculation is based ONLY on the authoritative monthly
+  // dataset returned directly by Supabase. It no longer depends on the global
+  // sys.invoices cache or on the Invoice module being opened first.
   const analytics = useMemo(() => {
-    const customerMap = new Map(
-      safeCustomers.map((customer) => [customer.id, customer])
-    );
     const dataMap = new Map();
 
-    safeInvoices.forEach((inv) => {
-      const isCurrentMonth = String(inv.date).startsWith(selectedMonth);
-      if (!isCurrentMonth) return;
-
-      const customerId = inv.customerId || `unknown:${inv.customer || 'unknown'}`;
+    statementInvoices.forEach((inv) => {
+      const customerId =
+        inv.customerId || `unknown:${inv.customer || 'unknown'}`;
 
       if (!dataMap.has(customerId)) {
-        const customerObj = customerMap.get(inv.customerId);
-
         dataMap.set(customerId, {
-          customer: customerObj,
-          customerName: String(
-            customerObj?.name || inv.customer || 'Unknown Customer'
-          ),
+          customer: inv.statementCustomer || {
+            id: inv.customerId,
+            name: inv.customer || 'Unknown Customer',
+            address: '',
+            payment_terms: '30_days',
+          },
+          customerName: String(inv.customer || 'Unknown Customer'),
           invoices: [],
+          totalBilledCents: 0,
           totalBilled: 0,
           monthStatus: 'Paid',
         });
       }
 
       const row = dataMap.get(customerId);
-      const invTotal = Number(inv.total) || 0;
-      const roundedInvTotal = Math.round(invTotal * 100) / 100;
-      const invStatus = String(inv.status || 'Paid');
+      const invStatus = String(inv.status || 'Paid').toLowerCase();
+      const invoiceCents = toDisplayedCents(inv.total);
 
       row.invoices.push(inv);
-      row.totalBilled += roundedInvTotal;
+      row.totalBilledCents += invoiceCents;
+      row.totalBilled = row.totalBilledCents / 100;
 
-      if (invStatus === 'Unpaid') {
+      if (invStatus === 'unpaid') {
         row.monthStatus = 'Unpaid';
       }
     });
 
-    const relevantCustomers = Array.from(dataMap.values()).filter((row) => {
-      if (row.invoices.length === 0) return false;
+    const relevantCustomers = Array.from(dataMap.values()).filter(
+      (row) => row.invoices.length > 0
+    );
 
-      if (termFilter !== 'All') {
-        const cTerm =
-          row.customer?.payment_terms === 'cod' ? 'cod' : '30_days';
-
-        if (cTerm !== termFilter) return false;
-      }
-
-      return true;
-    });
-
-    let totalRevenue = 0;
+    let totalRevenueCents = 0;
     let totalInvoicesCount = 0;
 
     relevantCustomers.forEach((row) => {
-      totalRevenue += row.totalBilled;
+      totalRevenueCents += row.totalBilledCents;
       totalInvoicesCount += row.invoices.length;
     });
 
-    totalRevenue = Math.round(totalRevenue * 100) / 100;
+    const totalRevenue = totalRevenueCents / 100;
 
     const activeCustomers = relevantCustomers.length;
     const aov =
@@ -241,7 +266,7 @@ export function BillingModule({ sys }) {
         const dateB = new Date(b.date || 0);
 
         if (dateA.getTime() !== dateB.getTime()) {
-          return dateA - dateB;
+          return dateA.getTime() - dateB.getTime();
         }
 
         const numA = String(a.number || a.id);
@@ -263,30 +288,50 @@ export function BillingModule({ sys }) {
       displayList,
       allCustomerStats: relevantCustomers,
     };
-  }, [
-    safeInvoices,
-    safeCustomers,
-    selectedMonth,
-    searchTerm,
-    termFilter,
-  ]);
+  }, [statementInvoices, searchTerm]);
 
-  const handleStatusChange = (customerId, newStatus) => {
-    const updatedInvoices = safeInvoices.map((inv) => {
-      if (
-        inv.customerId === customerId &&
-        String(inv.date).startsWith(selectedMonth)
-      ) {
-        return {
-          ...inv,
-          status: newStatus,
-        };
+  const visibleAnalytics = statementLoading
+    ? {
+        totalRevenue: null,
+        activeCustomers: null,
+        totalInvoicesCount: null,
+        aov: null,
+        topCustomer: null,
+        displayList: [],
+        allCustomerStats: [],
       }
+    : analytics;
 
-      return inv;
-    });
+  const handleStatusChange = async (customerId, newStatus) => {
+    const customerInvoices = statementInvoices.filter(
+      (inv) => inv.customerId === customerId
+    );
 
-    sys.setInvoices(updatedInvoices);
+    const invoiceIds = customerInvoices
+      .map((inv) => inv.id)
+      .filter(Boolean);
+
+    if (invoiceIds.length === 0) return;
+
+    try {
+      const { error } = await supabase
+        .from('invoices')
+        .update({ status: newStatus })
+        .in('id', invoiceIds);
+
+      if (error) throw error;
+
+      setStatementInvoices((current) =>
+        current.map((inv) =>
+          invoiceIds.includes(inv.id)
+            ? { ...inv, status: newStatus }
+            : inv
+        )
+      );
+    } catch (error) {
+      console.error('Invoice status update failed:', error);
+      alert(error?.message || 'Unable to update invoice status.');
+    }
   };
 
   const handlePrint = (target) => {
@@ -297,6 +342,17 @@ export function BillingModule({ sys }) {
       setPrintTarget(null);
     }, 300);
   };
+
+  const handleRefreshStatement = () => {
+    setStatementRefreshKey((value) => value + 1);
+  };
+
+  const dataStatusTime = statementLoadedAt
+    ? statementLoadedAt.toLocaleTimeString('en-SG', {
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : null;
 
   // ==========================================
   // ZIP ENGINE: SEPARATED RESPONSIBILITIES
@@ -469,13 +525,6 @@ export function BillingModule({ sys }) {
       : termFilter === 'cod'
         ? 'COD'
         : '30-DAY';
-
-  const dataStatusTime = dataSettledAt
-    ? dataSettledAt.toLocaleTimeString('en-SG', {
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    : null;
 
   // =========================================================================
   // FOOLPROOF PRINT PORTAL
@@ -751,7 +800,7 @@ export function BillingModule({ sys }) {
                                 </td>
 
                                 <td className="p-1 pr-4 text-right font-bold text-black">
-                                  ${formatMoney(billed)}
+                                  $${formatStatementMoney(billed)}
                                 </td>
                               </tr>
                             );
@@ -783,7 +832,7 @@ export function BillingModule({ sys }) {
                               </td>
 
                               <td className="py-2 pr-4 text-right text-[16px] font-black text-black">
-                                ${formatMoney(data.totalBilled)}
+                                $${formatStatementCents(data.totalBilledCents)}
                               </td>
                             </tr>
                           ) : null}
@@ -906,11 +955,11 @@ export function BillingModule({ sys }) {
               <span
                 className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 ${dataStatusClass}`}
                 title={
-                  sys?.lastSyncError
-                    ? 'The ERP data source reported a synchronization issue.'
-                    : dataSettledAt
-                      ? `Statement data settled at ${dataStatusTime}.`
-                      : 'Waiting for invoice data to finish synchronizing.'
+                  statementError
+                    ? statementError
+                    : statementLoading
+                      ? 'Loading the selected statement period directly from Supabase.'
+                      : `Statement data loaded at ${dataStatusTime}.`
                 }
               >
                 <span className="relative flex h-2 w-2">
@@ -926,10 +975,10 @@ export function BillingModule({ sys }) {
 
               <span className="inline-flex items-center gap-1.5 px-1 py-1">
                 <Database size={12} className="text-slate-400" />
-                {formatDashboardInteger(safeInvoices.length)} invoice records loaded
+                {statementLoading ? 'Loading invoice records…' : `${formatDashboardInteger(statementInvoices.length)} invoice records in selected period`}
               </span>
 
-              {dataSettledAt && !dataIsSyncing && (
+              {!dataIsSyncing && dataStatusTime && (
                 <span className="inline-flex items-center gap-1.5 px-1 py-1 text-slate-400">
                   <Clock3 size={12} />
                   Updated {dataStatusTime}
@@ -941,25 +990,10 @@ export function BillingModule({ sys }) {
           <div className="flex items-center gap-2">
             <button
               className="inline-flex h-10 items-center rounded-lg border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-              onClick={async () => {
-                const refresh =
-                  sys?.refreshInvoices ||
-                  sys?.reloadInvoices ||
-                  sys?.refreshData;
-
-                if (typeof refresh === 'function') {
-                  try {
-                    await refresh();
-                  } catch (error) {
-                    console.error('Statement refresh failed:', error);
-                  }
-                } else {
-                  window.location.reload();
-                }
-              }}
-              disabled={isZipping || sys?.isHydrating}
+              onClick={handleRefreshStatement}
+              disabled={isZipping || statementLoading}
               type="button"
-              title="Reload the ERP data source and recalculate the statement"
+              title="Reload the selected statement period directly from Supabase"
             >
               <RefreshCw
                 className={`mr-2 ${dataIsSyncing ? 'animate-spin' : ''}`}
@@ -1013,19 +1047,19 @@ export function BillingModule({ sys }) {
               <Loader2 className="shrink-0 animate-spin" size={15} />
               <div className="min-w-0">
                 <p className="font-semibold">
-                  {sys?.isHydrating
-                    ? 'Loading statement data…'
-                    : 'Updating statement figures…'}
+                  {statementError
+                    ? 'Statement data could not be loaded.'
+                    : 'Loading statement data…'}
                 </p>
                 <p className="mt-0.5 text-amber-700/80">
-                  Totals are temporarily withheld from actions until the
-                  invoice dataset has settled.
+                  Totals are withheld until the selected month has been
+                  loaded directly from the database.
                 </p>
               </div>
             </div>
 
             <span className="hidden shrink-0 font-mono text-[10px] uppercase tracking-wider text-amber-700 sm:inline">
-              {formatDashboardInteger(safeInvoices.length)} loaded
+              {statementLoading ? 'Loading…' : `${formatDashboardInteger(statementInvoices.length)} records`}
             </span>
           </div>
         )}
@@ -1043,7 +1077,7 @@ export function BillingModule({ sys }) {
                 className="truncate text-[28px] font-semibold leading-none tracking-[-0.025em] text-slate-950"
                 style={{ fontVariantNumeric: 'tabular-nums' }}
               >
-                {formatDashboardMoney(visibleAnalytics.totalRevenue)}
+                {visibleAnalytics.totalRevenue === null ? '—' : formatDashboardMoney(visibleAnalytics.totalRevenue)}
               </p>
               <p className="mt-2 text-[11px] text-slate-400">
                 {displayMonth}
@@ -1061,7 +1095,7 @@ export function BillingModule({ sys }) {
                 className="text-[28px] font-semibold leading-none tracking-[-0.025em] text-slate-950"
                 style={{ fontVariantNumeric: 'tabular-nums' }}
               >
-                {formatDashboardInteger(visibleAnalytics.totalInvoicesCount)}
+                {visibleAnalytics.totalInvoicesCount === null ? '—' : formatDashboardInteger(visibleAnalytics.totalInvoicesCount)}
               </p>
               <p className="mt-2 text-[11px] text-slate-400">
                 Included in selected period
@@ -1079,7 +1113,7 @@ export function BillingModule({ sys }) {
                 className="truncate text-[28px] font-semibold leading-none tracking-[-0.025em] text-slate-950"
                 style={{ fontVariantNumeric: 'tabular-nums' }}
               >
-                {formatDashboardMoney(visibleAnalytics.aov)}
+                {visibleAnalytics.aov === null ? '—' : formatDashboardMoney(visibleAnalytics.aov)}
               </p>
               <p className="mt-2 text-[11px] text-slate-400">
                 Per invoice
@@ -1097,7 +1131,7 @@ export function BillingModule({ sys }) {
                 className="text-[28px] font-semibold leading-none tracking-[-0.025em] text-slate-950"
                 style={{ fontVariantNumeric: 'tabular-nums' }}
               >
-                {formatDashboardInteger(visibleAnalytics.activeCustomers)}
+                {visibleAnalytics.activeCustomers === null ? '—' : formatDashboardInteger(visibleAnalytics.activeCustomers)}
               </p>
               <p className="mt-2 text-[11px] text-slate-400">
                 Customers billed
@@ -1285,7 +1319,7 @@ export function BillingModule({ sys }) {
                         className="px-5 py-4 text-right text-[15px] font-semibold text-slate-950"
                         style={{ fontVariantNumeric: 'tabular-nums' }}
                       >
-                        {formatDashboardMoney(row.totalBilled)}
+                        {formatDashboardMoney(row.totalBilledCents / 100)}
                       </td>
 
                       <td className="px-5 py-3.5 text-center">
