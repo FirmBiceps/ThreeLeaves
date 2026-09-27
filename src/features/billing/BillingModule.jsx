@@ -133,6 +133,11 @@ export function BillingModule({ sys: _sys }) {
           customerId: row.customer_id,
           customer: row.customer_name,
           total: Number(row.total ?? 0),
+          // IMPORTANT:
+          // This is the exact amount shown to the customer on the invoice.
+          // All statement totals are calculated from this 2-decimal value,
+          // never from hidden 3+ decimal values.
+          displayCents: toDisplayedCents(row.total),
           status: row.status || 'Paid',
           statementCustomer: {
             id: row.customer_id,
@@ -213,9 +218,15 @@ export function BillingModule({ sys: _sys }) {
 
       const row = dataMap.get(customerId);
       const invStatus = String(inv.status || 'Paid').toLowerCase();
-      const invoiceCents = toDisplayedCents(inv.total);
+      const invoiceCents = Number.isInteger(inv.displayCents)
+        ? inv.displayCents
+        : toDisplayedCents(inv.total);
 
       row.invoices.push(inv);
+
+      // Every invoice contributes only its customer-visible 2dp amount.
+      // Therefore the customer total can never differ by 1 cent because of
+      // hidden 3dp/4dp arithmetic.
       row.totalBilledCents += invoiceCents;
       row.totalBilled = row.totalBilledCents / 100;
 
@@ -772,7 +783,10 @@ export function BillingModule({ sys: _sys }) {
 
                         <tbody>
                           {pageItems.map((inv, idx) => {
-                            const billed = Number(inv.total) || 0;
+                            const billedCents = Number.isInteger(inv.displayCents)
+                              ? inv.displayCents
+                              : toDisplayedCents(inv.total);
+
                             const absoluteIndex =
                               pageIndex * ITEMS_PER_PAGE + idx + 1;
 
@@ -800,7 +814,7 @@ export function BillingModule({ sys: _sys }) {
                                 </td>
 
                                 <td className="p-1 pr-4 text-right font-bold text-black">
-                                  $${formatStatementMoney(billed)}
+                                  $${formatStatementCents(billedCents)}
                                 </td>
                               </tr>
                             );
@@ -832,7 +846,16 @@ export function BillingModule({ sys: _sys }) {
                               </td>
 
                               <td className="py-2 pr-4 text-right text-[16px] font-black text-black">
-                                $${formatStatementCents(data.totalBilledCents)}
+                                $${formatStatementCents(
+                                  data.invoices.reduce(
+                                    (sum, invoice) =>
+                                      sum +
+                                      (Number.isInteger(invoice.displayCents)
+                                        ? invoice.displayCents
+                                        : toDisplayedCents(invoice.total)),
+                                    0
+                                  )
+                                )}
                               </td>
                             </tr>
                           ) : null}
