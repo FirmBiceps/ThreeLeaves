@@ -1761,14 +1761,14 @@ function PartTimeDayRow({
         </div>
       </td>
 
-      <td className="min-w-[115px] bg-emerald-50/30 px-3 py-3 text-right">
-        <p className="font-mono text-xs font-black text-emerald-800">${formatMoney(gross)}</p>
-        <p className="mt-0.5 text-[8px] font-black uppercase tracking-wider text-emerald-600/60">Gross</p>
+      <td className="min-w-[115px] px-3 py-2.5 text-right">
+        <p className="font-mono text-sm font-semibold text-slate-900">${formatMoney(gross)}</p>
+        <p className="mt-0.5 text-xs font-medium text-slate-500">Gross</p>
       </td>
 
       <td className="min-w-[130px] px-3 py-2.5">
         <div className="relative ml-auto w-[108px]">
-          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-amber-500">$</span>
+          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-400">$</span>
           <input
             type="number"
             min="0"
@@ -1780,11 +1780,11 @@ function PartTimeDayRow({
               markDirty();
             }}
             onBlur={commitCurrentField}
-            className="w-full rounded-xl border border-amber-100 bg-amber-50/60 py-2.5 pl-6 pr-2 text-right font-mono text-xs font-black text-amber-800 outline-none transition focus:border-amber-300 focus:ring-2 focus:ring-amber-100 disabled:bg-slate-100 disabled:text-slate-400"
+            className="w-full rounded-md border border-slate-300 bg-white py-2 pl-6 pr-2 text-right text-sm font-medium text-slate-900 outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-300 disabled:bg-slate-50 disabled:text-slate-400"
           />
         </div>
         {otherAdvanceAmount > 0 && (
-          <p className="mt-1 text-right text-[8px] font-bold text-amber-600">
+          <p className="mt-1 text-right text-xs font-medium text-slate-500">
             +${formatMoney(otherAdvanceAmount)} ledger
           </p>
         )}
@@ -1827,25 +1827,28 @@ function PartTimeSalaryIssuedCell({
   const commit = async () => {
     if (locked || saving) return;
 
-    const cleaned = String(draftAmount || '').trim();
-    const numeric = cleaned === '' ? 0 : Number(cleaned);
+    const amount = Number(String(draftAmount || '').trim());
 
-    if (!Number.isFinite(numeric) || numeric <= 0) {
+    if (!Number.isFinite(amount) || amount <= 0) {
       return;
     }
 
-    const ok = await onSave(numeric, paymentDate || localDateString());
+    const ok = await onSave(
+      amount,
+      paymentDate || localDateString()
+    );
+
     if (ok) {
-      // Keep the field blank after recording a payment. The value displayed
-      // in the interval total is derived from the saved payment ledger.
+      // Salary Issued is intentionally blank after the payment is recorded.
+      // The interval total is derived from the saved payment ledger.
       setDraftAmount('');
     }
   };
 
   return (
-    <div className="min-w-[180px] space-y-1.5">
-      <div className="relative">
-        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400">
+    <div className="flex min-w-[245px] items-center justify-end gap-1.5">
+      <div className="relative w-[95px]">
+        <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-slate-400">
           $
         </span>
         <input
@@ -1854,35 +1857,36 @@ function PartTimeSalaryIssuedCell({
           step="0.01"
           value={draftAmount}
           disabled={locked || saving}
-          placeholder="Enter amount paid"
+          placeholder="—"
+          aria-label="Salary issued amount"
           onChange={(event) => setDraftAmount(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
               event.preventDefault();
-              commit();
+              void commit();
             }
           }}
-          className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-7 pr-2 text-right font-mono text-xs font-black text-slate-800 outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-400"
+          className="h-9 w-full rounded-md border border-slate-300 bg-white pl-6 pr-2 text-right text-sm font-semibold text-slate-900 outline-none placeholder:text-slate-300 focus:border-slate-500 focus:ring-1 focus:ring-slate-300 disabled:bg-slate-50 disabled:text-slate-400"
         />
       </div>
+
       <input
         type="date"
         value={paymentDate}
         disabled={locked || saving}
+        aria-label="Salary payment date"
         onChange={(event) => setPaymentDate(event.target.value)}
-        className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[10px] font-bold text-slate-600 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-400"
+        className="h-9 w-[128px] rounded-md border border-slate-300 bg-white px-2 text-sm font-medium text-slate-700 outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-300 disabled:bg-slate-50 disabled:text-slate-400"
       />
+
       <button
         type="button"
         disabled={locked || saving || !(Number(draftAmount) > 0)}
-        onClick={commit}
-        className="w-full rounded-lg bg-emerald-600 px-2 py-1.5 text-[9px] font-black uppercase tracking-wider text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+        onClick={() => void commit()}
+        className="inline-flex h-9 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
       >
-        {saving ? 'Recording…' : 'Record Payment'}
+        {saving ? 'Saving' : 'Record'}
       </button>
-      <p className="text-right text-[8px] font-black uppercase tracking-wider text-slate-400">
-        Blank until you actually pay
-      </p>
     </div>
   );
 }
@@ -2940,30 +2944,30 @@ export function EmployeeModule() {
     };
 
     return (
-      <div className="space-y-5">
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+      <div className="space-y-4">
+        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+          <div className="flex flex-col gap-4 border-b border-slate-200 px-4 py-4 lg:flex-row lg:items-end lg:justify-between">
             <div className="min-w-0">
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
-                Part-Time Timesheet & Salary Payment
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Part-Time Hours
               </p>
-              <h2 className="mt-1 text-xl font-black tracking-tight text-slate-900">
-                Part-Time Pay Workspace
+              <h2 className="mt-1 text-lg font-bold tracking-tight text-slate-900">
+                Timesheet & Salary Payment
               </h2>
-              <p className="mt-1 max-w-4xl text-xs leading-5 text-slate-500">
-                Enter the shift timing, rate and any advance directly in the ledger. Enter the actual amount paid in the Salary Issued column for this payment interval. The system calculates the interval balance: a positive amount means salary is still owed to the employee; a negative amount means the employee has received more than the interval amount and owes the company.
+              <p className="mt-1 max-w-4xl text-sm leading-5 text-slate-500">
+                Enter working hours, the applicable hourly rate, transport allowance and any Advance Salary directly in the ledger. Salary Issued is only for recording an actual payment made to the employee.
               </p>
             </div>
 
             <div className="flex flex-wrap items-end gap-3">
               <label className="min-w-[240px]">
-                <span className="mb-1.5 block text-[9px] font-black uppercase tracking-wider text-slate-400">
+                <span className="mb-1 block text-xs font-medium text-slate-500">
                   Part-Time Employee
                 </span>
                 <select
                   value={selectedEmployee?.id || ''}
                   onChange={(event) => chooseEmployee(event.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-black text-slate-700 outline-none focus:border-blue-300"
+                  className="h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-900 outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-300"
                 >
                   {partTimers.map((employee) => (
                     <option key={employee.id} value={employee.id}>
@@ -2974,10 +2978,10 @@ export function EmployeeModule() {
               </label>
 
               <div>
-                <span className="mb-1.5 block text-[9px] font-black uppercase tracking-wider text-slate-400">
+                <span className="mb-1 block text-xs font-medium text-slate-500">
                   Payment Interval
                 </span>
-                <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
+                <div className="inline-flex h-9 rounded-md border border-slate-300 bg-white p-0.5">
                   {[
                     ['weekly', 'Weekly'],
                     ['monthly', 'Monthly'],
@@ -2986,10 +2990,10 @@ export function EmployeeModule() {
                       key={value}
                       type="button"
                       onClick={() => switchCycle(value)}
-                      className={`rounded-lg px-3 py-2 text-xs font-black ${
+                      className={`rounded px-3 text-xs font-semibold ${
                         partTimeCycle === value
-                          ? 'bg-white text-blue-600 shadow-sm'
-                          : 'text-slate-500'
+                          ? 'bg-slate-900 text-white'
+                          : 'text-slate-600 hover:bg-slate-50'
                       }`}
                     >
                       {label}
@@ -3001,123 +3005,103 @@ export function EmployeeModule() {
               <button
                 type="button"
                 onClick={() => setPartTimeAnchor(localDateString())}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-black text-slate-600"
+                className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
               >
                 Current
               </button>
             </div>
           </div>
-        </div>
 
-        {!selectedEmployee ? (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
-            <Table2 size={28} className="mx-auto text-slate-300" />
-            <p className="mt-3 text-sm font-black text-slate-700">
-              No {partTimeCycle} part-time employee configured
-            </p>
-            <p className="mt-1 text-xs text-slate-400">
-              Add or edit a Part-Time employee and set the matching payment interval.
-            </p>
-          </div>
-        ) : (
-          <>
-            <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-              <SummaryCard
-                label="Hours"
-                value={`${totalHours.toFixed(2)} hrs`}
-                detail={intervalLabel(bounds.start, bounds.end, partTimeCycle)}
-                icon={Clock}
-                tone="violet"
-              />
-              <SummaryCard
-                label="Gross Earnings"
-                value={`$${formatMoney(grossEarnings)}`}
-                detail={`Daily-rate pay $${formatMoney(hourlyPay)} + transport $${formatMoney(transportTotal)}`}
-                icon={DollarSign}
-                tone="emerald"
-              />
-              <SummaryCard
-                label="Advances This Interval"
-                value={`$${formatMoney(advancesThisInterval)}`}
-                detail="Advances entered against this payment interval"
-                icon={Gift}
-                tone="amber"
-              />
-              <SummaryCard
-                label="Brought Forward"
-                value={signedMoney(broughtForward)}
-                detail={`${broughtForwardRows.length} unsettled earlier interval${broughtForwardRows.length === 1 ? '' : 's'}`}
-                icon={TrendingUp}
-                tone={broughtForward < 0 ? 'amber' : 'blue'}
-              />
+          {!selectedEmployee ? (
+            <div className="border-dashed px-6 py-14 text-center">
+              <Table2 size={28} className="mx-auto text-slate-300" />
+              <p className="mt-3 text-sm font-semibold text-slate-700">
+                No {partTimeCycle} part-time employee configured
+              </p>
+              <p className="mt-1 text-sm text-slate-500">
+                Add or edit a Part-Time employee and set the matching payment interval.
+              </p>
             </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 divide-x border-b border-slate-200 sm:grid-cols-4">
+                <div className="px-4 py-3">
+                  <p className="text-xs font-medium text-slate-500">Hours</p>
+                  <p className="mt-1 font-mono text-base font-bold text-slate-900">{totalHours.toFixed(2)} hrs</p>
+                </div>
+                <div className="px-4 py-3">
+                  <p className="text-xs font-medium text-slate-500">Gross Earnings</p>
+                  <p className="mt-1 font-mono text-base font-bold text-slate-900">${formatMoney(grossEarnings)}</p>
+                </div>
+                <div className="px-4 py-3">
+                  <p className="text-xs font-medium text-slate-500">Advance Salary</p>
+                  <p className="mt-1 font-mono text-base font-bold text-slate-900">${formatMoney(advancesThisInterval)}</p>
+                </div>
+                <div className="px-4 py-3">
+                  <p className="text-xs font-medium text-slate-500">Brought Forward</p>
+                  <p className="mt-1 font-mono text-base font-bold text-slate-900">{signedMoney(broughtForward)}</p>
+                </div>
+              </div>
 
-            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-              <div className="flex flex-col gap-4 border-b border-slate-200 bg-slate-50 px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => setPartTimeAnchor((current) => shiftInterval(current, partTimeCycle, -1))}
-                    className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 hover:text-slate-900"
+                    className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
+                    aria-label="Previous interval"
                   >
-                    <ChevronLeft size={17} />
+                    <ChevronLeft size={16} />
                   </button>
-
-                  <div className="min-w-[240px] rounded-xl border border-slate-200 bg-white px-4 py-2 text-center">
-                    <p className="text-sm font-black text-slate-900">
+                  <div className="min-w-[220px] text-center">
+                    <p className="text-sm font-semibold text-slate-900">
                       {intervalLabel(bounds.start, bounds.end, partTimeCycle)}
                     </p>
-                    <p className="mt-0.5 text-[9px] font-black uppercase tracking-wider text-slate-400">
+                    <p className="mt-0.5 text-xs text-slate-500">
                       {selectedEmployee.name} · {rateLabel}
                     </p>
                   </div>
-
                   <button
                     type="button"
                     onClick={() => setPartTimeAnchor((current) => shiftInterval(current, partTimeCycle, 1))}
-                    className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 hover:text-slate-900"
+                    className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
+                    aria-label="Next interval"
                   >
-                    <ChevronRight size={17} />
+                    <ChevronRight size={16} />
                   </button>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="inline-flex items-center rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-emerald-700">
-                    <CheckCircle2 size={12} className="mr-1.5" /> Save On Exit
-                  </span>
-                  <span className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-500">
-                    $5 Transport Default
-                  </span>
+                <div className="flex items-center gap-3 text-xs">
                   {intervalLocked ? (
-                    <span className="inline-flex items-center rounded-lg bg-slate-200 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-600">
-                      <Lock size={12} className="mr-1.5" /> Settled & Locked
+                    <span className="inline-flex items-center gap-1.5 font-medium text-slate-500">
+                      <Lock size={13} /> Settled & Locked
                     </span>
                   ) : (
-                    <span className="rounded-lg bg-blue-50 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-blue-700">
-                      Editable Interval
-                    </span>
+                    <span className="font-medium text-slate-500">Editable interval</span>
                   )}
+                  <span className="text-slate-300">•</span>
+                  <span className="font-medium text-slate-500">Transport default $5</span>
                 </div>
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[1480px] border-collapse text-left">
-                  <thead className="bg-white">
-                    <tr className="border-b border-slate-200 text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">
-                      <th className="sticky left-0 z-20 min-w-[105px] bg-white px-4 py-3 shadow-[1px_0_0_0_#e2e8f0]">Date</th>
-                      <th className="min-w-[260px] px-3 py-3">Work Shift</th>
+                <table className="w-full min-w-[1460px] border-collapse text-sm text-slate-900">
+                  <thead className="bg-slate-50">
+                    <tr className="border-b border-slate-200 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+                      <th className="sticky left-0 z-20 min-w-[105px] bg-slate-50 px-4 py-3 text-left">Date</th>
+                      <th className="min-w-[260px] px-3 py-3 text-left">Work Shift</th>
                       <th className="min-w-[105px] px-3 py-3 text-right">Duration</th>
                       <th className="min-w-[155px] px-3 py-3 text-right">Rate / Hourly Pay</th>
                       <th className="min-w-[130px] px-3 py-3 text-right">Transport</th>
-                      <th className="min-w-[115px] bg-emerald-50/30 px-3 py-3 text-right">Gross</th>
-                      <th className="min-w-[130px] px-3 py-3 text-right">Advance</th>
-                      <th className="min-w-[180px] px-3 py-3 text-right">Salary Issued<br /><span className="normal-case font-semibold tracking-normal text-slate-300">actual payment record</span></th>
-                      <th className="min-w-[155px] px-3 py-3 text-right">Outstanding After Payment</th>
-                      <th className="min-w-[130px] px-3 py-3 text-right">Database</th>
+                      <th className="min-w-[115px] px-3 py-3 text-right">Gross</th>
+                      <th className="min-w-[140px] px-3 py-3 text-right">Advance Salary</th>
+                      <th className="min-w-[245px] px-3 py-3 text-right">Salary Issued</th>
+                      <th className="min-w-[155px] px-3 py-3 text-right">Outstanding</th>
+                      <th className="min-w-[90px] px-3 py-3 text-right">Actions</th>
                     </tr>
                   </thead>
 
-                  <tbody>
+                  <tbody className="divide-y divide-slate-100">
                     {dates.map((date) => {
                       const attendanceRow = employeeAttendance.find((row) => row.work_date === date) || null;
                       const dateAdvances = employeeAdvances.filter((row) => row.advance_date === date);
@@ -3145,161 +3129,126 @@ export function EmployeeModule() {
                   </tbody>
 
                   <tfoot className="border-t-2 border-slate-300 bg-slate-50">
-                    <tr className="text-xs font-black text-slate-800">
-                      <td className="sticky left-0 z-10 bg-slate-50 px-4 py-4 shadow-[1px_0_0_0_#cbd5e1]">INTERVAL TOTAL</td>
-                      <td className="px-3 py-4 text-slate-400">{usedRates.length <= 1 ? rateLabel : `${usedRates.length} rates used`}</td>
-                      <td className="px-3 py-4 text-right font-mono">{durationLabel(totalHours)}</td>
-                      <td className="px-3 py-4 text-right">
-                        <p className="font-mono text-slate-800">${formatMoney(hourlyPay)}</p>
-                        <p className="mt-0.5 text-[8px] font-black uppercase tracking-wider text-slate-400">Hourly pay</p>
+                    <tr className="text-sm font-semibold text-slate-900">
+                      <td className="sticky left-0 z-10 bg-slate-50 px-4 py-3 font-bold">Interval Total</td>
+                      <td className="px-3 py-3 text-slate-500">
+                        {usedRates.length <= 1 ? rateLabel : `${usedRates.length} rates used`}
                       </td>
-                      <td className="px-3 py-4 text-right font-mono">${formatMoney(transportTotal)}</td>
-                      <td className="bg-emerald-50 px-3 py-4 text-right font-mono text-emerald-800">${formatMoney(grossEarnings)}</td>
-                      <td className="px-3 py-4 text-right font-mono text-amber-800">${formatMoney(advancesThisInterval)}</td>
-                      <td className="px-3 py-4 text-right">
+                      <td className="px-3 py-3 text-right font-mono">{durationLabel(totalHours)}</td>
+                      <td className="px-3 py-3 text-right font-mono">${formatMoney(hourlyPay)}</td>
+                      <td className="px-3 py-3 text-right font-mono">${formatMoney(transportTotal)}</td>
+                      <td className="px-3 py-3 text-right font-mono">${formatMoney(grossEarnings)}</td>
+                      <td className="px-3 py-3 text-right font-mono">${formatMoney(advancesThisInterval)}</td>
+                      <td className="px-3 py-3 text-right">
                         <PartTimeSalaryIssuedCell
                           locked={intervalLocked}
                           saving={partTimeSavingKey === `${selectedEmployee.id}|salary|${bounds.start}|${bounds.end}`}
                           onSave={(amount, paymentDate) => savePartTimeSalaryIssued(selectedEmployee, bounds, amount, paymentDate)}
                         />
                       </td>
-                      <td className={`px-3 py-4 text-right font-mono ${intervalOutstanding < 0 ? 'text-red-700' : intervalOutstanding > 0 ? 'text-blue-700' : 'text-emerald-700'}`}>
-                        <p>{signedMoney(intervalOutstanding)}</p>
-                        <p className="mt-0.5 text-[8px] font-black uppercase tracking-wider text-slate-400">After salary issued</p>
+                      <td className="px-3 py-3 text-right font-mono font-bold">
+                        {signedMoney(intervalOutstanding)}
                       </td>
-                      <td className="px-3 py-4 text-right text-[9px] font-black uppercase tracking-wider text-slate-400">Each entry records an actual payment</td>
+                      <td className="px-3 py-3" />
                     </tr>
                   </tfoot>
                 </table>
               </div>
-            </div>
 
-            <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-7">
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
-                  Interval Calculation
-                </p>
-                <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
-                  {[
-                    ['Hourly Earnings', hourlyPay],
-                    ['Transport Allowance', transportTotal],
-                    ['Gross Earnings', grossEarnings],
-                    ['Advance Taken', -advancesThisInterval],
-                    ['Salary Due Before Payment', currentBalance],
-                    ['Salary Issued', -salaryIssuedThisInterval],
-                    ['Outstanding / (Employee Owes)', intervalOutstanding],
-                    ['Brought Forward (separate)', broughtForward],
-                  ].map(([label, amount], index) => (
-                    <div
-                      key={label}
-                      className={`flex items-center justify-between px-4 py-3 text-sm ${index < 5 ? 'border-b border-slate-100' : ''}`}
-                    >
-                      <span className="text-slate-600">{label}</span>
-                      <span className={`font-mono font-black ${Number(amount) < 0 ? 'text-red-700' : 'text-slate-900'}`}>
-                        {signedMoney(amount)}
-                      </span>
+              <div className="border-t border-slate-200 bg-white px-4 py-4">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+                    <div>
+                      <span className="text-slate-500">Hourly earnings</span>
+                      <span className="ml-2 font-mono font-semibold text-slate-900">${formatMoney(hourlyPay)}</span>
                     </div>
-                  ))}
-                </div>
-              </div>
+                    <span className="text-slate-300">+</span>
+                    <div>
+                      <span className="text-slate-500">Transport</span>
+                      <span className="ml-2 font-mono font-semibold text-slate-900">${formatMoney(transportTotal)}</span>
+                    </div>
+                    <span className="text-slate-300">−</span>
+                    <div>
+                      <span className="text-slate-500">Advance Salary</span>
+                      <span className="ml-2 font-mono font-semibold text-slate-900">${formatMoney(advancesThisInterval)}</span>
+                    </div>
+                    <span className="text-slate-300">=</span>
+                    <div>
+                      <span className="text-slate-500">Salary Due</span>
+                      <span className="ml-2 font-mono font-bold text-slate-900">${formatMoney(currentBalance)}</span>
+                    </div>
+                    <span className="text-slate-300">−</span>
+                    <div>
+                      <span className="text-slate-500">Salary Issued</span>
+                      <span className="ml-2 font-mono font-semibold text-slate-900">${formatMoney(salaryIssuedThisInterval)}</span>
+                    </div>
+                  </div>
 
-              <div className={`rounded-2xl border p-5 shadow-sm xl:col-span-7 ${intervalOutstanding < 0 ? 'border-red-200 bg-red-50' : intervalOutstanding > 0 ? 'border-blue-200 bg-blue-50' : 'border-emerald-200 bg-emerald-50'}`}>
-                <p className={`text-[10px] font-black uppercase tracking-[0.18em] ${intervalOutstanding < 0 ? 'text-red-600' : intervalOutstanding > 0 ? 'text-blue-600' : 'text-emerald-600'}`}>
-                  This Interval · Outstanding After Payment
-                </p>
-                <p className={`mt-2 text-4xl font-black tracking-tight ${intervalOutstanding < 0 ? 'text-red-900' : intervalOutstanding > 0 ? 'text-blue-900' : 'text-emerald-900'}`}>
-                  {signedMoney(intervalOutstanding)}
-                </p>
-                <p className={`mt-2 text-xs leading-5 ${intervalOutstanding < 0 ? 'text-red-700' : intervalOutstanding > 0 ? 'text-blue-700' : 'text-emerald-700'}`}>
-                  {intervalOutstanding < 0
-                    ? `Employee owes the company $${formatMoney(Math.abs(intervalOutstanding))} for this interval.`
-                    : intervalOutstanding > 0
-                      ? `You still owe ${selectedEmployee.name} $${formatMoney(intervalOutstanding)} for this interval.`
+                  <div className="flex items-center gap-4 border-t border-slate-200 pt-3 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
+                    <div>
+                      <p className="text-xs font-medium text-slate-500">Outstanding</p>
+                      <p className="font-mono text-xl font-bold text-slate-900">{signedMoney(intervalOutstanding)}</p>
+                    </div>
+                    <div className="h-8 w-px bg-slate-200" />
+                    <div className="text-right">
+                      <p className="text-xs font-medium text-slate-500">Brought forward</p>
+                      <p className="font-mono text-sm font-semibold text-slate-900">{signedMoney(broughtForward)}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-3 border-t border-slate-100 pt-2.5 text-xs text-slate-500">
+                  {intervalOutstanding > 0
+                    ? `Salary still payable to ${selectedEmployee.name}.`
+                    : intervalOutstanding < 0
+                      ? `${selectedEmployee.name} has received more than the current balance.`
                       : 'This interval is fully settled.'}
-                </p>
-
-                <div className="mt-5 grid grid-cols-2 gap-3">
-                  <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                    <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Salary Due</p>
-                    <p className="mt-1 font-mono text-lg font-black text-slate-900">${formatMoney(currentBalance)}</p>
-                  </div>
-                  <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                    <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Salary Issued</p>
-                    <p className="mt-1 font-mono text-lg font-black text-slate-900">${formatMoney(salaryIssuedThisInterval)}</p>
-                  </div>
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-12">
+              <div className="border-t border-slate-200 px-4 py-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Actual Payment History</p>
-                    <p className="mt-1 text-sm font-black text-slate-900">Salary payments recorded for this interval</p>
+                    <p className="text-sm font-semibold text-slate-900">Payment history</p>
+                    <p className="text-xs text-slate-500">Actual salary payments recorded for this interval.</p>
                   </div>
-                  <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-[9px] font-black uppercase tracking-wider text-slate-500">
+                  <span className="text-xs font-medium text-slate-500">
                     {currentSalaryPayments.length} payment{currentSalaryPayments.length === 1 ? '' : 's'}
                   </span>
                 </div>
-                {currentSalaryPayments.length ? (
-                  <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-slate-50 text-[9px] font-black uppercase tracking-wider text-slate-400">
+
+                {currentSalaryPayments.length > 0 && (
+                  <div className="mt-3 overflow-hidden rounded-md border border-slate-200">
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
                         <tr>
-                          <th className="px-4 py-2.5">Payment Date</th>
-                          <th className="px-4 py-2.5 text-right">Amount Paid</th>
-                          <th className="px-4 py-2.5">Method</th>
+                          <th className="px-3 py-2 text-left">Payment Date</th>
+                          <th className="px-3 py-2 text-right">Amount Paid</th>
+                          <th className="px-3 py-2 text-left">Method</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {currentSalaryPayments.map((payment) => (
                           <tr key={payment.id}>
-                            <td className="px-4 py-2.5 font-mono font-bold text-slate-600">{payment.payment_date || '—'}</td>
-                            <td className="px-4 py-2.5 text-right font-mono font-black text-emerald-700">${formatMoney(payment.amount || 0)}</td>
-                            <td className="px-4 py-2.5 text-slate-500">{payment.payment_method || '—'}</td>
+                            <td className="px-3 py-2 font-mono text-slate-700">{payment.payment_date || '—'}</td>
+                            <td className="px-3 py-2 text-right font-mono font-semibold text-slate-900">${formatMoney(payment.amount || 0)}</td>
+                            <td className="px-3 py-2 text-slate-600">{payment.payment_method || '—'}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
-                ) : (
-                  <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-center text-[10px] font-bold text-slate-400">
-                    No salary payment has been recorded for this interval yet. The Salary Issued field remains blank until you actually pay the employee.
-                  </div>
+                )}
+
+                {!currentSalaryPayments.length && (
+                  <p className="mt-2 text-xs text-slate-400">
+                    No salary payment has been recorded yet. Salary Issued remains blank until you actually pay the employee.
+                  </p>
                 )}
               </div>
-
-              <div className={`rounded-2xl border p-5 shadow-sm xl:col-span-5 ${rollingBalance < 0 ? 'border-red-200 bg-red-50' : 'border-emerald-200 bg-emerald-50'}`}>
-                <p className={`text-[10px] font-black uppercase tracking-[0.18em] ${rollingBalance < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                  Rolling Balance Through {bounds.end}
-                </p>
-                <p className={`mt-2 text-4xl font-black tracking-tight ${rollingBalance < 0 ? 'text-red-900' : 'text-emerald-900'}`}>
-                  {signedMoney(rollingBalance)}
-                </p>
-                <p className={`mt-2 text-xs leading-5 ${rollingBalance < 0 ? 'text-red-700' : 'text-emerald-700'}`}>
-                  {rollingBalance < 0
-                    ? `Advances exceed earned pay by $${formatMoney(Math.abs(rollingBalance))}. This negative balance carries forward until recovered or settled.`
-                    : rollingBalance > 0
-                      ? `Amount payable to ${selectedEmployee.name}, including any brought-forward balance.`
-                      : 'The account is fully balanced through this interval.'}
-                </p>
-
-                <div className="mt-5 flex flex-wrap items-center gap-3">
-                  <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                    <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Salary Issued This Interval</p>
-                    <p className="mt-1 font-mono text-lg font-black text-slate-900">${formatMoney(salaryIssuedThisInterval)}</p>
-                  </div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                    {totalOutstandingIntervals} open interval{totalOutstandingIntervals === 1 ? '' : 's'}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-[10px] leading-5 text-slate-500">
-              <strong>Salary issued & interval balance:</strong> Salary Issued is an actual payment record, not a calculated payroll field. It stays blank until you pay the employee. Enter the amount actually paid and the payment date; every payment is stored separately so you can track how much and when you paid. The interval outstanding balance is <strong>Salary Due Before Payment − Total Actual Payments</strong>. A positive balance means you still owe the employee; a negative balance means the employee owes the company. Historical paid intervals remain protected.
-            </div>
-          </>
-        )}
+            </>
+          )}
+        </section>
       </div>
     );
   };
