@@ -147,18 +147,24 @@ export function BillingModule({ sys: _sys }) {
 
         if (error) throw error;
 
-        const rows = (Array.isArray(data) ? data : []).map((row) => ({
+        const rows = (Array.isArray(data) ? data : []).map((row) => {
+          // Lock the invoice amount to the same 2-decimal value that is
+          // displayed on the customer's invoice before doing ANY monthly
+          // aggregation. This prevents hidden 3dp/4dp values from leaking
+          // into the statement total.
+          const displayCents = toDisplayedCents(row.total);
+          const displayTotal = displayCents / 100;
+
+          return {
           id: row.invoice_id,
           number: row.invoice_number,
           date: row.invoice_date,
           customerId: row.customer_id,
           customer: row.customer_name,
-          total: Number(row.total ?? 0),
-          // IMPORTANT:
-          // This is the exact amount shown to the customer on the invoice.
-          // All statement totals are calculated from this 2-decimal value,
-          // never from hidden 3+ decimal values.
-          displayCents: toDisplayedCents(row.total),
+          // `total` is deliberately the displayed 2dp invoice amount.
+          // Do not use the raw database total for statement calculations.
+          total: displayTotal,
+          displayCents,
           status: row.status || 'Paid',
           statementCustomer: {
             id: row.customer_id,
@@ -166,7 +172,8 @@ export function BillingModule({ sys: _sys }) {
             address: row.customer_address || '',
             payment_terms: row.payment_terms || '30_days',
           },
-        }));
+        };
+        });
 
         if (!cancelled) {
           setStatementInvoices(rows);
