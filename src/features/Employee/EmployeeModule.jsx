@@ -1792,7 +1792,7 @@ function PartTimeDayRow({
         )}
       </td>
 
-      <td className="min-w-[150px] px-3 py-2.5">
+      <td className="min-w-[165px] px-3 py-2.5">
         <PartTimeDaySalaryIssuedCell
           locked={locked}
           saving={salarySaving}
@@ -1802,7 +1802,13 @@ function PartTimeDayRow({
         />
       </td>
 
-      <td className="min-w-[130px] px-3 py-3">
+      <td className="min-w-[155px] px-3 py-3 text-right">
+        <p className={`font-mono text-sm font-semibold ${gross - totalAdvance - salaryPaymentsForDate.reduce((sum, payment) => sum + Number(payment.amount || 0), 0) < 0 ? 'text-red-600' : 'text-slate-900'}`}>
+          {signedMoney(gross - totalAdvance - salaryPaymentsForDate.reduce((sum, payment) => sum + Number(payment.amount || 0), 0))}
+        </p>
+      </td>
+
+      <td className="min-w-[90px] px-3 py-3">
         <div className="flex items-center justify-end gap-2">
           <div className="min-w-[66px] text-right">{saveBadge}</div>
 
@@ -1829,6 +1835,7 @@ function PartTimeDaySalaryIssuedCell({
   onSave,
 }) {
   const [draftAmount, setDraftAmount] = useState('');
+  const [paymentSaveState, setPaymentSaveState] = useState('idle');
 
   const recordedTotal = payments.reduce(
     (sum, payment) => sum + Number(payment.amount || 0),
@@ -1838,17 +1845,32 @@ function PartTimeDaySalaryIssuedCell({
   const commit = async () => {
     if (locked || saving) return;
 
-    const amount = Number(String(draftAmount || '').trim());
+    const rawAmount = String(draftAmount || '').trim();
+    if (!rawAmount) return;
+
+    const amount = Number(rawAmount);
     if (!Number.isFinite(amount) || amount <= 0) return;
 
-    const ok = await onSave(amount, date);
-    if (ok) setDraftAmount('');
+    setPaymentSaveState('saving');
+
+    try {
+      const ok = await onSave(amount, date);
+      if (ok) {
+        setDraftAmount('');
+        setPaymentSaveState('saved');
+      } else {
+        setPaymentSaveState('error');
+      }
+    } catch (error) {
+      console.error('Salary payment save failed:', error);
+      setPaymentSaveState('error');
+    }
   };
 
   return (
-    <div className="flex min-w-[150px] items-center justify-end gap-2">
-      <div className="relative w-[100px]">
-        <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-slate-400">$</span>
+    <div className="flex min-w-[165px] flex-col items-end gap-1">
+      <div className="relative w-[118px]">
+        <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-400">$</span>
         <input
           type="number"
           min="0.01"
@@ -1857,7 +1879,11 @@ function PartTimeDaySalaryIssuedCell({
           disabled={locked || saving}
           placeholder="—"
           aria-label={`Salary issued on ${date}`}
-          onChange={(event) => setDraftAmount(event.target.value)}
+          onChange={(event) => {
+            setDraftAmount(event.target.value);
+            setPaymentSaveState('idle');
+          }}
+          onBlur={() => void commit()}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
               event.preventDefault();
@@ -1868,21 +1894,21 @@ function PartTimeDaySalaryIssuedCell({
         />
       </div>
 
-      <button
-        type="button"
-        disabled={locked || saving || !(Number(draftAmount) > 0)}
-        onClick={() => void commit()}
-        className="h-9 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-700 transition hover:border-slate-500 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-300"
-        title="Record salary actually paid on this date"
-      >
-        {saving ? 'Saving' : 'Record'}
-      </button>
-
-      {recordedTotal > 0 && (
-        <span className="whitespace-nowrap text-xs font-medium text-slate-500">
-          Paid ${formatMoney(recordedTotal)}
-        </span>
-      )}
+      <div className="flex h-4 items-center justify-end text-[11px] font-medium leading-none text-slate-400">
+        {saving || paymentSaveState === 'saving' ? (
+          <span className="inline-flex items-center gap-1 text-slate-500">
+            <RefreshCw size={10} className="animate-spin" /> Saving…
+          </span>
+        ) : paymentSaveState === 'error' ? (
+          <span className="text-red-600">Save failed</span>
+        ) : paymentSaveState === 'saved' ? (
+          <span className="text-slate-500">Saved</span>
+        ) : recordedTotal > 0 ? (
+          <span>Paid ${formatMoney(recordedTotal)}</span>
+        ) : (
+          <span>Enter payment when paid</span>
+        )}
+      </div>
     </div>
   );
 }
@@ -3091,7 +3117,7 @@ export function EmployeeModule() {
                       <th className="min-w-[130px] px-3 py-3 text-right">Transport</th>
                       <th className="min-w-[115px] px-3 py-3 text-right">Gross</th>
                       <th className="min-w-[140px] px-3 py-3 text-right">Advance Salary</th>
-                      <th className="min-w-[150px] px-3 py-3 text-right">Salary Issued</th>
+                      <th className="min-w-[165px] px-3 py-3 text-right">Salary Issued</th>
                       <th className="min-w-[155px] px-3 py-3 text-right">Outstanding</th>
                       <th className="min-w-[90px] px-3 py-3 text-right">Actions</th>
                     </tr>
