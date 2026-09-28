@@ -1339,6 +1339,9 @@ function PartTimeDayRow({
   saving,
   onSave,
   onDelete,
+  salaryPaymentsForDate = [],
+  salarySaving = false,
+  onSalaryIssued,
 }) {
   const legacyHours = attendanceHours(attendanceRow);
   const hasStoredTiming = Boolean(attendanceRow?.clock_in && attendanceRow?.clock_out);
@@ -1391,7 +1394,6 @@ function PartTimeDayRow({
   const dayAllowance = computedHours > 0 ? Number(allowance || 0) : 0;
   const gross = hourlyPay + dayAllowance;
   const totalAdvance = Number(advance || 0) + Number(otherAdvanceAmount || 0);
-  const dayBalance = gross - totalAdvance;
   const hasStoredEntry = Boolean(attendanceRow || timesheetAdvance);
 
   const buildDraft = () => ({
@@ -1790,11 +1792,14 @@ function PartTimeDayRow({
         )}
       </td>
 
-      <td className="min-w-[118px] px-3 py-3 text-right">
-        <p className={`font-mono text-xs font-black ${dayBalance < 0 ? 'text-red-700' : 'text-blue-700'}`}>
-          {signedMoney(dayBalance)}
-        </p>
-        <p className="mt-0.5 text-[8px] font-black uppercase tracking-wider text-slate-400">Net day</p>
+      <td className="min-w-[150px] px-3 py-2.5">
+        <PartTimeDaySalaryIssuedCell
+          locked={locked}
+          saving={salarySaving}
+          date={date}
+          payments={salaryPaymentsForDate}
+          onSave={onSalaryIssued}
+        />
       </td>
 
       <td className="min-w-[130px] px-3 py-3">
@@ -1816,41 +1821,34 @@ function PartTimeDayRow({
   );
 }
 
-function PartTimeSalaryIssuedCell({
+function PartTimeDaySalaryIssuedCell({
   locked,
   saving,
+  date,
+  payments = [],
   onSave,
 }) {
   const [draftAmount, setDraftAmount] = useState('');
-  const [paymentDate, setPaymentDate] = useState(localDateString());
+
+  const recordedTotal = payments.reduce(
+    (sum, payment) => sum + Number(payment.amount || 0),
+    0
+  );
 
   const commit = async () => {
     if (locked || saving) return;
 
     const amount = Number(String(draftAmount || '').trim());
+    if (!Number.isFinite(amount) || amount <= 0) return;
 
-    if (!Number.isFinite(amount) || amount <= 0) {
-      return;
-    }
-
-    const ok = await onSave(
-      amount,
-      paymentDate || localDateString()
-    );
-
-    if (ok) {
-      // Salary Issued is intentionally blank after the payment is recorded.
-      // The interval total is derived from the saved payment ledger.
-      setDraftAmount('');
-    }
+    const ok = await onSave(amount, date);
+    if (ok) setDraftAmount('');
   };
 
   return (
-    <div className="flex min-w-[245px] items-center justify-end gap-1.5">
-      <div className="relative w-[95px]">
-        <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-slate-400">
-          $
-        </span>
+    <div className="flex min-w-[150px] items-center justify-end gap-2">
+      <div className="relative w-[100px]">
+        <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-slate-400">$</span>
         <input
           type="number"
           min="0.01"
@@ -1858,7 +1856,7 @@ function PartTimeSalaryIssuedCell({
           value={draftAmount}
           disabled={locked || saving}
           placeholder="—"
-          aria-label="Salary issued amount"
+          aria-label={`Salary issued on ${date}`}
           onChange={(event) => setDraftAmount(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
@@ -1870,23 +1868,21 @@ function PartTimeSalaryIssuedCell({
         />
       </div>
 
-      <input
-        type="date"
-        value={paymentDate}
-        disabled={locked || saving}
-        aria-label="Salary payment date"
-        onChange={(event) => setPaymentDate(event.target.value)}
-        className="h-9 w-[128px] rounded-md border border-slate-300 bg-white px-2 text-sm font-medium text-slate-700 outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-300 disabled:bg-slate-50 disabled:text-slate-400"
-      />
-
       <button
         type="button"
         disabled={locked || saving || !(Number(draftAmount) > 0)}
         onClick={() => void commit()}
-        className="inline-flex h-9 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+        className="h-9 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-700 transition hover:border-slate-500 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-300"
+        title="Record salary actually paid on this date"
       >
         {saving ? 'Saving' : 'Record'}
       </button>
+
+      {recordedTotal > 0 && (
+        <span className="whitespace-nowrap text-xs font-medium text-slate-500">
+          Paid ${formatMoney(recordedTotal)}
+        </span>
+      )}
     </div>
   );
 }
@@ -2330,7 +2326,7 @@ export function EmployeeModule() {
       return false;
     }
 
-    const savingKey = `${employee.id}|salary|${bounds.start}|${bounds.end}`;
+    const savingKey = `${employee.id}|salary|${bounds.start}|${bounds.end}|${paymentDate}`;
     setPartTimeSavingKey(savingKey);
 
     try {
@@ -3095,7 +3091,7 @@ export function EmployeeModule() {
                       <th className="min-w-[130px] px-3 py-3 text-right">Transport</th>
                       <th className="min-w-[115px] px-3 py-3 text-right">Gross</th>
                       <th className="min-w-[140px] px-3 py-3 text-right">Advance Salary</th>
-                      <th className="min-w-[245px] px-3 py-3 text-right">Salary Issued</th>
+                      <th className="min-w-[150px] px-3 py-3 text-right">Salary Issued</th>
                       <th className="min-w-[155px] px-3 py-3 text-right">Outstanding</th>
                       <th className="min-w-[90px] px-3 py-3 text-right">Actions</th>
                     </tr>
@@ -3123,6 +3119,15 @@ export function EmployeeModule() {
                           saving={partTimeSavingKey === `${selectedEmployee.id}|${date}`}
                           onSave={(draft) => savePartTimeDay(selectedEmployee, draft)}
                           onDelete={(dateValue) => deletePartTimeDay(selectedEmployee, dateValue)}
+                          salaryPaymentsForDate={salaryPayments.filter(
+                            (payment) =>
+                              String(payment.employee_id) === String(selectedEmployee.id) &&
+                              payment.payment_date === date
+                          )}
+                          salarySaving={partTimeSavingKey === `${selectedEmployee.id}|salary|${bounds.start}|${bounds.end}|${date}`}
+                          onSalaryIssued={(amount, paymentDate) =>
+                            savePartTimeSalaryIssued(selectedEmployee, bounds, amount, paymentDate)
+                          }
                         />
                       );
                     })}
@@ -3139,12 +3144,8 @@ export function EmployeeModule() {
                       <td className="px-3 py-3 text-right font-mono">${formatMoney(transportTotal)}</td>
                       <td className="px-3 py-3 text-right font-mono">${formatMoney(grossEarnings)}</td>
                       <td className="px-3 py-3 text-right font-mono">${formatMoney(advancesThisInterval)}</td>
-                      <td className="px-3 py-3 text-right">
-                        <PartTimeSalaryIssuedCell
-                          locked={intervalLocked}
-                          saving={partTimeSavingKey === `${selectedEmployee.id}|salary|${bounds.start}|${bounds.end}`}
-                          onSave={(amount, paymentDate) => savePartTimeSalaryIssued(selectedEmployee, bounds, amount, paymentDate)}
-                        />
+                      <td className="px-3 py-3 text-right font-mono font-bold">
+                        ${formatMoney(salaryIssuedThisInterval)}
                       </td>
                       <td className="px-3 py-3 text-right font-mono font-bold">
                         {signedMoney(intervalOutstanding)}
