@@ -63,13 +63,13 @@ const toDisplayedCents = (value) => {
 
   if (!Number.isFinite(numericValue)) return 0;
 
-  // Format first, then convert the already-rounded display value into integer
-  // cents. This avoids binary floating-point accumulation and guarantees that
-  // the statement total is the sum of the amounts the customer can see.
-  const displayed = STATEMENT_MONEY_FORMAT.format(numericValue);
-  const normalized = displayed.replace(/,/g, '');
+  // Locks the number to exactly 2 decimal places using standard JS rules 
+  // (which matches how your Invoice module renders numbers on screen),
+  // preventing any aggressive string-formatting rounding.
+  const strictTwoDecimals = numericValue.toFixed(2);
 
-  return Math.round(Number(normalized) * 100);
+  // Safely converts the resulting strict "854.01" string into 85401 integer cents
+  return Math.round(Number(strictTwoDecimals) * 100);
 };
 
 const formatStatementMoney = (value) =>
