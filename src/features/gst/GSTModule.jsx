@@ -25,6 +25,9 @@ import {
 import { formatMoney } from '../../utils/format';
 import { supabase } from '../../lib/supabaseClient';
 
+// The report uses the browser's native print engine so users can print
+// directly or choose "Save as PDF" without adding another PDF dependency.
+
 const GST_RATE = 0.09;
 const SALES_EXCLUSION_STORAGE_KEY = 'three-leaves-gst-sales-exclusions-v1';
 
@@ -154,6 +157,88 @@ function getInventorySku(item) {
 
 function getSupplierName(supplier) {
   return String(supplier?.name || supplier?.Name || supplier?.supplier_name || 'Unnamed Supplier');
+}
+
+function getSupplierGstRegistrationNumber(supplier) {
+  return String(
+    supplier?.gst_registration_number ||
+    supplier?.gstRegistrationNumber ||
+    supplier?.gst_reg_no ||
+    supplier?.gstRegNo ||
+    supplier?.gst_number ||
+    supplier?.gstNumber ||
+    supplier?.GSTRegistrationNumber ||
+    supplier?.GST ||
+    ''
+  );
+}
+
+function getInvoiceDescription(invoice) {
+  const explicit = invoice?.description || invoice?.Description || invoice?.remarks || invoice?.notes;
+  if (explicit) return String(explicit);
+
+  const items = Array.isArray(invoice?.items) ? invoice.items : [];
+  if (items.length > 0) {
+    return items
+      .map((item) => {
+        const name = item?.description || item?.name || item?.Name || item?.productName || item?.product || item?.Items || 'Item';
+        const qty = item?.qty ?? item?.quantity;
+        return qty !== undefined && qty !== null && qty !== '' ? `${name} x ${qty}` : String(name);
+      })
+      .join(', ');
+  }
+
+  return 'Sales invoice';
+}
+
+function getInvoiceDestination(invoice) {
+  return String(
+    invoice?.destinationOfGoods ||
+    invoice?.destination ||
+    invoice?.shippingAddress ||
+    invoice?.deliveryAddress ||
+    invoice?.delivery_address ||
+    ''
+  );
+}
+
+function getPurchaseInvoiceNumber(record) {
+  if (record?.supplierInvoiceNumber || record?.invoiceNumber || record?.invoice_no) {
+    return String(record?.supplierInvoiceNumber || record?.invoiceNumber || record?.invoice_no);
+  }
+
+  const description = String(record?.desc || '');
+  const match = description.match(/\bInvoice\s+(.+?)(?:\s+•|$)/i);
+  return match?.[1] || '';
+}
+
+function getPurchaseSupplierName(record) {
+  if (record?.supplierName || record?.supplier || record?.supplier_name) {
+    return String(record?.supplierName || record?.supplier || record?.supplier_name);
+  }
+
+  const description = String(record?.desc || '');
+  const separatorIndex = description.indexOf(' • Invoice');
+  return separatorIndex > -1 ? description.slice(0, separatorIndex).trim() : 'Supplier purchase';
+}
+
+function getPurchaseSupplierGstRegistrationNumber(record) {
+  return String(
+    record?.supplierGstRegistrationNumber ||
+    record?.supplier_gst_registration_number ||
+    record?.supplierGstNo ||
+    record?.supplier_gst_no ||
+    record?.gstRegistrationNumber ||
+    ''
+  );
+}
+
+function getPurchaseDescription(record) {
+  if (record?.description) return String(record.description);
+
+  const description = String(record?.desc || '');
+  const match = description.match(/\bInvoice\s+.+?\s+•\s+(.+)$/i);
+  return match?.[1] || description || 'Supplier purchase';
 }
 
 function loadStoredSalesExclusions() {
@@ -928,7 +1013,7 @@ function PurchaseEntryTable({ suppliers, inventory, onPost }) {
   );
 }
 
-function GstQuarterReport({ report, monthlyReport, salesRows, purchaseRows }) {
+function GstQuarterReport({ report, monthlyReport, salesRows, purchaseRows, onPrint }) {
   const [showSalesSummary, setShowSalesSummary] = useState(true);
   const [showPurchaseSummary, setShowPurchaseSummary] = useState(true);
   const [showInvoiceDetail, setShowInvoiceDetail] = useState(false);
@@ -936,6 +1021,9 @@ function GstQuarterReport({ report, monthlyReport, salesRows, purchaseRows }) {
   const [showTaxableValues, setShowTaxableValues] = useState(true);
 
   const toggle = (setter) => (event) => setter(event.target.checked);
+
+  const includedSales = salesRows.filter((row) => !row.isExcluded);
+  const excludedSales = salesRows.filter((row) => row.isExcluded);
 
   return (
     <div className="space-y-5">
@@ -946,7 +1034,7 @@ function GstQuarterReport({ report, monthlyReport, salesRows, purchaseRows }) {
             <h3 className="text-sm font-black text-slate-800">Report Builder</h3>
           </div>
           <p className="mt-1 text-xs font-medium text-slate-500">
-            Choose the level of detail before printing or reviewing the quarter.
+            Review the quarter on screen, then print or choose “Save as PDF”. The printed version automatically includes the full supporting listings.
           </p>
         </div>
 
@@ -973,20 +1061,22 @@ function GstQuarterReport({ report, monthlyReport, salesRows, purchaseRows }) {
           </label>
           <button
             type="button"
-            onClick={() => window.print()}
-            className="flex items-center rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-black uppercase tracking-widest text-white hover:bg-slate-800"
+            onClick={onPrint}
+            className="flex items-center rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-black uppercase tracking-widest text-white shadow-sm hover:bg-slate-800"
+            title="Print the current quarter or choose Save as PDF in the browser print dialog"
           >
-            <Printer size={15} className="mr-2" /> Print report
+            <Printer size={15} className="mr-2" /> Print / Save PDF
           </button>
         </div>
       </div>
 
       <div id="gst-quarter-report" className="space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm print:border-0 print:p-0 print:shadow-none">
-        <div className="flex flex-col gap-2 border-b border-slate-200 pb-5 md:flex-row md:items-end md:justify-between">
+        <div className="flex flex-col gap-3 border-b border-slate-200 pb-5 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">GST Quarterly Report</p>
             <h2 className="mt-1 text-2xl font-black text-slate-900">{report.quarterLabel}</h2>
             <p className="mt-1 text-xs font-medium text-slate-500">Sales GST versus Purchase GST • {report.year}</p>
+            <p className="mt-1 text-[10px] font-semibold text-slate-400">Supporting GST record • Print / Save PDF includes the quarter summary and detailed sales & purchase listings.</p>
           </div>
           <div className="grid grid-cols-3 gap-5 text-right">
             <div>
@@ -1004,6 +1094,15 @@ function GstQuarterReport({ report, monthlyReport, salesRows, purchaseRows }) {
           </div>
         </div>
 
+        <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            <div><p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Taxable sales</p><p className="mt-1 font-mono text-sm font-black text-slate-900">${formatMoney(report.taxableSales)}</p></div>
+            <div><p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Taxable purchases</p><p className="mt-1 font-mono text-sm font-black text-slate-900">${formatMoney(report.taxablePurchases)}</p></div>
+            <div><p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Sales invoices</p><p className="mt-1 font-mono text-sm font-black text-slate-900">{report.includedSalesCount}</p></div>
+            <div><p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Purchase records</p><p className="mt-1 font-mono text-sm font-black text-slate-900">{report.purchaseCount}</p></div>
+          </div>
+        </section>
+
         {(showSalesSummary || showPurchaseSummary) && (
           <section>
             <div className="mb-3 flex items-end justify-between">
@@ -1013,7 +1112,6 @@ function GstQuarterReport({ report, monthlyReport, salesRows, purchaseRows }) {
               </div>
               <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{report.includedSalesCount} sales • {report.purchaseCount} purchases</p>
             </div>
-
             <div className="overflow-x-auto">
               <table className="w-full min-w-[900px] text-sm">
                 <thead className="border-y border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-400">
@@ -1063,23 +1161,25 @@ function GstQuarterReport({ report, monthlyReport, salesRows, purchaseRows }) {
           <section className="border-t border-slate-200 pt-6">
             <h3 className="mb-3 text-sm font-black text-slate-800">Sales Invoice GST Detail</h3>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[850px] text-sm">
+              <table className="w-full min-w-[950px] text-sm">
                 <thead className="border-y border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-400">
                   <tr>
                     <th className="p-3 text-left">Date</th>
                     <th className="p-3 text-left">Invoice</th>
                     <th className="p-3 text-left">Customer</th>
+                    <th className="p-3 text-left">Description</th>
                     {showTaxableValues && <th className="p-3 text-right">Sales ex-GST</th>}
                     <th className="p-3 text-right">Sales GST</th>
                     <th className="p-3 text-right">Invoice Total</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {salesRows.filter((row) => !row.isExcluded).map((row) => (
+                  {includedSales.map((row) => (
                     <tr key={`report-sales-${row.invoiceId}`}>
                       <td className="p-3 text-slate-500">{row.invoice?.date || '-'}</td>
                       <td className="p-3 font-mono font-black text-slate-800">#{row.invoice?.number || row.invoice?.id || '-'}</td>
                       <td className="p-3 font-semibold text-slate-700">{row.invoice?.customer || 'Unknown customer'}</td>
+                      <td className="p-3 text-slate-600">{getInvoiceDescription(row.invoice)}</td>
                       {showTaxableValues && <td className="p-3 text-right font-mono">${formatMoney(row.subtotal)}</td>}
                       <td className="p-3 text-right font-mono font-black text-indigo-700">${formatMoney(row.gstAmount)}</td>
                       <td className="p-3 text-right font-mono font-black">${formatMoney(row.total)}</td>
@@ -1095,11 +1195,14 @@ function GstQuarterReport({ report, monthlyReport, salesRows, purchaseRows }) {
           <section className="border-t border-slate-200 pt-6">
             <h3 className="mb-3 text-sm font-black text-slate-800">Purchase GST Detail</h3>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[850px] text-sm">
+              <table className="w-full min-w-[1050px] text-sm">
                 <thead className="border-y border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-400">
                   <tr>
                     <th className="p-3 text-left">Date</th>
-                    <th className="p-3 text-left">Purchase</th>
+                    <th className="p-3 text-left">Invoice</th>
+                    <th className="p-3 text-left">Supplier</th>
+                    <th className="p-3 text-left">Supplier GST Reg. No.</th>
+                    <th className="p-3 text-left">Description</th>
                     <th className="p-3 text-left">Category</th>
                     {showTaxableValues && <th className="p-3 text-right">Purchase ex-GST</th>}
                     <th className="p-3 text-right">Purchase GST</th>
@@ -1113,7 +1216,10 @@ function GstQuarterReport({ report, monthlyReport, salesRows, purchaseRows }) {
                     return (
                       <tr key={`report-purchase-${record.id}`}>
                         <td className="p-3 text-slate-500">{record.date || '-'}</td>
-                        <td className="p-3 font-semibold text-slate-700">{record.desc || 'Supplier purchase'}</td>
+                        <td className="p-3 font-mono font-black">{getPurchaseInvoiceNumber(record) || '-'}</td>
+                        <td className="p-3 font-semibold">{getPurchaseSupplierName(record)}</td>
+                        <td className="p-3 text-slate-500">{getPurchaseSupplierGstRegistrationNumber(record) || '-'}</td>
+                        <td className="p-3 text-slate-600">{getPurchaseDescription(record)}</td>
                         <td className="p-3 text-slate-500">{record.category || 'Purchase'}</td>
                         {showTaxableValues && <td className="p-3 text-right font-mono">${formatMoney(amount)}</td>}
                         <td className="p-3 text-right font-mono font-black text-emerald-700">${formatMoney(gst)}</td>
@@ -1126,6 +1232,154 @@ function GstQuarterReport({ report, monthlyReport, salesRows, purchaseRows }) {
             </div>
           </section>
         )}
+
+        <div className="print-only hidden space-y-7">
+          <section className="border-t border-slate-300 pt-6">
+            <div className="mb-3">
+              <h3 className="text-sm font-black text-slate-900">Sales Listing — GST Supporting Schedule</h3>
+              <p className="mt-1 text-[10px] font-medium text-slate-500">Included sales invoices for the selected GST quarter. Excluded invoices are listed separately below.</p>
+            </div>
+            <table className="w-full table-fixed text-[8px]">
+              <thead className="table-header-group border-y border-slate-300 bg-slate-100">
+                <tr>
+                  <th className="w-[8%] p-2 text-left">Invoice date</th>
+                  <th className="w-[10%] p-2 text-left">Invoice no.</th>
+                  <th className="w-[15%] p-2 text-left">Customer</th>
+                  <th className="w-[25%] p-2 text-left">Description</th>
+                  <th className="w-[16%] p-2 text-left">Destination</th>
+                  <th className="w-[10%] p-2 text-right">Excl. GST</th>
+                  <th className="w-[8%] p-2 text-right">GST</th>
+                  <th className="w-[8%] p-2 text-right">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {includedSales.map((row) => (
+                  <tr key={`print-sales-${row.invoiceId}`} className="border-b border-slate-200 align-top">
+                    <td className="p-2">{row.invoice?.date || '-'}</td>
+                    <td className="p-2 font-mono font-bold">#{row.invoice?.number || row.invoice?.id || '-'}</td>
+                    <td className="p-2 font-semibold">{row.invoice?.customer || 'Unknown customer'}</td>
+                    <td className="p-2">{getInvoiceDescription(row.invoice)}</td>
+                    <td className="p-2">{getInvoiceDestination(row.invoice) || '-'}</td>
+                    <td className="p-2 text-right font-mono">${formatMoney(row.subtotal)}</td>
+                    <td className="p-2 text-right font-mono font-bold">${formatMoney(row.gstAmount)}</td>
+                    <td className="p-2 text-right font-mono font-bold">${formatMoney(row.total)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="border-t-2 border-slate-400 font-black">
+                <tr>
+                  <td className="p-2" colSpan={5}>Quarter sales listing total</td>
+                  <td className="p-2 text-right font-mono">${formatMoney(report.taxableSales)}</td>
+                  <td className="p-2 text-right font-mono">${formatMoney(report.outputGst)}</td>
+                  <td className="p-2 text-right font-mono">${formatMoney(report.taxableSales + report.outputGst)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </section>
+
+          <section className="border-t border-slate-300 pt-6">
+            <div className="mb-3">
+              <h3 className="text-sm font-black text-slate-900">Purchase Listing — GST Supporting Schedule</h3>
+              <p className="mt-1 text-[10px] font-medium text-slate-500">Taxable purchase records captured in the ERP for the selected GST quarter.</p>
+            </div>
+            <table className="w-full table-fixed text-[8px]">
+              <thead className="table-header-group border-y border-slate-300 bg-slate-100">
+                <tr>
+                  <th className="w-[9%] p-2 text-left">Invoice date</th>
+                  <th className="w-[11%] p-2 text-left">Invoice no.</th>
+                  <th className="w-[15%] p-2 text-left">Supplier</th>
+                  <th className="w-[12%] p-2 text-left">Supplier GST Reg. No.</th>
+                  <th className="w-[24%] p-2 text-left">Description</th>
+                  <th className="w-[10%] p-2 text-right">Excl. GST</th>
+                  <th className="w-[9%] p-2 text-right">GST</th>
+                  <th className="w-[10%] p-2 text-right">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {purchaseRows.map((record) => {
+                  const amount = toMoneyNumber(record?.amount);
+                  const gst = toMoneyNumber(record?.gst);
+                  return (
+                    <tr key={`print-purchase-${record.id}`} className="border-b border-slate-200 align-top">
+                      <td className="p-2">{record.date || '-'}</td>
+                      <td className="p-2 font-mono font-bold">{getPurchaseInvoiceNumber(record) || '-'}</td>
+                      <td className="p-2 font-semibold">{getPurchaseSupplierName(record)}</td>
+                      <td className="p-2">{getPurchaseSupplierGstRegistrationNumber(record) || '-'}</td>
+                      <td className="p-2">{getPurchaseDescription(record)}</td>
+                      <td className="p-2 text-right font-mono">${formatMoney(amount)}</td>
+                      <td className="p-2 text-right font-mono font-bold">${formatMoney(gst)}</td>
+                      <td className="p-2 text-right font-mono font-bold">${formatMoney(amount + gst)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot className="border-t-2 border-slate-400 font-black">
+                <tr>
+                  <td className="p-2" colSpan={5}>Quarter purchase listing total</td>
+                  <td className="p-2 text-right font-mono">${formatMoney(report.taxablePurchases)}</td>
+                  <td className="p-2 text-right font-mono">${formatMoney(report.inputGst)}</td>
+                  <td className="p-2 text-right font-mono">${formatMoney(report.taxablePurchases + report.inputGst)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </section>
+
+          {excludedSales.length > 0 && (
+            <section className="border-t border-slate-300 pt-6">
+              <h3 className="text-sm font-black text-slate-900">Excluded Sales — Audit Trail</h3>
+              <p className="mt-1 text-[10px] font-medium text-slate-500">These invoices remain visible for traceability but are excluded from the quarter GST calculation.</p>
+              <table className="mt-3 w-full text-[8px]">
+                <thead className="table-header-group border-y border-slate-300 bg-slate-100">
+                  <tr>
+                    <th className="p-2 text-left">Date</th>
+                    <th className="p-2 text-left">Invoice</th>
+                    <th className="p-2 text-left">Customer</th>
+                    <th className="p-2 text-left">Reason</th>
+                    <th className="p-2 text-left">Notes</th>
+                    <th className="p-2 text-right">GST excluded</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {excludedSales.map((row) => (
+                    <tr key={`print-excluded-${row.invoiceId}`} className="border-b border-slate-200 align-top">
+                      <td className="p-2">{row.invoice?.date || '-'}</td>
+                      <td className="p-2 font-mono font-bold">#{row.invoice?.number || row.invoice?.id || '-'}</td>
+                      <td className="p-2">{row.invoice?.customer || 'Unknown customer'}</td>
+                      <td className="p-2">{row.exclusion?.reason || '-'}</td>
+                      <td className="p-2">{row.exclusion?.notes || '-'}</td>
+                      <td className="p-2 text-right font-mono">${formatMoney(row.gstAmount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          )}
+
+          <section className="border-t border-slate-300 pt-6">
+            <div className="grid grid-cols-2 gap-6">
+              <div>
+                <h3 className="text-sm font-black text-slate-900">Quarter Reconciliation</h3>
+                <table className="mt-3 w-full text-[9px]">
+                  <tbody>
+                    <tr className="border-b border-slate-200"><td className="p-2 font-semibold">Output tax — sales GST</td><td className="p-2 text-right font-mono font-bold">${formatMoney(report.outputGst)}</td></tr>
+                    <tr className="border-b border-slate-200"><td className="p-2 font-semibold">Input tax — purchase GST</td><td className="p-2 text-right font-mono font-bold">(${formatMoney(report.inputGst)})</td></tr>
+                    <tr className="border-t-2 border-slate-400"><td className="p-2 font-black">Net GST position</td><td className="p-2 text-right font-mono font-black">${formatMoney(Math.abs(report.netPayable))} {report.netPayable >= 0 ? 'payable' : 'claimable'}</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-slate-900">Record Status</h3>
+                <div className="mt-3 space-y-2 text-[9px] text-slate-600">
+                  <p><strong>{report.includedSalesCount}</strong> sales invoices included in GST calculation.</p>
+                  <p><strong>{report.excludedSalesCount}</strong> sales invoices excluded with an audit reason.</p>
+                  <p><strong>{report.purchaseCount}</strong> purchase GST records included.</p>
+                  <p><strong>{report.reviewCount}</strong> sales invoice(s) use GST fallback/derived calculation and should be reviewed against the source invoice.</p>
+                  <p className="pt-2 text-slate-500">This is an ERP-generated supporting record, not an official IRAS GST return form. Retain it with the underlying invoices, receipts and other supporting documents.</p>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
       </div>
     </div>
   );
@@ -1343,6 +1597,10 @@ export function GSTModule({ sys }) {
       date: purchase.invoiceDate,
       type: 'input',
       desc: `${supplierName} • Invoice ${purchase.supplierInvoiceNumber} • ${purchasedItemNames.join(', ')}`,
+      supplierName,
+      supplierInvoiceNumber: purchase.supplierInvoiceNumber,
+      supplierGstRegistrationNumber: getSupplierGstRegistrationNumber(supplier),
+      description: purchasedItemNames.join(', '),
       category: purchase.category,
       amount: Number(purchase.subtotal.toFixed(2)),
       gst: Number(purchase.gstAmount.toFixed(2)),
@@ -1398,15 +1656,83 @@ export function GSTModule({ sys }) {
     showNotification('Purchase posted, input GST recorded, and inventory stock increased.');
   };
 
+  const handlePrintGSTReport = () => {
+    const previousTitle = document.title;
+    document.title = `Three Leaves GST ${selectedQuarter} ${selectedYear}`;
+    window.print();
+    window.setTimeout(() => {
+      document.title = previousTitle;
+    }, 1000);
+  };
+
   const netTone = report.netPayable >= 0 ? 'red' : 'emerald';
 
   return (
     <>
       <style>{`
+        @page {
+          size: A4 landscape;
+          margin: 10mm;
+        }
+
         @media print {
-          body { background: white !important; }
-          .no-print { display: none !important; }
-          #gst-quarter-report { width: 100% !important; }
+          body {
+            background: white !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+
+          body * {
+            visibility: hidden !important;
+          }
+
+          #gst-quarter-report,
+          #gst-quarter-report * {
+            visibility: visible !important;
+          }
+
+          #gst-quarter-report {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: 0 !important;
+            box-shadow: none !important;
+            background: white !important;
+          }
+
+          .no-print {
+            display: none !important;
+          }
+
+          .print-only {
+            display: block !important;
+          }
+
+          #gst-quarter-report table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+          }
+
+          #gst-quarter-report thead {
+            display: table-header-group !important;
+          }
+
+          #gst-quarter-report tr {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+
+          #gst-quarter-report section {
+            break-inside: auto;
+          }
+
+          .print-page-break {
+            break-before: page !important;
+            page-break-before: always !important;
+          }
         }
       `}</style>
     <div className="min-h-full space-y-6 bg-slate-50/60 p-8">
@@ -1701,6 +2027,7 @@ export function GSTModule({ sys }) {
               monthlyReport={monthlyReport}
               salesRows={salesRows}
               purchaseRows={purchaseRows}
+              onPrint={handlePrintGSTReport}
             />
           </div>
         )}
