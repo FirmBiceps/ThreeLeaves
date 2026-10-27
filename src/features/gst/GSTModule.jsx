@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
   BarChart3,
@@ -1024,23 +1024,85 @@ function GstQuarterReport({ report, monthlyReport, salesRows, purchaseRows, onPr
   const includedSales = salesRows.filter((row) => !row.isExcluded);
   const excludedSales = salesRows.filter((row) => row.isExcluded);
 
+  const monthLookup = useMemo(() => {
+    const map = new Map();
+    monthlyReport.forEach((month) => map.set(month.key, month));
+    return map;
+  }, [monthlyReport]);
+
+  const getRowMonthKey = (row, type = 'sales') => {
+    const value = type === 'purchase'
+      ? (row.purchase_date || row.invoice_date || row.date || row.created_at)
+      : (row.invoice?.date || row.date || row.created_at);
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  };
+
+  const groupedSales = useMemo(() => {
+    const groups = new Map();
+    includedSales.forEach((row) => {
+      const key = getRowMonthKey(row, 'sales');
+      if (!groups.has(key)) {
+        groups.set(key, {
+          key,
+          label: monthLookup.get(key)?.label || key || 'Unassigned Month',
+          rows: [],
+          subtotal: 0,
+          gst: 0,
+          total: 0,
+        });
+      }
+      const group = groups.get(key);
+      group.rows.push(row);
+      group.subtotal += Number(row.subtotal || 0);
+      group.gst += Number(row.gstAmount || 0);
+      group.total += Number(row.total || 0);
+    });
+    return Array.from(groups.values()).sort((a, b) => a.key.localeCompare(b.key));
+  }, [includedSales, monthLookup]);
+
+  const groupedPurchases = useMemo(() => {
+    const groups = new Map();
+    purchaseRows.forEach((row) => {
+      const key = getRowMonthKey(row, 'purchase');
+      if (!groups.has(key)) {
+        groups.set(key, {
+          key,
+          label: monthLookup.get(key)?.label || key || 'Unassigned Month',
+          rows: [],
+          subtotal: 0,
+          gst: 0,
+          total: 0,
+        });
+      }
+      const group = groups.get(key);
+      group.rows.push(row);
+      group.subtotal += Number(row.amount || 0);
+      group.gst += Number(row.gst || 0);
+      group.total += Number(row.amount || 0) + Number(row.gst || 0);
+    });
+    return Array.from(groups.values()).sort((a, b) => a.key.localeCompare(b.key));
+  }, [purchaseRows, monthLookup]);
+
+  const money = (value) => `$${formatMoney(value)}`;
+
   return (
-    <div className="space-y-5">
-      <div className="no-print flex flex-col gap-4 border-b border-slate-300 pb-4 md:flex-row md:items-center md:justify-between">
+    <div className="space-y-6 text-black">
+      <div className="no-print flex flex-col gap-3 border-b border-black pb-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h3 className="text-sm font-bold text-black">Quarterly GST Report</h3>
-          <p className="mt-1 text-xs text-slate-600">
-            Review the monthly totals and invoice-level GST amounts for the selected quarter.
-          </p>
+          <h3 className="text-sm font-bold">Quarterly GST Report</h3>
+          <p className="mt-1 text-xs text-slate-600">A transaction-backed quarterly schedule for sales GST and purchase GST.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-4 text-xs text-black">
+        <div className="flex flex-wrap items-center gap-4 text-xs">
           <label className="flex items-center gap-2">
             <input type="checkbox" checked={showInvoiceDetail} onChange={(event) => setShowInvoiceDetail(event.target.checked)} />
-            Sales invoice detail
+            Sales detail
           </label>
           <label className="flex items-center gap-2">
             <input type="checkbox" checked={showPurchaseDetail} onChange={(event) => setShowPurchaseDetail(event.target.checked)} />
-            Purchase invoice detail
+            Purchase detail
           </label>
           <button
             type="button"
@@ -1053,124 +1115,126 @@ function GstQuarterReport({ report, monthlyReport, salesRows, purchaseRows, onPr
       </div>
 
       <div id="gst-quarter-report" className="bg-white text-black print:p-0">
-        <header className="border-b-2 border-black pb-4">
-          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-600">GST Supporting Report</p>
-              <h1 className="mt-1 text-2xl font-bold text-black">{report.quarterLabel}</h1>
-              <p className="mt-1 text-xs text-slate-600">Sales GST and Purchase GST reconciliation</p>
-            </div>
-            <div className="text-right text-xs text-slate-600">
-              <p>Reporting period</p>
-              <p className="mt-1 font-semibold text-black">{report.quarterLabel}</p>
-            </div>
-          </div>
+        <header className="border-b-2 border-black pb-4 text-center">
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-700">Three Leaves</p>
+          <h1 className="mt-1 text-xl font-bold">GST Quarterly Report</h1>
+          <p className="mt-1 text-sm font-semibold">{report.quarterLabel}</p>
+          <p className="mt-1 text-[11px] text-slate-600">Sales GST and Purchase GST Supporting Schedule</p>
         </header>
 
-        <section className="mt-5 border border-black">
-          <div className="grid grid-cols-2 md:grid-cols-4">
-            <div className="border-b border-r border-black p-4 md:border-b-0">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-600">Sales Value</p>
-              <p className="mt-1 font-mono text-lg font-bold">${formatMoney(report.taxableSales)}</p>
-            </div>
-            <div className="border-b border-black p-4 md:border-b-0 md:border-r">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-600">Sales GST</p>
-              <p className="mt-1 font-mono text-lg font-bold">${formatMoney(report.outputGst)}</p>
-            </div>
-            <div className="border-b border-r border-black p-4 md:border-b-0">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-600">Purchase GST</p>
-              <p className="mt-1 font-mono text-lg font-bold">${formatMoney(report.inputGst)}</p>
-            </div>
-            <div className="p-4">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-600">Net GST</p>
-              <p className="mt-1 font-mono text-lg font-bold">${formatMoney(Math.abs(report.netPayable))}</p>
-              <p className="mt-1 text-[10px] text-slate-600">{report.netPayable >= 0 ? 'Payable' : 'Claimable'}</p>
-            </div>
+        <section className="mt-5">
+          <div className="border-y-2 border-black py-2">
+            <h2 className="text-sm font-bold">Quarter Summary</h2>
           </div>
-        </section>
 
-        <section className="mt-7">
-          <div className="mb-3">
-            <h2 className="text-base font-bold">1. Monthly GST Summary</h2>
-            <p className="mt-1 text-xs text-slate-600">Monthly totals are the sum of the individual 2-decimal invoice values recorded in the system.</p>
-          </div>
-          <table className="w-full border-collapse text-xs">
+          <table className="mt-2 w-full border-collapse text-xs">
             <thead>
-              <tr className="border-y border-black">
-                <th className="p-2 text-left font-bold">Month</th>
-                <th className="p-2 text-right font-bold">Sales Invoices</th>
-                <th className="p-2 text-right font-bold">Sales Value ex-GST</th>
-                <th className="p-2 text-right font-bold">Sales GST</th>
-                <th className="p-2 text-right font-bold">Sales Total</th>
-                <th className="p-2 text-right font-bold">Purchase Records</th>
-                <th className="p-2 text-right font-bold">Purchase GST</th>
-                <th className="p-2 text-right font-bold">Net GST</th>
+              <tr className="border-b border-black">
+                <th className="px-2 py-2 text-left font-bold">GST Account</th>
+                {monthlyReport.map((month) => (
+                  <th key={month.key} className="px-2 py-2 text-right font-bold">{month.label}</th>
+                ))}
+                <th className="px-2 py-2 text-right font-bold">Quarter Total</th>
               </tr>
             </thead>
             <tbody>
-              {monthlyReport.map((month) => (
-                <tr key={month.key} className="border-b border-slate-300">
-                  <td className="p-2 font-semibold">{month.label}</td>
-                  <td className="p-2 text-right font-mono">{month.salesCount}</td>
-                  <td className="p-2 text-right font-mono">${formatMoney(month.salesSubtotal)}</td>
-                  <td className="p-2 text-right font-mono">${formatMoney(month.salesGst)}</td>
-                  <td className="p-2 text-right font-mono">${formatMoney(month.salesSubtotal + month.salesGst)}</td>
-                  <td className="p-2 text-right font-mono">{month.purchaseCount}</td>
-                  <td className="p-2 text-right font-mono">${formatMoney(month.purchaseGst)}</td>
-                  <td className="p-2 text-right font-mono">${formatMoney(month.salesGst - month.purchaseGst)}</td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="border-t-2 border-black font-bold">
-                <td className="p-2">Quarter Total</td>
-                <td className="p-2 text-right font-mono">{report.includedSalesCount}</td>
-                <td className="p-2 text-right font-mono">${formatMoney(report.taxableSales)}</td>
-                <td className="p-2 text-right font-mono">${formatMoney(report.outputGst)}</td>
-                <td className="p-2 text-right font-mono">${formatMoney(report.taxableSales + report.outputGst)}</td>
-                <td className="p-2 text-right font-mono">{report.purchaseCount}</td>
-                <td className="p-2 text-right font-mono">${formatMoney(report.inputGst)}</td>
-                <td className="p-2 text-right font-mono">${formatMoney(report.netPayable)}</td>
+              <tr className="border-b border-slate-300">
+                <td className="px-2 py-2 font-semibold">Sales invoices</td>
+                {monthlyReport.map((month) => (
+                  <td key={month.key} className="px-2 py-2 text-right font-mono">{month.salesCount}</td>
+                ))}
+                <td className="px-2 py-2 text-right font-mono font-bold">{report.includedSalesCount}</td>
               </tr>
-            </tfoot>
+              <tr className="border-b border-slate-300">
+                <td className="px-2 py-2 font-semibold">Sales value ex-GST</td>
+                {monthlyReport.map((month) => (
+                  <td key={month.key} className="px-2 py-2 text-right font-mono">{money(month.salesSubtotal)}</td>
+                ))}
+                <td className="px-2 py-2 text-right font-mono font-bold">{money(report.taxableSales)}</td>
+              </tr>
+              <tr className="border-b border-slate-300">
+                <td className="px-2 py-2 font-semibold">Output GST — Sales</td>
+                {monthlyReport.map((month) => (
+                  <td key={month.key} className="px-2 py-2 text-right font-mono">{money(month.salesGst)}</td>
+                ))}
+                <td className="px-2 py-2 text-right font-mono font-bold">{money(report.outputGst)}</td>
+              </tr>
+              <tr className="border-b border-slate-300">
+                <td className="px-2 py-2 font-semibold">Purchase records</td>
+                {monthlyReport.map((month) => (
+                  <td key={month.key} className="px-2 py-2 text-right font-mono">{month.purchaseCount}</td>
+                ))}
+                <td className="px-2 py-2 text-right font-mono font-bold">{report.purchaseCount}</td>
+              </tr>
+              <tr className="border-b border-slate-300">
+                <td className="px-2 py-2 font-semibold">Input GST — Purchases</td>
+                {monthlyReport.map((month) => (
+                  <td key={month.key} className="px-2 py-2 text-right font-mono">{money(month.purchaseGst)}</td>
+                ))}
+                <td className="px-2 py-2 text-right font-mono font-bold">{money(report.inputGst)}</td>
+              </tr>
+              <tr className="border-t-2 border-black font-bold">
+                <td className="px-2 py-2">Net GST {report.netPayable >= 0 ? 'Payable' : 'Claimable'}</td>
+                {monthlyReport.map((month) => (
+                  <td key={month.key} className="px-2 py-2 text-right font-mono">{money(month.salesGst - month.purchaseGst)}</td>
+                ))}
+                <td className="px-2 py-2 text-right font-mono">{money(Math.abs(report.netPayable))}</td>
+              </tr>
+            </tbody>
           </table>
         </section>
 
         {showInvoiceDetail && (
-          <section className="mt-8 print-page-break">
-            <div className="mb-3">
-              <h2 className="text-base font-bold">2. Sales Invoice GST Detail</h2>
-              <p className="mt-1 text-xs text-slate-600">Invoice-level values only. Product or ordered-item details are intentionally omitted.</p>
+          <section className="mt-7 print-page-break">
+            <div className="border-y-2 border-black py-2">
+              <h2 className="text-sm font-bold">Sales GST Listing</h2>
+              <p className="mt-1 text-[10px] text-slate-600">Invoice-level figures only; ordered-item details are intentionally omitted.</p>
             </div>
-            <table className="w-full border-collapse text-xs">
+
+            <table className="mt-2 w-full border-collapse text-xs">
               <thead>
-                <tr className="border-y border-black">
-                  <th className="p-2 text-left font-bold">Date</th>
-                  <th className="p-2 text-left font-bold">Invoice No.</th>
-                  <th className="p-2 text-left font-bold">Customer</th>
-                  <th className="p-2 text-right font-bold">Value ex-GST</th>
-                  <th className="p-2 text-right font-bold">GST</th>
-                  <th className="p-2 text-right font-bold">Invoice Total</th>
+                <tr className="border-b border-black">
+                  <th className="px-2 py-2 text-left font-bold">Type</th>
+                  <th className="px-2 py-2 text-left font-bold">Date</th>
+                  <th className="px-2 py-2 text-left font-bold">Invoice No.</th>
+                  <th className="px-2 py-2 text-left font-bold">Customer</th>
+                  <th className="px-2 py-2 text-right font-bold">Value ex-GST</th>
+                  <th className="px-2 py-2 text-right font-bold">GST</th>
+                  <th className="px-2 py-2 text-right font-bold">Invoice Total</th>
                 </tr>
               </thead>
               <tbody>
-                {includedSales.map((row) => (
-                  <tr key={`report-sales-${row.invoiceId}`} className="border-b border-slate-300">
-                    <td className="p-2">{row.invoice?.date || '-'}</td>
-                    <td className="p-2 font-mono font-semibold">#{row.invoice?.number || row.invoice?.id || '-'}</td>
-                    <td className="p-2">{row.invoice?.customer || 'Unknown customer'}</td>
-                    <td className="p-2 text-right font-mono">${formatMoney(row.subtotal)}</td>
-                    <td className="p-2 text-right font-mono">${formatMoney(row.gstAmount)}</td>
-                    <td className="p-2 text-right font-mono font-semibold">${formatMoney(row.total)}</td>
-                  </tr>
+                {groupedSales.map((group) => (
+                  <React.Fragment key={`sales-group-${group.key}`}>
+                    <tr className="bg-slate-100 font-bold">
+                      <td colSpan="7" className="border-y border-slate-300 px-2 py-2">{group.label}</td>
+                    </tr>
+                    {group.rows.map((row) => (
+                      <tr key={`report-sales-${row.invoiceId}`} className="border-b border-slate-200">
+                        <td className="px-2 py-1.5">Invoice</td>
+                        <td className="px-2 py-1.5">{row.invoice?.date || '-'}</td>
+                        <td className="px-2 py-1.5 font-mono">#{row.invoice?.number || row.invoice?.id || '-'}</td>
+                        <td className="px-2 py-1.5">{row.invoice?.customer || 'Unknown customer'}</td>
+                        <td className="px-2 py-1.5 text-right font-mono">{money(row.subtotal)}</td>
+                        <td className="px-2 py-1.5 text-right font-mono">{money(row.gstAmount)}</td>
+                        <td className="px-2 py-1.5 text-right font-mono font-semibold">{money(row.total)}</td>
+                      </tr>
+                    ))}
+                    <tr className="border-b border-black bg-slate-50 font-semibold">
+                      <td colSpan="4" className="px-2 py-1.5">Total {group.label}</td>
+                      <td className="px-2 py-1.5 text-right font-mono">{money(group.subtotal)}</td>
+                      <td className="px-2 py-1.5 text-right font-mono">{money(group.gst)}</td>
+                      <td className="px-2 py-1.5 text-right font-mono">{money(group.total)}</td>
+                    </tr>
+                  </React.Fragment>
                 ))}
               </tbody>
               <tfoot>
                 <tr className="border-t-2 border-black font-bold">
-                  <td className="p-2" colSpan={3}>Quarter Sales Total</td>
-                  <td className="p-2 text-right font-mono">${formatMoney(report.taxableSales)}</td>
-                  <td className="p-2 text-right font-mono">${formatMoney(report.outputGst)}</td>
-                  <td className="p-2 text-right font-mono">${formatMoney(report.taxableSales + report.outputGst)}</td>
+                  <td colSpan="4" className="px-2 py-2">Total Sales</td>
+                  <td className="px-2 py-2 text-right font-mono">{money(report.taxableSales)}</td>
+                  <td className="px-2 py-2 text-right font-mono">{money(report.outputGst)}</td>
+                  <td className="px-2 py-2 text-right font-mono">{money(report.taxableSales + report.outputGst)}</td>
                 </tr>
               </tfoot>
             </table>
@@ -1178,44 +1242,54 @@ function GstQuarterReport({ report, monthlyReport, salesRows, purchaseRows, onPr
         )}
 
         {showPurchaseDetail && (
-          <section className="mt-8 print-page-break">
-            <div className="mb-3">
-              <h2 className="text-base font-bold">3. Purchase GST Detail</h2>
-              <p className="mt-1 text-xs text-slate-600">Invoice-level purchase values and input GST.</p>
+          <section className="mt-7 print-page-break">
+            <div className="border-y-2 border-black py-2">
+              <h2 className="text-sm font-bold">Purchase GST Listing</h2>
+              <p className="mt-1 text-[10px] text-slate-600">Invoice-level purchase figures supporting input GST.</p>
             </div>
-            <table className="w-full border-collapse text-xs">
+
+            <table className="mt-2 w-full border-collapse text-xs">
               <thead>
-                <tr className="border-y border-black">
-                  <th className="p-2 text-left font-bold">Date</th>
-                  <th className="p-2 text-left font-bold">Invoice No.</th>
-                  <th className="p-2 text-left font-bold">Supplier</th>
-                  <th className="p-2 text-right font-bold">Value ex-GST</th>
-                  <th className="p-2 text-right font-bold">GST</th>
-                  <th className="p-2 text-right font-bold">Invoice Total</th>
+                <tr className="border-b border-black">
+                  <th className="px-2 py-2 text-left font-bold">Type</th>
+                  <th className="px-2 py-2 text-left font-bold">Date</th>
+                  <th className="px-2 py-2 text-left font-bold">Supplier Invoice</th>
+                  <th className="px-2 py-2 text-left font-bold">Supplier</th>
+                  <th className="px-2 py-2 text-left font-bold">GST Reg. No.</th>
+                  <th className="px-2 py-2 text-right font-bold">Value ex-GST</th>
+                  <th className="px-2 py-2 text-right font-bold">GST</th>
                 </tr>
               </thead>
               <tbody>
-                {purchaseRows.map((record) => {
-                  const amount = roundMoney(record?.amount);
-                  const gst = roundMoney(record?.gst);
-                  return (
-                    <tr key={`report-purchase-${record.id}`} className="border-b border-slate-300">
-                      <td className="p-2">{record.date || '-'}</td>
-                      <td className="p-2 font-mono font-semibold">{getPurchaseInvoiceNumber(record) || '-'}</td>
-                      <td className="p-2">{getPurchaseSupplierName(record)}</td>
-                      <td className="p-2 text-right font-mono">${formatMoney(amount)}</td>
-                      <td className="p-2 text-right font-mono">${formatMoney(gst)}</td>
-                      <td className="p-2 text-right font-mono font-semibold">${formatMoney(amount + gst)}</td>
+                {groupedPurchases.map((group) => (
+                  <React.Fragment key={`purchase-group-${group.key}`}>
+                    <tr className="bg-slate-100 font-bold">
+                      <td colSpan="7" className="border-y border-slate-300 px-2 py-2">{group.label}</td>
                     </tr>
-                  );
-                })}
+                    {group.rows.map((row, index) => (
+                      <tr key={`report-purchase-${row.id || index}`} className="border-b border-slate-200">
+                        <td className="px-2 py-1.5">Purchase</td>
+                        <td className="px-2 py-1.5">{row.date || row.purchase_date || row.invoice_date || '-'}</td>
+                        <td className="px-2 py-1.5 font-mono">{getPurchaseInvoiceNumber(row)}</td>
+                        <td className="px-2 py-1.5">{getPurchaseSupplierName(row)}</td>
+                        <td className="px-2 py-1.5">{getPurchaseSupplierGstRegistrationNumber(row)}</td>
+                        <td className="px-2 py-1.5 text-right font-mono">{money(row.amount)}</td>
+                        <td className="px-2 py-1.5 text-right font-mono">{money(row.gst)}</td>
+                      </tr>
+                    ))}
+                    <tr className="border-b border-black bg-slate-50 font-semibold">
+                      <td colSpan="5" className="px-2 py-1.5">Total {group.label}</td>
+                      <td className="px-2 py-1.5 text-right font-mono">{money(group.subtotal)}</td>
+                      <td className="px-2 py-1.5 text-right font-mono">{money(group.gst)}</td>
+                    </tr>
+                  </React.Fragment>
+                ))}
               </tbody>
               <tfoot>
                 <tr className="border-t-2 border-black font-bold">
-                  <td className="p-2" colSpan={3}>Quarter Purchase Total</td>
-                  <td className="p-2 text-right font-mono">${formatMoney(report.taxablePurchases)}</td>
-                  <td className="p-2 text-right font-mono">${formatMoney(report.inputGst)}</td>
-                  <td className="p-2 text-right font-mono">${formatMoney(report.taxablePurchases + report.inputGst)}</td>
+                  <td colSpan="5" className="px-2 py-2">Total Purchases</td>
+                  <td className="px-2 py-2 text-right font-mono">{money(purchaseRows.reduce((sum, row) => sum + Number(row.amount || 0), 0))}</td>
+                  <td className="px-2 py-2 text-right font-mono">{money(report.inputGst)}</td>
                 </tr>
               </tfoot>
             </table>
@@ -1223,31 +1297,28 @@ function GstQuarterReport({ report, monthlyReport, salesRows, purchaseRows, onPr
         )}
 
         {excludedSales.length > 0 && (
-          <section className="mt-8 print-page-break">
-            <div className="mb-3">
-              <h2 className="text-base font-bold">4. Excluded Sales Audit Trail</h2>
-              <p className="mt-1 text-xs text-slate-600">Invoices excluded from the GST calculation remain listed for traceability.</p>
+          <section className="mt-7 print-page-break">
+            <div className="border-y-2 border-black py-2">
+              <h2 className="text-sm font-bold">Excluded Sales Audit Trail</h2>
             </div>
-            <table className="w-full border-collapse text-xs">
+            <table className="mt-2 w-full border-collapse text-xs">
               <thead>
-                <tr className="border-y border-black">
-                  <th className="p-2 text-left font-bold">Date</th>
-                  <th className="p-2 text-left font-bold">Invoice No.</th>
-                  <th className="p-2 text-left font-bold">Customer</th>
-                  <th className="p-2 text-left font-bold">Reason</th>
-                  <th className="p-2 text-left font-bold">Notes</th>
-                  <th className="p-2 text-right font-bold">GST Excluded</th>
+                <tr className="border-b border-black">
+                  <th className="px-2 py-2 text-left font-bold">Date</th>
+                  <th className="px-2 py-2 text-left font-bold">Invoice No.</th>
+                  <th className="px-2 py-2 text-left font-bold">Customer</th>
+                  <th className="px-2 py-2 text-left font-bold">Reason</th>
+                  <th className="px-2 py-2 text-right font-bold">GST</th>
                 </tr>
               </thead>
               <tbody>
                 {excludedSales.map((row) => (
-                  <tr key={`excluded-${row.invoiceId}`} className="border-b border-slate-300">
-                    <td className="p-2">{row.invoice?.date || '-'}</td>
-                    <td className="p-2 font-mono">#{row.invoice?.number || row.invoice?.id || '-'}</td>
-                    <td className="p-2">{row.invoice?.customer || 'Unknown customer'}</td>
-                    <td className="p-2">{row.exclusion?.reason || '-'}</td>
-                    <td className="p-2">{row.exclusion?.notes || '-'}</td>
-                    <td className="p-2 text-right font-mono">${formatMoney(row.gstAmount)}</td>
+                  <tr key={`excluded-${row.invoiceId}`} className="border-b border-slate-200">
+                    <td className="px-2 py-1.5">{row.invoice?.date || '-'}</td>
+                    <td className="px-2 py-1.5 font-mono">#{row.invoice?.number || row.invoice?.id || '-'}</td>
+                    <td className="px-2 py-1.5">{row.invoice?.customer || '-'}</td>
+                    <td className="px-2 py-1.5">{row.exclusionReason || 'Excluded'}</td>
+                    <td className="px-2 py-1.5 text-right font-mono">{money(row.gstAmount)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1255,9 +1326,11 @@ function GstQuarterReport({ report, monthlyReport, salesRows, purchaseRows, onPr
           </section>
         )}
 
-        <footer className="mt-8 border-t-2 border-black pt-3 text-[10px] text-slate-600">
-          <p className="font-semibold text-black">GST report generated from the ERP records for {report.quarterLabel}.</p>
-          <p className="mt-1">The monthly and quarterly sales figures are aggregated from the individual 2-decimal invoice values shown above.</p>
+        <footer className="mt-8 border-t border-black pt-3 text-[10px] text-slate-600">
+          <div className="flex justify-between gap-4">
+            <span>Generated from Three Leaves ERP transaction records.</span>
+            <span>Supporting GST schedule — retain with source invoices and purchase documents.</span>
+          </div>
         </footer>
       </div>
     </div>
