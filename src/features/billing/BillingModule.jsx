@@ -108,6 +108,7 @@ export function BillingModule({ sys: _sys }) {
   const [statementError, setStatementError] = useState(null);
   const [statementLoadedAt, setStatementLoadedAt] = useState(null);
   const [statementRefreshKey, setStatementRefreshKey] = useState(0);
+  const [statementCreditNotes, setStatementCreditNotes] = useState([]);
 
   // Product Sales Intelligence is deliberately isolated from the existing
   // statement engine. If the optional product RPC is unavailable, the
@@ -147,36 +148,87 @@ export function BillingModule({ sys: _sys }) {
 
         if (error) throw error;
 
-        const rows = (Array.isArray(data) ? data : []).map((row) => {
+        const rawRows = Array.isArray(data) ? data : [];
+        const invoiceIds = rawRows.map((row) => row?.invoice_id).filter(Boolean);
+
+        // Returns are deliberately stored separately from invoices. The
+        // original invoice remains immutable, while customer statements use
+        // the invoice's displayed 2dp value LESS all issued credit notes tied
+        // to that invoice. This keeps statement totals aligned with the
+        // amount the customer actually owes after returns.
+        let creditNotes = [];
+        if (invoiceIds.length > 0) {
+          const { data: creditData, error: creditError } = await supabase
+            .from('credit_notes')
+            .select('id, credit_note_number, invoice_id, total_amount, status, credit_note_date')
+            .in('invoice_id', invoiceIds)
+            .neq('status', 'void');
+
+          if (creditError) {
+            throw new Error(
+              `Unable to load sales returns / credit notes: ${creditError.message}`
+            );
+          }
+
+          creditNotes = Array.isArray(creditData) ? creditData : [];
+        }
+
+        const creditByInvoice = new Map();
+        creditNotes.forEach((note) => {
+          const invoiceId = String(note?.invoice_id || '');
+          if (!invoiceId) return;
+
+          const creditCents = toDisplayedCents(note?.total_amount);
+          const current = creditByInvoice.get(invoiceId) || {
+            cents: 0,
+            notes: [],
+          };
+
+          current.cents += creditCents;
+          current.notes.push(note);
+          creditByInvoice.set(invoiceId, current);
+        });
+
+        const rows = rawRows.map((row) => {
           // Lock the invoice amount to the same 2-decimal value that is
           // displayed on the customer's invoice before doing ANY monthly
           // aggregation. This prevents hidden 3dp/4dp values from leaking
           // into the statement total.
-          const displayCents = toDisplayedCents(row.total);
-          const displayTotal = displayCents / 100;
+          const originalDisplayCents = toDisplayedCents(row.total);
+          const credit = creditByInvoice.get(String(row.invoice_id)) || {
+            cents: 0,
+            notes: [],
+          };
+          const adjustedDisplayCents = Math.max(
+            0,
+            originalDisplayCents - credit.cents
+          );
+          const displayTotal = adjustedDisplayCents / 100;
 
           return {
-          id: row.invoice_id,
-          number: row.invoice_number,
-          date: row.invoice_date,
-          customerId: row.customer_id,
-          customer: row.customer_name,
-          // `total` is deliberately the displayed 2dp invoice amount.
-          // Do not use the raw database total for statement calculations.
-          total: displayTotal,
-          displayCents,
-          status: row.status || 'Paid',
-          statementCustomer: {
-            id: row.customer_id,
-            name: row.customer_name,
-            address: row.customer_address || '',
-            payment_terms: row.payment_terms || '30_days',
-          },
-        };
+            id: row.invoice_id,
+            number: row.invoice_number,
+            date: row.invoice_date,
+            customerId: row.customer_id,
+            customer: row.customer_name,
+            total: displayTotal,
+            displayCents: adjustedDisplayCents,
+            originalDisplayCents,
+            creditNoteCents: credit.cents,
+            creditNotes: credit.notes,
+            status: row.status || 'Paid',
+            statementCustomer: {
+              id: row.customer_id,
+              name: row.customer_name,
+              address: row.customer_address || '',
+              payment_terms: row.payment_terms || '30_days',
+            },
+          };
         });
 
         if (!cancelled) {
           setStatementInvoices(rows);
+          setStatementCreditNotes(creditNotes);
           setStatementLoadedAt(new Date());
         }
       } catch (error) {
@@ -184,6 +236,7 @@ export function BillingModule({ sys: _sys }) {
 
         if (!cancelled) {
           setStatementInvoices([]);
+          setStatementCreditNotes([]);
           setStatementError(
             error?.message || 'Unable to load statement data.'
           );
@@ -457,6 +510,7 @@ export function BillingModule({ sys: _sys }) {
           invoices: [],
           totalBilledCents: 0,
           totalBilled: 0,
+          totalCreditNoteCents: 0,
           monthStatus: 'Paid',
         });
       }
@@ -474,6 +528,7 @@ export function BillingModule({ sys: _sys }) {
       // hidden 3dp/4dp arithmetic.
       row.totalBilledCents += invoiceCents;
       row.totalBilled = row.totalBilledCents / 100;
+      row.totalCreditNoteCents += Number(inv.creditNoteCents) || 0;
 
       if (invStatus === 'unpaid') {
         row.monthStatus = 'Unpaid';
@@ -539,18 +594,25 @@ export function BillingModule({ sys: _sys }) {
       totalRevenue,
       activeCustomers,
       totalInvoicesCount,
+      totalCreditNotesCount: statementCreditNotes.length,
+      totalCreditNoteCents: statementCreditNotes.reduce(
+        (sum, note) => sum + toDisplayedCents(note?.total_amount),
+        0
+      ),
       aov,
       topCustomer,
       displayList,
       allCustomerStats: relevantCustomers,
     };
-  }, [statementInvoices, searchTerm]);
+  }, [statementInvoices, statementCreditNotes, searchTerm]);
 
   const visibleAnalytics = statementLoading
     ? {
         totalRevenue: null,
         activeCustomers: null,
         totalInvoicesCount: null,
+        totalCreditNotesCount: null,
+        totalCreditNoteCents: null,
         aov: null,
         topCustomer: null,
         displayList: [],
@@ -1060,6 +1122,11 @@ export function BillingModule({ sys: _sys }) {
 
                                 <td className="p-1 pr-4 text-right font-bold text-black">
                                   $${formatStatementCents(billedCents)}
+                                  {inv.creditNoteCents > 0 && (
+                                    <div className="text-[9px] font-normal text-slate-600">
+                                      Return credit: -$${formatStatementCents(inv.creditNoteCents)}
+                                    </div>
+                                  )}
                                 </td>
                               </tr>
                             );
@@ -1244,6 +1311,11 @@ export function BillingModule({ sys: _sys }) {
               <span className="inline-flex items-center gap-1.5 px-1 py-1">
                 <Database size={12} className="text-slate-400" />
                 {statementLoading ? 'Loading invoice records…' : `${formatDashboardInteger(statementInvoices.length)} invoice records in selected period`}
+              {!statementLoading && statementCreditNotes.length > 0 && (
+                <span className="ml-3 font-black text-amber-700">
+                  · {formatDashboardInteger(statementCreditNotes.length)} return credit{statementCreditNotes.length === 1 ? '' : 's'} · {formatDashboardMoney(statementCreditNotes.reduce((sum, note) => sum + toDisplayedCents(note?.total_amount), 0) / 100)} deducted
+                </span>
+              )}
               </span>
 
               {!dataIsSyncing && dataStatusTime && (
