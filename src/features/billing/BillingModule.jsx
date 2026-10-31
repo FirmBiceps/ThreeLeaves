@@ -133,6 +133,15 @@ export function BillingModule({ sys: _sys }) {
   const [creditNoteSearch, setCreditNoteSearch] = useState('');
   const [creditNoteStatus, setCreditNoteStatus] = useState('All');
   const [creditNoteRefreshKey, setCreditNoteRefreshKey] = useState(0);
+  const [creditNoteFromMonth, setCreditNoteFromMonth] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [creditNoteToMonth, setCreditNoteToMonth] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [creditNotePdfLoading, setCreditNotePdfLoading] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -174,44 +183,209 @@ export function BillingModule({ sys: _sys }) {
 
   const filteredCreditNotes = useMemo(() => {
     const query = creditNoteSearch.trim().toLowerCase();
+    const from = `${creditNoteFromMonth}-01`;
+    const toParts = String(creditNoteToMonth).split('-').map(Number);
+    const toDate = new Date(toParts[0], toParts[1], 1);
+    const to = `${toDate.getFullYear()}-${String(toDate.getMonth() + 1).padStart(2, '0')}-01`;
 
-    return creditNotes.filter((note) => {
-      const statusMatches =
-        creditNoteStatus === 'All' ||
-        String(note.status || '').toLowerCase() === creditNoteStatus.toLowerCase();
+    return creditNotes
+      .filter((note) => {
+        const statusMatches =
+          creditNoteStatus === 'All' ||
+          String(note.status || '').toLowerCase() === creditNoteStatus.toLowerCase();
+        if (!statusMatches) return false;
 
-      if (!statusMatches) return false;
-      if (!query) return true;
+        const noteDate = String(note.credit_note_date || note.created_at || '').slice(0, 10);
+        const dateMatches = !noteDate || (noteDate >= from && noteDate < to);
+        if (!dateMatches) return false;
 
-      return [
-        note.credit_note_number,
-        note.invoice_number,
-        note.customer_name,
-        note.reason,
-        note.settlement_method,
-        note.settlement_status,
-      ]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(query));
+        if (!query) return true;
+
+        return [
+          note.credit_note_number,
+          note.invoice_number,
+          note.customer_name,
+          note.reason,
+          note.settlement_method,
+          note.settlement_status,
+        ]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(query));
+      })
+      .sort((a, b) => {
+        const dateA = String(a.credit_note_date || a.created_at || '');
+        const dateB = String(b.credit_note_date || b.created_at || '');
+        if (dateA !== dateB) return dateB.localeCompare(dateA);
+        return String(b.credit_note_number || '').localeCompare(String(a.credit_note_number || ''), undefined, { numeric: true });
+      });
+  }, [creditNotes, creditNoteSearch, creditNoteStatus, creditNoteFromMonth, creditNoteToMonth]);
+
+  const creditNoteMonthlySummary = useMemo(() => {
+    const monthMap = new Map();
+    filteredCreditNotes.forEach((note) => {
+      const rawDate = String(note.credit_note_date || note.created_at || '');
+      const month = rawDate.slice(0, 7) || 'Unknown';
+      if (!monthMap.has(month)) {
+        monthMap.set(month, { month, count: 0, total: 0, gst: 0 });
+      }
+      const row = monthMap.get(month);
+      const isVoid = String(note.status || '').toLowerCase() === 'void';
+      if (!isVoid) {
+        row.count += 1;
+        row.total += Number(note.total_amount || 0);
+        row.gst += Number(note.gst_amount || 0);
+      }
     });
-  }, [creditNotes, creditNoteSearch, creditNoteStatus]);
+    return Array.from(monthMap.values()).sort((a, b) => b.month.localeCompare(a.month));
+  }, [filteredCreditNotes]);
 
   const creditNoteSummary = useMemo(() => {
-    const active = creditNotes.filter(
+    const active = filteredCreditNotes.filter(
       (note) => String(note.status || 'issued').toLowerCase() !== 'void'
     );
 
     return {
       count: active.length,
       total: active.reduce((sum, note) => sum + Number(note.total_amount || 0), 0),
+      gst: active.reduce((sum, note) => sum + Number(note.gst_amount || 0), 0),
       pending: active
         .filter((note) => String(note.settlement_status || '').toLowerCase() === 'pending')
         .reduce((sum, note) => sum + Number(note.total_amount || 0), 0),
-      cancelled: creditNotes.filter(
+      cancelled: filteredCreditNotes.filter(
         (note) => String(note.status || '').toLowerCase() === 'void'
       ).length,
     };
-  }, [creditNotes]);
+  }, [filteredCreditNotes]);
+
+  const formatCreditNoteMonth = (yyyyMm) => {
+    if (!yyyyMm || yyyyMm === 'Unknown') return 'Unknown';
+    const [year, month] = String(yyyyMm).split('-').map(Number);
+    return new Date(year, month - 1, 1).toLocaleDateString('en-SG', { month: 'long', year: 'numeric' });
+  };
+
+  const handlePrintCreditNote = async (note) => {
+    if (!note?.id) return;
+    setCreditNotePdfLoading(note.id);
+
+    try {
+      const { data: items, error: itemsError } = await supabase
+        .from('credit_note_items')
+        .select('*')
+        .eq('credit_note_id', note.id);
+
+      if (itemsError) throw itemsError;
+
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const margin = 18;
+      const pageWidth = 210;
+      let y = 20;
+
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(18);
+      pdf.text('THREE LEAVES', margin, y);
+      y += 7;
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text('CREDIT NOTE', margin, y);
+      pdf.setDrawColor(40, 40, 40);
+      pdf.line(margin, y + 4, pageWidth - margin, y + 4);
+      y += 14;
+
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(15);
+      pdf.text(note.credit_note_number || 'CREDIT NOTE', pageWidth - margin, y, { align: 'right' });
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(9);
+      pdf.text(`Date: ${note.credit_note_date || '—'}`, pageWidth - margin, y + 6, { align: 'right' });
+      pdf.text(`Original Invoice: ${note.invoice_number || '—'}`, pageWidth - margin, y + 11, { align: 'right' });
+      if (String(note.status || '').toLowerCase() === 'void') {
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('CANCELLED', pageWidth - margin, y + 17, { align: 'right' });
+      }
+
+      y += 23;
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(10);
+      pdf.text('CUSTOMER', margin, y);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(9);
+      pdf.text(String(note.customer_name || '—'), margin, y + 6);
+      if (note.customer_address) {
+        const addressLines = pdf.splitTextToSize(String(note.customer_address), 78);
+        pdf.text(addressLines, margin, y + 11);
+      }
+
+      y += 30;
+      pdf.setFillColor(245, 245, 245);
+      pdf.rect(margin, y, pageWidth - margin * 2, 8, 'F');
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(8);
+      pdf.text('RETURNED ITEM', margin + 2, y + 5);
+      pdf.text('QTY', 118, y + 5, { align: 'right' });
+      pdf.text('UNIT PRICE', 151, y + 5, { align: 'right' });
+      pdf.text('AMOUNT', pageWidth - margin - 2, y + 5, { align: 'right' });
+      y += 13;
+
+      pdf.setFont('helvetica', 'normal');
+      const itemRows = Array.isArray(items) ? items : [];
+      itemRows.forEach((item) => {
+        if (y > 258) {
+          pdf.addPage();
+          y = 20;
+        }
+        const name = String(item.product_name || item.item_name || item.description || 'Returned item');
+        const lines = pdf.splitTextToSize(name, 82);
+        pdf.text(lines, margin + 2, y);
+        pdf.text(String(item.returned_qty ?? item.quantity ?? 0), 118, y, { align: 'right' });
+        pdf.text(formatDashboardMoney(item.unit_price || 0).replace('S$ ', '$'), 151, y, { align: 'right' });
+        pdf.text(formatDashboardMoney(item.amount_ex_gst ?? item.line_amount ?? 0).replace('S$ ', '$'), pageWidth - margin - 2, y, { align: 'right' });
+        y += Math.max(6, lines.length * 4.5);
+        pdf.setDrawColor(225, 225, 225);
+        pdf.line(margin, y - 2, pageWidth - margin, y - 2);
+      });
+
+      y += 8;
+      const labelX = 132;
+      const valueX = pageWidth - margin;
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(9);
+      pdf.text('Amount excluding GST', labelX, y);
+      pdf.text(`$${Number(note.subtotal_ex_gst || 0).toFixed(2)}`, valueX, y, { align: 'right' });
+      y += 6;
+      pdf.text('GST reversed', labelX, y);
+      pdf.text(`$${Number(note.gst_amount || 0).toFixed(2)}`, valueX, y, { align: 'right' });
+      y += 7;
+      pdf.setDrawColor(30, 30, 30);
+      pdf.line(labelX, y - 3, valueX, y - 3);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('CREDIT NOTE TOTAL', labelX, y + 3);
+      pdf.text(`$${Number(note.total_amount || 0).toFixed(2)}`, valueX, y + 3, { align: 'right' });
+
+      y += 18;
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('RETURN DETAILS', margin, y);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(9);
+      pdf.text(`Reason: ${note.reason || 'Customer return'}`, margin, y + 6);
+      if (note.remarks) pdf.text(pdf.splitTextToSize(`Remarks: ${note.remarks}`, pageWidth - margin * 2), margin, y + 12);
+      pdf.text(`Settlement: ${String(note.settlement_method || 'invoice_adjustment').replace(/_/g, ' ')}`, margin, y + (note.remarks ? 24 : 12));
+
+      const footerY = 282;
+      pdf.setDrawColor(180, 180, 180);
+      pdf.line(margin, footerY - 5, pageWidth - margin, footerY - 5);
+      pdf.setFontSize(7.5);
+      pdf.setTextColor(90, 90, 90);
+      pdf.text('This credit note relates to the original invoice stated above.', margin, footerY);
+      pdf.text('THREE LEAVES', pageWidth - margin, footerY, { align: 'right' });
+
+      pdf.save(`${note.credit_note_number || 'credit-note'}.pdf`);
+    } catch (error) {
+      console.error('Credit note PDF generation failed:', error);
+      alert(error?.message || 'Unable to generate the credit note PDF.');
+    } finally {
+      setCreditNotePdfLoading(null);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -1288,7 +1462,7 @@ export function BillingModule({ sys: _sys }) {
                 </div>
                 <div>
                   <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-slate-900">Credit Notes</h1>
-                  <p className="mt-0.5 text-xs font-medium text-slate-500">View and monitor all customer return credits issued by the ERP</p>
+                  <p className="mt-0.5 text-xs font-medium text-slate-500">Customer returns, credits and refunds issued during the selected billing period</p>
                 </div>
               </div>
             </div>
@@ -1302,18 +1476,68 @@ export function BillingModule({ sys: _sys }) {
             </div>
           </div>
 
-          <div className="mb-5 grid grid-cols-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm md:grid-cols-3">
+          <div className="mb-5 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Billing Period</p>
+                <p className="mt-1 text-sm font-semibold text-slate-900">Filter credit notes by the month they were issued</p>
+              </div>
+              <div className="flex flex-wrap items-end gap-3">
+                <label className="block">
+                  <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-slate-500">From</span>
+                  <input type="month" value={creditNoteFromMonth} onChange={(event) => setCreditNoteFromMonth(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none" />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-slate-500">To</span>
+                  <input type="month" value={creditNoteToMonth} min={creditNoteFromMonth} onChange={(event) => setCreditNoteToMonth(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none" />
+                </label>
+                <button type="button" onClick={() => { const d = new Date(); const m = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; setCreditNoteFromMonth(m); setCreditNoteToMonth(m); }} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50">This Month</button>
+              </div>
+            </div>
+          </div>
+
+          <div className="mb-5 grid grid-cols-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm md:grid-cols-4">
             <div className="border-b border-slate-200 px-5 py-5 md:border-b-0 md:border-r">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Active Credit Notes</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Returns / Credit Notes</p>
               <p className="mt-2 text-[28px] font-semibold leading-none tracking-[-0.025em] text-slate-950 tabular-nums">{formatDashboardInteger(creditNoteSummary.count)}</p>
             </div>
             <div className="border-b border-slate-200 px-5 py-5 md:border-b-0 md:border-r">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Active Credit Value</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Credit Value</p>
               <p className="mt-2 text-[28px] font-semibold leading-none tracking-[-0.025em] text-slate-950 tabular-nums">{formatDashboardMoney(creditNoteSummary.total)}</p>
+            </div>
+            <div className="border-b border-slate-200 px-5 py-5 md:border-b-0 md:border-r">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">GST Reversed</p>
+              <p className="mt-2 text-[28px] font-semibold leading-none tracking-[-0.025em] text-slate-950 tabular-nums">{formatDashboardMoney(creditNoteSummary.gst)}</p>
             </div>
             <div className="px-5 py-5">
               <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Pending Settlement</p>
               <p className="mt-2 text-[28px] font-semibold leading-none tracking-[-0.025em] text-slate-950 tabular-nums">{formatDashboardMoney(creditNoteSummary.pending)}</p>
+            </div>
+          </div>
+
+          <div className="mb-5 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="border-b border-slate-200 px-5 py-4">
+              <h2 className="text-sm font-semibold text-slate-900">Monthly Credit Note Summary</h2>
+              <p className="mt-0.5 text-[11px] text-slate-500">A month-by-month view of customer returns within the selected billing period.</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-left text-xs">
+                <thead className="border-b border-slate-200 bg-slate-50/70 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  <tr><th className="px-5 py-3">Month</th><th className="px-4 py-3 text-right">Returns</th><th className="px-4 py-3 text-right">Credit Value</th><th className="px-5 py-3 text-right">GST Reversed</th></tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {creditNoteMonthlySummary.length === 0 ? (
+                    <tr><td colSpan="4" className="px-5 py-8 text-center text-xs text-slate-400">No credit notes in the selected period.</td></tr>
+                  ) : creditNoteMonthlySummary.map((row) => (
+                    <tr key={row.month}>
+                      <td className="px-5 py-3 font-semibold text-slate-800">{formatCreditNoteMonth(row.month)}</td>
+                      <td className="px-4 py-3 text-right font-semibold tabular-nums text-slate-800">{formatDashboardInteger(row.count)}</td>
+                      <td className="px-4 py-3 text-right font-semibold tabular-nums text-slate-900">{formatDashboardMoney(row.total)}</td>
+                      <td className="px-5 py-3 text-right tabular-nums text-slate-700">{formatDashboardMoney(row.gst)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
 
@@ -1322,11 +1546,13 @@ export function BillingModule({ sys: _sys }) {
               <Search size={15} className="shrink-0 text-slate-400" />
               <input value={creditNoteSearch} onChange={(event) => setCreditNoteSearch(event.target.value)} placeholder="Search credit note, customer or invoice…" className="min-w-0 flex-1 bg-transparent text-xs text-slate-700 outline-none placeholder:text-slate-400" />
             </div>
-            <select value={creditNoteStatus} onChange={(event) => setCreditNoteStatus(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none">
-              <option value="All">All statuses</option>
-              <option value="issued">Issued</option>
-              <option value="void">Cancelled</option>
-            </select>
+            <div className="flex items-center gap-2">
+              <select value={creditNoteStatus} onChange={(event) => setCreditNoteStatus(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none">
+                <option value="All">All statuses</option>
+                <option value="issued">Issued</option>
+                <option value="void">Cancelled</option>
+              </select>
+            </div>
           </div>
 
           {creditNotesError && (
@@ -1337,7 +1563,7 @@ export function BillingModule({ sys: _sys }) {
 
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
-              <div><h2 className="text-sm font-semibold text-slate-900">Issued Credit Notes</h2><p className="mt-0.5 text-[11px] text-slate-500">Every credit note is listed here without requiring an invoice search.</p></div>
+              <div><h2 className="text-sm font-semibold text-slate-900">Issued Credit Notes</h2><p className="mt-0.5 text-[11px] text-slate-500">Billing records for the selected period. Download the credit note PDF to send to the customer.</p></div>
               <span className="text-[11px] font-medium text-slate-400">{formatDashboardInteger(filteredCreditNotes.length)} records</span>
             </div>
 
@@ -1349,7 +1575,7 @@ export function BillingModule({ sys: _sys }) {
               <div className="overflow-x-auto">
                 <table className="min-w-full text-left text-xs">
                   <thead className="border-b border-slate-200 bg-slate-50/70 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                    <tr><th className="whitespace-nowrap px-5 py-3">Credit Note</th><th className="whitespace-nowrap px-4 py-3">Date</th><th className="px-4 py-3">Customer</th><th className="whitespace-nowrap px-4 py-3">Original Invoice</th><th className="px-4 py-3">Reason</th><th className="whitespace-nowrap px-4 py-3 text-right">Credit Amount</th><th className="whitespace-nowrap px-4 py-3">Settlement</th><th className="whitespace-nowrap px-5 py-3">Status</th></tr>
+                    <tr><th className="whitespace-nowrap px-5 py-3">Credit Note</th><th className="whitespace-nowrap px-4 py-3">Date</th><th className="px-4 py-3">Customer</th><th className="whitespace-nowrap px-4 py-3">Original Invoice</th><th className="px-4 py-3">Reason</th><th className="whitespace-nowrap px-4 py-3 text-right">Credit Amount</th><th className="whitespace-nowrap px-4 py-3">Settlement</th><th className="whitespace-nowrap px-4 py-3">Status</th><th className="whitespace-nowrap px-5 py-3 text-right">PDF</th></tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {filteredCreditNotes.map((note) => {
@@ -1364,7 +1590,12 @@ export function BillingModule({ sys: _sys }) {
                           <td className="max-w-[240px] truncate px-4 py-3.5 text-slate-600">{note.reason || 'Customer return'}</td>
                           <td className="whitespace-nowrap px-4 py-3.5 text-right font-semibold tabular-nums text-slate-900">{formatDashboardMoney(note.total_amount)}</td>
                           <td className="whitespace-nowrap px-4 py-3.5 text-slate-600">{settlement}</td>
-                          <td className="whitespace-nowrap px-5 py-3.5"><span className="inline-flex rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-slate-700">{isVoid ? 'Cancelled' : 'Issued'}</span></td>
+                          <td className="whitespace-nowrap px-4 py-3.5"><span className="inline-flex rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-slate-700">{isVoid ? 'Cancelled' : 'Issued'}</span></td>
+                          <td className="whitespace-nowrap px-5 py-3.5 text-right">
+                            <button type="button" onClick={() => handlePrintCreditNote(note)} disabled={creditNotePdfLoading === note.id} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[10px] font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50" title="Download credit note PDF">
+                              {creditNotePdfLoading === note.id ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />} PDF
+                            </button>
+                          </td>
                         </tr>
                       );
                     })}
