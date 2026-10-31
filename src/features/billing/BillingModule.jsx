@@ -108,7 +108,6 @@ export function BillingModule({ sys: _sys }) {
   const [statementError, setStatementError] = useState(null);
   const [statementLoadedAt, setStatementLoadedAt] = useState(null);
   const [statementRefreshKey, setStatementRefreshKey] = useState(0);
-  const [statementCreditNotes, setStatementCreditNotes] = useState([]);
 
   // Product Sales Intelligence is deliberately isolated from the existing
   // statement engine. If the optional product RPC is unavailable, the
@@ -124,6 +123,95 @@ export function BillingModule({ sys: _sys }) {
 
   const [printTarget, setPrintTarget] = useState(null);
   const [isZipping, setIsZipping] = useState(false);
+
+  // Dedicated Credit Notes view: users can see every issued credit note
+  // directly from Billing instead of having to locate the original invoice.
+  const [billingView, setBillingView] = useState('statements');
+  const [creditNotes, setCreditNotes] = useState([]);
+  const [creditNotesLoading, setCreditNotesLoading] = useState(false);
+  const [creditNotesError, setCreditNotesError] = useState(null);
+  const [creditNoteSearch, setCreditNoteSearch] = useState('');
+  const [creditNoteStatus, setCreditNoteStatus] = useState('All');
+  const [creditNoteRefreshKey, setCreditNoteRefreshKey] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadCreditNotes = async () => {
+      if (billingView !== 'credit-notes') return;
+
+      setCreditNotesLoading(true);
+      setCreditNotesError(null);
+
+      try {
+        const { data, error } = await supabase
+          .from('credit_notes')
+          .select('*')
+          .order('credit_note_date', { ascending: false })
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        if (!cancelled) setCreditNotes(Array.isArray(data) ? data : []);
+      } catch (error) {
+        console.error('Credit notes load failed:', error);
+        if (!cancelled) {
+          setCreditNotes([]);
+          setCreditNotesError(
+            error?.message || 'Unable to load credit notes from Supabase.'
+          );
+        }
+      } finally {
+        if (!cancelled) setCreditNotesLoading(false);
+      }
+    };
+
+    void loadCreditNotes();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [billingView, creditNoteRefreshKey]);
+
+  const filteredCreditNotes = useMemo(() => {
+    const query = creditNoteSearch.trim().toLowerCase();
+
+    return creditNotes.filter((note) => {
+      const statusMatches =
+        creditNoteStatus === 'All' ||
+        String(note.status || '').toLowerCase() === creditNoteStatus.toLowerCase();
+
+      if (!statusMatches) return false;
+      if (!query) return true;
+
+      return [
+        note.credit_note_number,
+        note.invoice_number,
+        note.customer_name,
+        note.reason,
+        note.settlement_method,
+        note.settlement_status,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query));
+    });
+  }, [creditNotes, creditNoteSearch, creditNoteStatus]);
+
+  const creditNoteSummary = useMemo(() => {
+    const active = creditNotes.filter(
+      (note) => String(note.status || 'issued').toLowerCase() !== 'void'
+    );
+
+    return {
+      count: active.length,
+      total: active.reduce((sum, note) => sum + Number(note.total_amount || 0), 0),
+      pending: active
+        .filter((note) => String(note.settlement_status || '').toLowerCase() === 'pending')
+        .reduce((sum, note) => sum + Number(note.total_amount || 0), 0),
+      cancelled: creditNotes.filter(
+        (note) => String(note.status || '').toLowerCase() === 'void'
+      ).length,
+    };
+  }, [creditNotes]);
 
   useEffect(() => {
     let cancelled = false;
@@ -148,87 +236,36 @@ export function BillingModule({ sys: _sys }) {
 
         if (error) throw error;
 
-        const rawRows = Array.isArray(data) ? data : [];
-        const invoiceIds = rawRows.map((row) => row?.invoice_id).filter(Boolean);
-
-        // Returns are deliberately stored separately from invoices. The
-        // original invoice remains immutable, while customer statements use
-        // the invoice's displayed 2dp value LESS all issued credit notes tied
-        // to that invoice. This keeps statement totals aligned with the
-        // amount the customer actually owes after returns.
-        let creditNotes = [];
-        if (invoiceIds.length > 0) {
-          const { data: creditData, error: creditError } = await supabase
-            .from('credit_notes')
-            .select('id, credit_note_number, invoice_id, total_amount, status, credit_note_date')
-            .in('invoice_id', invoiceIds)
-            .neq('status', 'void');
-
-          if (creditError) {
-            throw new Error(
-              `Unable to load sales returns / credit notes: ${creditError.message}`
-            );
-          }
-
-          creditNotes = Array.isArray(creditData) ? creditData : [];
-        }
-
-        const creditByInvoice = new Map();
-        creditNotes.forEach((note) => {
-          const invoiceId = String(note?.invoice_id || '');
-          if (!invoiceId) return;
-
-          const creditCents = toDisplayedCents(note?.total_amount);
-          const current = creditByInvoice.get(invoiceId) || {
-            cents: 0,
-            notes: [],
-          };
-
-          current.cents += creditCents;
-          current.notes.push(note);
-          creditByInvoice.set(invoiceId, current);
-        });
-
-        const rows = rawRows.map((row) => {
+        const rows = (Array.isArray(data) ? data : []).map((row) => {
           // Lock the invoice amount to the same 2-decimal value that is
           // displayed on the customer's invoice before doing ANY monthly
           // aggregation. This prevents hidden 3dp/4dp values from leaking
           // into the statement total.
-          const originalDisplayCents = toDisplayedCents(row.total);
-          const credit = creditByInvoice.get(String(row.invoice_id)) || {
-            cents: 0,
-            notes: [],
-          };
-          const adjustedDisplayCents = Math.max(
-            0,
-            originalDisplayCents - credit.cents
-          );
-          const displayTotal = adjustedDisplayCents / 100;
+          const displayCents = toDisplayedCents(row.total);
+          const displayTotal = displayCents / 100;
 
           return {
-            id: row.invoice_id,
-            number: row.invoice_number,
-            date: row.invoice_date,
-            customerId: row.customer_id,
-            customer: row.customer_name,
-            total: displayTotal,
-            displayCents: adjustedDisplayCents,
-            originalDisplayCents,
-            creditNoteCents: credit.cents,
-            creditNotes: credit.notes,
-            status: row.status || 'Paid',
-            statementCustomer: {
-              id: row.customer_id,
-              name: row.customer_name,
-              address: row.customer_address || '',
-              payment_terms: row.payment_terms || '30_days',
-            },
-          };
+          id: row.invoice_id,
+          number: row.invoice_number,
+          date: row.invoice_date,
+          customerId: row.customer_id,
+          customer: row.customer_name,
+          // `total` is deliberately the displayed 2dp invoice amount.
+          // Do not use the raw database total for statement calculations.
+          total: displayTotal,
+          displayCents,
+          status: row.status || 'Paid',
+          statementCustomer: {
+            id: row.customer_id,
+            name: row.customer_name,
+            address: row.customer_address || '',
+            payment_terms: row.payment_terms || '30_days',
+          },
+        };
         });
 
         if (!cancelled) {
           setStatementInvoices(rows);
-          setStatementCreditNotes(creditNotes);
           setStatementLoadedAt(new Date());
         }
       } catch (error) {
@@ -236,7 +273,6 @@ export function BillingModule({ sys: _sys }) {
 
         if (!cancelled) {
           setStatementInvoices([]);
-          setStatementCreditNotes([]);
           setStatementError(
             error?.message || 'Unable to load statement data.'
           );
@@ -510,7 +546,6 @@ export function BillingModule({ sys: _sys }) {
           invoices: [],
           totalBilledCents: 0,
           totalBilled: 0,
-          totalCreditNoteCents: 0,
           monthStatus: 'Paid',
         });
       }
@@ -528,7 +563,6 @@ export function BillingModule({ sys: _sys }) {
       // hidden 3dp/4dp arithmetic.
       row.totalBilledCents += invoiceCents;
       row.totalBilled = row.totalBilledCents / 100;
-      row.totalCreditNoteCents += Number(inv.creditNoteCents) || 0;
 
       if (invStatus === 'unpaid') {
         row.monthStatus = 'Unpaid';
@@ -594,25 +628,18 @@ export function BillingModule({ sys: _sys }) {
       totalRevenue,
       activeCustomers,
       totalInvoicesCount,
-      totalCreditNotesCount: statementCreditNotes.length,
-      totalCreditNoteCents: statementCreditNotes.reduce(
-        (sum, note) => sum + toDisplayedCents(note?.total_amount),
-        0
-      ),
       aov,
       topCustomer,
       displayList,
       allCustomerStats: relevantCustomers,
     };
-  }, [statementInvoices, statementCreditNotes, searchTerm]);
+  }, [statementInvoices, searchTerm]);
 
   const visibleAnalytics = statementLoading
     ? {
         totalRevenue: null,
         activeCustomers: null,
         totalInvoicesCount: null,
-        totalCreditNotesCount: null,
-        totalCreditNoteCents: null,
         aov: null,
         topCustomer: null,
         displayList: [],
@@ -1122,11 +1149,6 @@ export function BillingModule({ sys: _sys }) {
 
                                 <td className="p-1 pr-4 text-right font-bold text-black">
                                   $${formatStatementCents(billedCents)}
-                                  {inv.creditNoteCents > 0 && (
-                                    <div className="text-[9px] font-normal text-slate-600">
-                                      Return credit: -$${formatStatementCents(inv.creditNoteCents)}
-                                    </div>
-                                  )}
                                 </td>
                               </tr>
                             );
@@ -1254,6 +1276,108 @@ export function BillingModule({ sys: _sys }) {
     </div>
   ) : null;
 
+  if (billingView === 'credit-notes') {
+    return (
+      <div className="relative h-full overflow-y-auto bg-slate-50/50 p-8">
+        <div className="mx-auto max-w-[1600px]">
+          <div className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+            <div>
+              <div className="mb-2 flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm">
+                  <Receipt size={18} />
+                </div>
+                <div>
+                  <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-slate-900">Credit Notes</h1>
+                  <p className="mt-0.5 text-xs font-medium text-slate-500">View and monitor all customer return credits issued by the ERP</p>
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" onClick={() => setBillingView('statements')} className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50">
+                <FileText size={15} /> Statements
+              </button>
+              <button type="button" onClick={() => setCreditNoteRefreshKey((value) => value + 1)} disabled={creditNotesLoading} className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50">
+                <RefreshCw size={15} className={creditNotesLoading ? 'animate-spin' : ''} /> Refresh
+              </button>
+            </div>
+          </div>
+
+          <div className="mb-5 grid grid-cols-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm md:grid-cols-3">
+            <div className="border-b border-slate-200 px-5 py-5 md:border-b-0 md:border-r">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Active Credit Notes</p>
+              <p className="mt-2 text-[28px] font-semibold leading-none tracking-[-0.025em] text-slate-950 tabular-nums">{formatDashboardInteger(creditNoteSummary.count)}</p>
+            </div>
+            <div className="border-b border-slate-200 px-5 py-5 md:border-b-0 md:border-r">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Active Credit Value</p>
+              <p className="mt-2 text-[28px] font-semibold leading-none tracking-[-0.025em] text-slate-950 tabular-nums">{formatDashboardMoney(creditNoteSummary.total)}</p>
+            </div>
+            <div className="px-5 py-5">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Pending Settlement</p>
+              <p className="mt-2 text-[28px] font-semibold leading-none tracking-[-0.025em] text-slate-950 tabular-nums">{formatDashboardMoney(creditNoteSummary.pending)}</p>
+            </div>
+          </div>
+
+          <div className="mb-4 flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:flex-row md:items-center md:justify-between">
+            <div className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 md:max-w-md">
+              <Search size={15} className="shrink-0 text-slate-400" />
+              <input value={creditNoteSearch} onChange={(event) => setCreditNoteSearch(event.target.value)} placeholder="Search credit note, customer or invoice…" className="min-w-0 flex-1 bg-transparent text-xs text-slate-700 outline-none placeholder:text-slate-400" />
+            </div>
+            <select value={creditNoteStatus} onChange={(event) => setCreditNoteStatus(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none">
+              <option value="All">All statuses</option>
+              <option value="issued">Issued</option>
+              <option value="void">Cancelled</option>
+            </select>
+          </div>
+
+          {creditNotesError && (
+            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-800">
+              <div className="flex items-start gap-2"><AlertTriangle size={15} className="mt-0.5 shrink-0" /><div><p className="font-semibold">Credit Notes could not be loaded</p><p className="mt-1">{creditNotesError}</p></div></div>
+            </div>
+          )}
+
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
+              <div><h2 className="text-sm font-semibold text-slate-900">Issued Credit Notes</h2><p className="mt-0.5 text-[11px] text-slate-500">Every credit note is listed here without requiring an invoice search.</p></div>
+              <span className="text-[11px] font-medium text-slate-400">{formatDashboardInteger(filteredCreditNotes.length)} records</span>
+            </div>
+
+            {creditNotesLoading ? (
+              <div className="flex items-center justify-center gap-2 px-5 py-14 text-xs text-slate-500"><Loader2 size={16} className="animate-spin" /> Loading credit notes from Supabase…</div>
+            ) : filteredCreditNotes.length === 0 ? (
+              <div className="px-5 py-14 text-center"><Receipt size={24} className="mx-auto text-slate-300" /><p className="mt-3 text-sm font-semibold text-slate-700">No credit notes found</p><p className="mt-1 text-xs text-slate-400">Issued credit notes will appear here automatically.</p></div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-left text-xs">
+                  <thead className="border-b border-slate-200 bg-slate-50/70 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                    <tr><th className="whitespace-nowrap px-5 py-3">Credit Note</th><th className="whitespace-nowrap px-4 py-3">Date</th><th className="px-4 py-3">Customer</th><th className="whitespace-nowrap px-4 py-3">Original Invoice</th><th className="px-4 py-3">Reason</th><th className="whitespace-nowrap px-4 py-3 text-right">Credit Amount</th><th className="whitespace-nowrap px-4 py-3">Settlement</th><th className="whitespace-nowrap px-5 py-3">Status</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredCreditNotes.map((note) => {
+                      const isVoid = String(note.status || '').toLowerCase() === 'void';
+                      const settlement = String(note.settlement_method || 'invoice_adjustment').replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+                      return (
+                        <tr key={note.id} className={`hover:bg-slate-50/70 ${isVoid ? 'opacity-60' : ''}`}>
+                          <td className="whitespace-nowrap px-5 py-3.5 font-semibold text-slate-900">{note.credit_note_number || '—'}</td>
+                          <td className="whitespace-nowrap px-4 py-3.5 text-slate-600">{note.credit_note_date || '—'}</td>
+                          <td className="max-w-[240px] truncate px-4 py-3.5 font-medium text-slate-800">{note.customer_name || '—'}</td>
+                          <td className="whitespace-nowrap px-4 py-3.5 font-medium text-slate-700">{note.invoice_number || '—'}</td>
+                          <td className="max-w-[240px] truncate px-4 py-3.5 text-slate-600">{note.reason || 'Customer return'}</td>
+                          <td className="whitespace-nowrap px-4 py-3.5 text-right font-semibold tabular-nums text-slate-900">{formatDashboardMoney(note.total_amount)}</td>
+                          <td className="whitespace-nowrap px-4 py-3.5 text-slate-600">{settlement}</td>
+                          <td className="whitespace-nowrap px-5 py-3.5"><span className="inline-flex rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-slate-700">{isVoid ? 'Cancelled' : 'Issued'}</span></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="relative h-full overflow-y-auto bg-slate-50/50 p-8">
       {/* Invisible preloads */}
@@ -1311,11 +1435,6 @@ export function BillingModule({ sys: _sys }) {
               <span className="inline-flex items-center gap-1.5 px-1 py-1">
                 <Database size={12} className="text-slate-400" />
                 {statementLoading ? 'Loading invoice records…' : `${formatDashboardInteger(statementInvoices.length)} invoice records in selected period`}
-              {!statementLoading && statementCreditNotes.length > 0 && (
-                <span className="ml-3 font-black text-amber-700">
-                  · {formatDashboardInteger(statementCreditNotes.length)} return credit{statementCreditNotes.length === 1 ? '' : 's'} · {formatDashboardMoney(statementCreditNotes.reduce((sum, note) => sum + toDisplayedCents(note?.total_amount), 0) / 100)} deducted
-                </span>
-              )}
               </span>
 
               {!dataIsSyncing && dataStatusTime && (
@@ -1328,6 +1447,16 @@ export function BillingModule({ sys: _sys }) {
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              className="inline-flex h-10 items-center rounded-lg border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-50"
+              onClick={() => setBillingView('credit-notes')}
+              type="button"
+              title="View all issued customer credit notes"
+            >
+              <Receipt className="mr-2" size={15} />
+              Credit Notes
+            </button>
+
             <button
               className="inline-flex h-10 items-center rounded-lg border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
               onClick={handleRefreshStatement}
