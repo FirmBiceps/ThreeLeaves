@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   ChevronLeft,
@@ -7,11 +7,13 @@ import {
   FileText,
   Printer,
   Save,
+  FileMinus,
   X,
 } from 'lucide-react';
 import { formatMoney } from '../../utils/format';
 import logo from './three_leaves_logo.png';
 import paynowQr from './paynow_qr.jpg';
+import { CreditNoteModal } from './CreditNoteModal';
 
 const CJK_FONT =
   '"Microsoft YaHei", "微软雅黑", "PingFang SC", "Hiragino Sans GB", "SimHei", "黑体", "SimSun", "宋体", serif';
@@ -408,6 +410,7 @@ export function InvoicePreview({
   onRegister,
   onPrint,
   onEdit,
+  onCreditNote,
   onClose,
   paymentTerms,
   subtotal,
@@ -679,6 +682,16 @@ export function InvoicePreview({
                   <Edit size={16} className="mr-2" />
                   Edit
                 </button>
+                {onCreditNote && (
+                  <button
+                    onClick={onCreditNote}
+                    className="flex items-center rounded-xl border border-slate-700 bg-white px-5 py-2.5 text-sm font-bold text-slate-900 transition-colors hover:bg-slate-100"
+                    type="button"
+                  >
+                    <FileMinus size={16} className="mr-2" />
+                    Return / Credit
+                  </button>
+                )}
                 <button
                   onClick={onClose}
                   className="ml-2 rounded-full bg-slate-800 p-2.5 transition-colors hover:bg-slate-700"
@@ -943,6 +956,8 @@ export function InvoicePreview({
 }
 
 export function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
+  const [creditNoteOpen, setCreditNoteOpen] = useState(false);
+
   if (!invoice) return null;
 
   const safeCustomers = Array.isArray(sys?.customers) ? sys.customers : [];
@@ -962,7 +977,8 @@ export function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
   const gst = subtotal * 0.09;
 
   return (
-    <InvoicePreview
+    <>
+      <InvoicePreview
       mode="history"
       customer={{
         name: invoice.customer,
@@ -975,6 +991,7 @@ export function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
       remarks={invoice.remarks}
       onPrint={() => window.print()}
       onEdit={() => onEdit(invoice)}
+      onCreditNote={() => setCreditNoteOpen(true)}
       onClose={onClose}
       paymentTerms={invoice.paymentTerms}
       subtotal={subtotal}
@@ -983,6 +1000,16 @@ export function InvoicePreviewModal({ invoice, onClose, onEdit, sys }) {
       isSpecialFormat={invoice.isSpecialFormat}
       poNumber={invoice.poNumber}
       carPlateNo={invoice.carPlateNo}
-    />
+      />
+      {creditNoteOpen && (
+        <CreditNoteModal
+          invoice={invoice}
+          onClose={() => setCreditNoteOpen(false)}
+          onSaved={() => {
+            setCreditNoteOpen(false);
+          }}
+        />
+      )}
+    </>
   );
 }
