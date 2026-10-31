@@ -187,18 +187,6 @@ function getInvoiceGst(invoice) {
   };
 }
 
-function getInventoryIdentity(item) {
-  return item?.id || item?.SKU || item?.sku || item?.Name || item?.name || item?.Items || '';
-}
-
-function getInventoryName(item) {
-  return String(item?.Name || item?.name || item?.Items || 'Unnamed Product');
-}
-
-function getInventorySku(item) {
-  return String(item?.SKU || item?.sku || '');
-}
-
 function getSupplierName(supplier) {
   return String(supplier?.name || supplier?.Name || supplier?.supplier_name || 'Unnamed Supplier');
 }
@@ -413,350 +401,115 @@ function SalesExclusionModal({ invoice, existing, onClose, onSave }) {
   );
 }
 
-function PurchaseEntryModal({ suppliers, inventory, onClose, onSave }) {
-  const [form, setForm] = useState({
-    supplierId: '',
-    supplierInvoiceNumber: '',
-    invoiceDate: new Date().toISOString().slice(0, 10),
-    category: 'Inventory Purchase',
-    notes: '',
-    gstRate: GST_RATE,
-  });
-  const [items, setItems] = useState([
-    { productId: '', quantity: 1, unitCost: 0, gstRate: GST_RATE },
-  ]);
-  const [isSaving, setIsSaving] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
-
-  const safeSuppliers = Array.isArray(suppliers) ? suppliers : [];
-  const safeInventory = Array.isArray(inventory) ? inventory : [];
-
-  const subtotal = useMemo(
-    () => items.reduce((sum, item) => sum + toMoneyNumber(item.quantity) * toMoneyNumber(item.unitCost), 0),
-    [items]
-  );
-
-  const gstAmount = useMemo(
-    () => items.reduce((sum, item) => {
-      const lineSubtotal = toMoneyNumber(item.quantity) * toMoneyNumber(item.unitCost);
-      return sum + lineSubtotal * toMoneyNumber(item.gstRate);
-    }, 0),
-    [items]
-  );
-
-  const total = subtotal + gstAmount;
-
-  const updateItem = (index, patch) => {
-    setItems((current) => current.map((item, itemIndex) => (
-      itemIndex === index ? { ...item, ...patch } : item
-    )));
-  };
-
-  const removeItem = (index) => {
-    setItems((current) => current.filter((_, itemIndex) => itemIndex !== index));
-  };
-
-  const handleSubmit = async () => {
-    setErrorMessage('');
-
-    const cleanItems = items
-      .map((item) => ({
-        ...item,
-        quantity: toMoneyNumber(item.quantity),
-        unitCost: toMoneyNumber(item.unitCost),
-        gstRate: toMoneyNumber(item.gstRate),
-      }))
-      .filter((item) => item.productId && item.quantity > 0);
-
-    if (!form.supplierId) {
-      setErrorMessage('Select a supplier.');
-      return;
-    }
-
-    if (!form.supplierInvoiceNumber.trim()) {
-      setErrorMessage('Enter the supplier invoice number.');
-      return;
-    }
-
-    if (cleanItems.length === 0) {
-      setErrorMessage('Add at least one valid purchase item.');
-      return;
-    }
-
-    setIsSaving(true);
-    try {
-      await onSave({
-        ...form,
-        supplierInvoiceNumber: form.supplierInvoiceNumber.trim(),
-        notes: form.notes.trim(),
-        items: cleanItems,
-        subtotal,
-        gstAmount,
-        total,
-      });
-    } catch (error) {
-      setErrorMessage(error?.message || 'Unable to save purchase entry.');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-[7000] flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm">
-      <div className="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
-        <div className="flex shrink-0 items-center justify-between bg-slate-900 px-6 py-4 text-white">
-          <div>
-            <h2 className="flex items-center text-sm font-black uppercase tracking-widest">
-              <ShoppingCart className="mr-2 text-emerald-400" size={18} />
-              Register Supplier Purchase
-            </h2>
-            <p className="mt-1 text-xs text-slate-300">Capture input GST and stock-in purchased items.</p>
-          </div>
-          <button type="button" onClick={onClose} className="rounded-full p-1.5 hover:bg-slate-800">
-            <X size={19} />
-          </button>
-        </div>
-
-        <div className="flex-1 space-y-6 overflow-y-auto bg-slate-50 p-6">
-          <div className="grid grid-cols-1 gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:grid-cols-4">
-            <div className="md:col-span-2">
-              <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">Supplier</label>
-              <select
-                value={form.supplierId}
-                onChange={(event) => setForm((current) => ({ ...current, supplierId: event.target.value }))}
-                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Select supplier...</option>
-                {safeSuppliers.map((supplier) => (
-                  <option key={supplier.id || getSupplierName(supplier)} value={supplier.id || getSupplierName(supplier)}>
-                    {getSupplierName(supplier)}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">Supplier Invoice No.</label>
-              <input
-                value={form.supplierInvoiceNumber}
-                onChange={(event) => setForm((current) => ({ ...current, supplierInvoiceNumber: event.target.value }))}
-                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="e.g. SUP-2026-001"
-              />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">Invoice Date</label>
-              <input
-                type="date"
-                value={form.invoiceDate}
-                onChange={(event) => setForm((current) => ({ ...current, invoiceDate: event.target.value }))}
-                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">Category</label>
-              <select
-                value={form.category}
-                onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))}
-                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {PURCHASE_CATEGORIES.map((category) => (
-                  <option key={category} value={category}>{category}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">Notes</label>
-              <input
-                value={form.notes}
-                onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))}
-                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Optional internal notes"
-              />
-            </div>
-          </div>
-
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-              <div>
-                <h3 className="text-sm font-black text-slate-800">Purchased Items</h3>
-                <p className="mt-1 text-xs font-medium text-slate-400">Each item will be added to stock when this purchase is saved.</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setItems((current) => [...current, { productId: '', quantity: 1, unitCost: 0, gstRate: GST_RATE }])}
-                className="flex items-center rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700 hover:bg-blue-100"
-              >
-                <Plus size={14} className="mr-1.5" /> Add item
-              </button>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="min-w-[900px] w-full text-left">
-                <thead className="border-b bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-400">
-                  <tr>
-                    <th className="p-4 pl-5">Product</th>
-                    <th className="p-4 text-center">Qty</th>
-                    <th className="p-4 text-right">Unit Cost</th>
-                    <th className="p-4 text-center">GST Rate</th>
-                    <th className="p-4 text-right">GST</th>
-                    <th className="p-4 text-right">Line Total</th>
-                    <th className="p-4 pr-5 text-center">Remove</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-sm">
-                  {items.map((item, index) => {
-                    const lineSubtotal = toMoneyNumber(item.quantity) * toMoneyNumber(item.unitCost);
-                    const lineGst = lineSubtotal * toMoneyNumber(item.gstRate);
-                    return (
-                      <tr key={`purchase-line-${index}`}>
-                        <td className="p-4 pl-5">
-                          <select
-                            value={item.productId}
-                            onChange={(event) => {
-                              const product = safeInventory.find((entry) => String(getInventoryIdentity(entry)) === String(event.target.value));
-                              updateItem(index, {
-                                productId: event.target.value,
-                                unitCost: product
-                                  ? toMoneyNumber(product?.['cost_price (SGD)'] ?? product?.cost_price ?? product?.costPrice)
-                                  : item.unitCost,
-                              });
-                            }}
-                            className="w-full rounded-lg border border-slate-200 bg-white p-2.5 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500"
-                          >
-                            <option value="">Select product...</option>
-                            {safeInventory.map((product) => {
-                              const identity = getInventoryIdentity(product);
-                              return (
-                                <option key={identity} value={identity}>
-                                  {getInventorySku(product) ? `[${getInventorySku(product)}] ` : ''}{getInventoryName(product)}
-                                </option>
-                              );
-                            })}
-                          </select>
-                        </td>
-                        <td className="p-4 text-center">
-                          <input
-                            type="number"
-                            min="0"
-                            step="1"
-                            value={item.quantity}
-                            onChange={(event) => updateItem(index, { quantity: event.target.value })}
-                            className="w-24 rounded-lg border border-slate-200 p-2.5 text-center font-mono font-bold outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                        </td>
-                        <td className="p-4 text-right">
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={item.unitCost}
-                            onChange={(event) => updateItem(index, { unitCost: event.target.value })}
-                            className="w-28 rounded-lg border border-slate-200 p-2.5 text-right font-mono font-bold outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                        </td>
-                        <td className="p-4 text-center">
-                          <select
-                            value={item.gstRate}
-                            onChange={(event) => updateItem(index, { gstRate: Number(event.target.value) })}
-                            className="rounded-lg border border-slate-200 bg-white p-2.5 text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500"
-                          >
-                            <option value={GST_RATE}>9%</option>
-                            <option value={0}>0%</option>
-                          </select>
-                        </td>
-                        <td className="p-4 text-right font-mono font-black text-emerald-600">${formatMoney(lineGst)}</td>
-                        <td className="p-4 text-right font-mono font-black text-slate-900">${formatMoney(lineSubtotal + lineGst)}</td>
-                        <td className="p-4 pr-5 text-center">
-                          <button
-                            type="button"
-                            disabled={items.length === 1}
-                            onClick={() => removeItem(index)}
-                            className="rounded-lg p-2 text-slate-300 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-30"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Purchase subtotal</p>
-              <p className="mt-2 font-mono text-2xl font-black text-slate-900">${formatMoney(subtotal)}</p>
-            </div>
-            <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5 shadow-sm">
-              <p className="text-[10px] font-black uppercase tracking-widest text-emerald-500">Input GST</p>
-              <p className="mt-2 font-mono text-2xl font-black text-emerald-800">${formatMoney(gstAmount)}</p>
-            </div>
-            <div className="rounded-2xl border border-blue-100 bg-blue-50 p-5 shadow-sm">
-              <p className="text-[10px] font-black uppercase tracking-widest text-blue-500">Invoice total</p>
-              <p className="mt-2 font-mono text-2xl font-black text-blue-900">${formatMoney(total)}</p>
-            </div>
-          </div>
-
-          {errorMessage && (
-            <div className="flex items-start rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">
-              <AlertCircle size={18} className="mr-2 mt-0.5 shrink-0" />
-              {errorMessage}
-            </div>
-          )}
-        </div>
-
-        <div className="flex shrink-0 items-center justify-between border-t border-slate-200 bg-white px-6 py-4">
-          <p className="max-w-2xl text-xs font-medium text-slate-400">
-            Temporary workflow: the GST record and inventory stock update are saved now. A later database migration will add formal purchase invoice and stock movement tables.
-          </p>
-          <div className="flex gap-3">
-            <button type="button" onClick={onClose} disabled={isSaving} className="rounded-xl px-5 py-2.5 text-sm font-bold text-slate-500 hover:bg-slate-100">
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={isSaving}
-              className="flex items-center rounded-xl bg-emerald-600 px-6 py-2.5 text-sm font-black text-white shadow-lg hover:bg-emerald-700 disabled:opacity-50"
-            >
-              {isSaving ? <RefreshCcw size={16} className="mr-2 animate-spin" /> : <CheckCircle2 size={16} className="mr-2" />}
-              {isSaving ? 'Saving...' : 'Post Purchase'}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-
 function createEmptyPurchaseDraft() {
   return {
     date: new Date().toISOString().slice(0, 10),
     supplierId: '',
+    supplierName: '',
     supplierInvoiceNumber: '',
     category: 'Inventory Purchase',
-    productId: '',
-    quantity: 1,
-    unitCost: '',
-    gstRate: GST_RATE,
+    grossAmount: '',
+    gstTreatment: 'standard',
+    gstAmount: '',
     notes: '',
     status: 'draft',
     error: '',
   };
 }
 
-function PurchaseEntryTable({ suppliers, inventory, onPost }) {
-  const [rows, setRows] = useState(() => [createEmptyPurchaseDraft()]);
+function getSupplierSearchScore(supplier, query) {
+  const name = getSupplierName(supplier).toLowerCase();
+  const normalized = String(query || '').trim().toLowerCase();
+  if (!normalized) return 0;
+  if (name === normalized) return 0;
+  if (name.startsWith(normalized)) return 1;
+  const words = name.split(/\s+/);
+  if (words.some((word) => word.startsWith(normalized))) return 2;
+  if (name.includes(normalized)) return 3;
+  return 99;
+}
 
+function SupplierTypeahead({ value, selectedSupplierId, suppliers, disabled, onChange, onSelect }) {
+  const [isOpen, setIsOpen] = useState(false);
   const safeSuppliers = Array.isArray(suppliers) ? suppliers : [];
-  const safeInventory = Array.isArray(inventory) ? inventory : [];
+  const query = String(value || '');
+
+  const suggestions = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) return safeSuppliers.slice(0, 8);
+
+    return safeSuppliers
+      .map((supplier) => ({ supplier, score: getSupplierSearchScore(supplier, normalized) }))
+      .filter(({ score }) => score < 99)
+      .sort((a, b) => a.score - b.score || getSupplierName(a.supplier).localeCompare(getSupplierName(b.supplier)))
+      .slice(0, 8)
+      .map(({ supplier }) => supplier);
+  }, [query, safeSuppliers]);
+
+  return (
+    <div className="relative">
+      <input
+        value={query}
+        disabled={disabled}
+        autoComplete="off"
+        placeholder="Type supplier name..."
+        onFocus={() => setIsOpen(true)}
+        onChange={(event) => {
+          onChange(event.target.value);
+          setIsOpen(true);
+        }}
+        onBlur={() => window.setTimeout(() => setIsOpen(false), 160)}
+        className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-bold text-slate-700 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100"
+      />
+      {isOpen && !disabled && suggestions.length > 0 && (
+        <div className="absolute left-0 right-0 top-full z-[120] mt-1 max-h-64 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-xl">
+          {suggestions.map((supplier) => {
+            const supplierId = String(supplier?.id || getSupplierName(supplier));
+            const isSelected = String(selectedSupplierId || '') === supplierId;
+            return (
+              <button
+                key={supplierId}
+                type="button"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => {
+                  onSelect(supplier);
+                  setIsOpen(false);
+                }}
+                className={`block w-full rounded-md px-3 py-2 text-left text-xs font-bold ${isSelected ? 'bg-emerald-50 text-emerald-800' : 'text-slate-700 hover:bg-slate-50'}`}
+              >
+                {getSupplierName(supplier)}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function getPurchaseAmounts(row) {
+  const grossAmount = roundMoney(row?.grossAmount);
+  const treatment = row?.gstTreatment || 'standard';
+
+  const autoGst = treatment === 'standard'
+    ? roundMoney(grossAmount * GST_RATE / (1 + GST_RATE))
+    : 0;
+
+  const gstAmount = row?.gstAmount === '' || row?.gstAmount === undefined || row?.gstAmount === null
+    ? autoGst
+    : roundMoney(row.gstAmount);
+
+  return {
+    grossAmount,
+    gstAmount: Math.min(Math.max(gstAmount, 0), grossAmount),
+    exGstAmount: roundMoney(grossAmount - Math.min(Math.max(gstAmount, 0), grossAmount)),
+    autoGst,
+  };
+}
+
+function PurchaseEntryTable({ suppliers, onPost }) {
+  const [rows, setRows] = useState(() => [createEmptyPurchaseDraft()]);
+  const safeSuppliers = Array.isArray(suppliers) ? suppliers : [];
 
   const updateRow = (index, patch) => {
     setRows((current) => current.map((row, rowIndex) => (
@@ -764,9 +517,30 @@ function PurchaseEntryTable({ suppliers, inventory, onPost }) {
     )));
   };
 
-  const addRow = () => {
-    setRows((current) => [...current, createEmptyPurchaseDraft()]);
+  const selectSupplier = (index, supplier) => {
+    updateRow(index, {
+      supplierId: String(supplier?.id || getSupplierName(supplier)),
+      supplierName: getSupplierName(supplier),
+    });
   };
+
+  const resolveSupplier = (row) => {
+    const exact = safeSuppliers.find((supplier) => (
+      String(supplier?.id || getSupplierName(supplier)) === String(row.supplierId || '') ||
+      getSupplierName(supplier).toLowerCase() === String(row.supplierName || '').trim().toLowerCase()
+    ));
+    if (exact) return exact;
+
+    const query = String(row.supplierName || '').trim().toLowerCase();
+    if (!query) return null;
+
+    return safeSuppliers
+      .map((supplier) => ({ supplier, score: getSupplierSearchScore(supplier, query) }))
+      .filter(({ score }) => score < 99)
+      .sort((a, b) => a.score - b.score || getSupplierName(a.supplier).localeCompare(getSupplierName(b.supplier)))[0]?.supplier || null;
+  };
+
+  const addRow = () => setRows((current) => [...current, createEmptyPurchaseDraft()]);
 
   const duplicateRow = (index) => {
     setRows((current) => {
@@ -786,46 +560,57 @@ function PurchaseEntryTable({ suppliers, inventory, onPost }) {
     });
   };
 
+  const updateTreatment = (index, treatment) => {
+    const row = rows[index];
+    const grossAmount = roundMoney(row.grossAmount);
+    const gstAmount = treatment === 'standard'
+      ? roundMoney(grossAmount * GST_RATE / (1 + GST_RATE))
+      : 0;
+    updateRow(index, { gstTreatment: treatment, gstAmount: gstAmount === 0 ? '' : gstAmount });
+  };
+
   const postRow = async (index) => {
     const row = rows[index];
-    if (!row.supplierId) {
-      updateRow(index, { error: 'Select supplier.' });
+    const supplier = resolveSupplier(row);
+
+    if (!supplier) {
+      updateRow(index, { error: 'Type and select a valid supplier.' });
       return;
     }
-    if (!row.supplierInvoiceNumber.trim()) {
-      updateRow(index, { error: 'Enter invoice no.' });
-      return;
-    }
-    if (!row.productId) {
-      updateRow(index, { error: 'Select product.' });
+    if (!String(row.supplierInvoiceNumber || '').trim()) {
+      updateRow(index, { error: 'Enter supplier invoice no.' });
       return;
     }
 
-    const quantity = toMoneyNumber(row.quantity);
-    const unitCost = toMoneyNumber(row.unitCost);
-    if (quantity <= 0 || unitCost < 0) {
-      updateRow(index, { error: 'Check quantity and unit cost.' });
+    const amounts = getPurchaseAmounts(row);
+    if (amounts.grossAmount <= 0) {
+      updateRow(index, { error: 'Enter the total purchase amount including GST.' });
+      return;
+    }
+    if (amounts.gstAmount < 0 || amounts.gstAmount > amounts.grossAmount) {
+      updateRow(index, { error: 'Check the GST amount.' });
       return;
     }
 
-    updateRow(index, { status: 'saving' });
+    updateRow(index, {
+      supplierId: String(supplier?.id || getSupplierName(supplier)),
+      supplierName: getSupplierName(supplier),
+      status: 'saving',
+    });
 
     try {
       await onPost({
-        supplierId: row.supplierId,
-        supplierInvoiceNumber: row.supplierInvoiceNumber.trim(),
+        supplierId: String(supplier?.id || getSupplierName(supplier)),
+        supplierName: getSupplierName(supplier),
+        supplierInvoiceNumber: String(row.supplierInvoiceNumber).trim(),
         invoiceDate: row.date,
         category: row.category,
-        notes: row.notes.trim(),
-        items: [{
-          productId: row.productId,
-          quantity,
-          unitCost,
-          gstRate: toMoneyNumber(row.gstRate),
-        }],
-        subtotal: quantity * unitCost,
-        gstAmount: quantity * unitCost * toMoneyNumber(row.gstRate),
-        total: quantity * unitCost * (1 + toMoneyNumber(row.gstRate)),
+        notes: String(row.notes || '').trim(),
+        gstTreatment: row.gstTreatment || 'standard',
+        grossAmount: amounts.grossAmount,
+        subtotal: amounts.exGstAmount,
+        gstAmount: amounts.gstAmount,
+        total: amounts.grossAmount,
       });
 
       updateRow(index, { status: 'posted', error: '' });
@@ -840,7 +625,7 @@ function PurchaseEntryTable({ suppliers, inventory, onPost }) {
         <div>
           <h3 className="text-sm font-black text-slate-800">Purchase GST Entry</h3>
           <p className="mt-1 text-xs font-medium text-slate-500">
-            Enter supplier purchases directly into the spreadsheet. No pop-up form is required.
+            Enter the supplier invoice total as shown on the tax invoice. GST and the pre-GST amount are calculated automatically.
           </p>
         </div>
         <button
@@ -853,33 +638,26 @@ function PurchaseEntryTable({ suppliers, inventory, onPost }) {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="min-w-[1500px] w-full text-left">
+        <table className="min-w-[1250px] w-full text-left">
           <thead className="border-b border-slate-200 bg-white text-[10px] font-black uppercase tracking-widest text-slate-400">
             <tr>
               <th className="w-[120px] p-3 pl-5">Date</th>
-              <th className="w-[210px] p-3">Supplier</th>
-              <th className="w-[150px] p-3">Invoice No.</th>
-              <th className="w-[170px] p-3">Product</th>
-              <th className="w-[110px] p-3 text-right">Qty</th>
-              <th className="w-[125px] p-3 text-right">Unit Cost</th>
-              <th className="w-[105px] p-3 text-center">GST</th>
-              <th className="w-[130px] p-3 text-right">Ex-GST</th>
-              <th className="w-[125px] p-3 text-right">Input GST</th>
-              <th className="w-[130px] p-3 text-right">Total</th>
+              <th className="w-[230px] p-3">Supplier</th>
+              <th className="w-[155px] p-3">Invoice No.</th>
               <th className="w-[170px] p-3">Category</th>
-              <th className="w-[130px] p-3 text-center">Action</th>
+              <th className="w-[145px] p-3 text-right">Total incl. GST</th>
+              <th className="w-[155px] p-3">GST Treatment</th>
+              <th className="w-[125px] p-3 text-right">Input GST</th>
+              <th className="w-[145px] p-3 text-right">Value ex-GST</th>
+              <th className="w-[110px] p-3 text-center">Action</th>
               <th className="w-[70px] p-3 pr-5 text-center">More</th>
             </tr>
           </thead>
 
           <tbody className="divide-y divide-slate-100 text-sm">
             {rows.map((row, index) => {
-              const quantity = toMoneyNumber(row.quantity);
-              const unitCost = toMoneyNumber(row.unitCost);
-              const rate = toMoneyNumber(row.gstRate);
-              const subtotal = quantity * unitCost;
-              const gst = subtotal * rate;
-              const total = subtotal + gst;
+              const amounts = getPurchaseAmounts(row);
+              const disabled = row.status === 'saving' || row.status === 'posted';
 
               return (
                 <tr key={`purchase-entry-${index}`} className={row.status === 'posted' ? 'bg-emerald-50/40' : 'hover:bg-slate-50'}>
@@ -888,33 +666,28 @@ function PurchaseEntryTable({ suppliers, inventory, onPost }) {
                       type="date"
                       value={row.date}
                       onChange={(event) => updateRow(index, { date: event.target.value })}
-                      disabled={row.status === 'saving' || row.status === 'posted'}
+                      disabled={disabled}
                       className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100"
                     />
                     {row.error && <p className="mt-1 text-[9px] font-bold text-red-600">{row.error}</p>}
                   </td>
 
                   <td className="p-2 align-top">
-                    <select
-                      value={row.supplierId}
-                      onChange={(event) => updateRow(index, { supplierId: event.target.value })}
-                      disabled={row.status === 'saving' || row.status === 'posted'}
-                      className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-bold text-slate-700 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100"
-                    >
-                      <option value="">Select supplier...</option>
-                      {safeSuppliers.map((supplier) => (
-                        <option key={supplier.id || getSupplierName(supplier)} value={supplier.id || getSupplierName(supplier)}>
-                          {getSupplierName(supplier)}
-                        </option>
-                      ))}
-                    </select>
+                    <SupplierTypeahead
+                      value={row.supplierName}
+                      selectedSupplierId={row.supplierId}
+                      suppliers={safeSuppliers}
+                      disabled={disabled}
+                      onChange={(value) => updateRow(index, { supplierName: value, supplierId: '' })}
+                      onSelect={(supplier) => selectSupplier(index, supplier)}
+                    />
                   </td>
 
                   <td className="p-2 align-top">
                     <input
                       value={row.supplierInvoiceNumber}
                       onChange={(event) => updateRow(index, { supplierInvoiceNumber: event.target.value })}
-                      disabled={row.status === 'saving' || row.status === 'posted'}
+                      disabled={disabled}
                       placeholder="INV-0001"
                       className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-bold text-slate-700 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100"
                     />
@@ -922,79 +695,9 @@ function PurchaseEntryTable({ suppliers, inventory, onPost }) {
 
                   <td className="p-2 align-top">
                     <select
-                      value={row.productId}
-                      onChange={(event) => {
-                        const product = safeInventory.find(
-                          (entry) => String(getInventoryIdentity(entry)) === String(event.target.value)
-                        );
-                        updateRow(index, {
-                          productId: event.target.value,
-                          unitCost: product
-                            ? toMoneyNumber(product?.['cost_price (SGD)'] ?? product?.cost_price ?? product?.costPrice)
-                            : row.unitCost,
-                        });
-                      }}
-                      disabled={row.status === 'saving' || row.status === 'posted'}
-                      className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-bold text-slate-700 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100"
-                    >
-                      <option value="">Select product...</option>
-                      {safeInventory.map((product) => {
-                        const identity = getInventoryIdentity(product);
-                        return (
-                          <option key={identity} value={identity}>
-                            {getInventorySku(product) ? `[${getInventorySku(product)}] ` : ''}{getInventoryName(product)}
-                          </option>
-                        );
-                      })}
-                    </select>
-                  </td>
-
-                  <td className="p-2 align-top">
-                    <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={row.quantity}
-                      onChange={(event) => updateRow(index, { quantity: event.target.value })}
-                      disabled={row.status === 'saving' || row.status === 'posted'}
-                      className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-right font-mono text-xs font-bold outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100"
-                    />
-                  </td>
-
-                  <td className="p-2 align-top">
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={row.unitCost}
-                      onChange={(event) => updateRow(index, { unitCost: event.target.value })}
-                      disabled={row.status === 'saving' || row.status === 'posted'}
-                      placeholder="0.00"
-                      className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-right font-mono text-xs font-bold outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100"
-                    />
-                  </td>
-
-                  <td className="p-2 align-top">
-                    <select
-                      value={row.gstRate}
-                      onChange={(event) => updateRow(index, { gstRate: Number(event.target.value) })}
-                      disabled={row.status === 'saving' || row.status === 'posted'}
-                      className="w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-center text-xs font-bold outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100"
-                    >
-                      <option value={GST_RATE}>9%</option>
-                      <option value={0}>0%</option>
-                    </select>
-                  </td>
-
-                  <td className="p-3 text-right font-mono text-xs font-bold text-slate-600">${formatMoney(subtotal)}</td>
-                  <td className="p-3 text-right font-mono text-xs font-black text-emerald-700">${formatMoney(gst)}</td>
-                  <td className="p-3 text-right font-mono text-xs font-black text-slate-900">${formatMoney(total)}</td>
-
-                  <td className="p-2 align-top">
-                    <select
                       value={row.category}
                       onChange={(event) => updateRow(index, { category: event.target.value })}
-                      disabled={row.status === 'saving' || row.status === 'posted'}
+                      disabled={disabled}
                       className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-bold text-slate-700 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100"
                     >
                       {PURCHASE_CATEGORIES.map((category) => (
@@ -1003,39 +706,85 @@ function PurchaseEntryTable({ suppliers, inventory, onPost }) {
                     </select>
                   </td>
 
-                  <td className="p-2 align-top text-center">
-                    {row.status === 'posted' ? (
-                      <span className="inline-flex items-center rounded-lg bg-emerald-100 px-2.5 py-2 text-[10px] font-black uppercase tracking-widest text-emerald-700">
-                        Posted
-                      </span>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => postRow(index)}
-                        disabled={row.status === 'saving'}
-                        className="rounded-lg bg-emerald-600 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white hover:bg-emerald-700 disabled:opacity-50"
-                      >
-                        {row.status === 'saving' ? 'Saving...' : 'Post'}
-                      </button>
-                    )}
+                  <td className="p-2 align-top">
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={row.grossAmount}
+                      onChange={(event) => {
+                        const grossAmount = event.target.value;
+                        const autoGst = row.gstTreatment === 'standard'
+                          ? roundMoney(toMoneyNumber(grossAmount) * GST_RATE / (1 + GST_RATE))
+                          : 0;
+                        updateRow(index, { grossAmount, gstAmount: autoGst === 0 ? '' : autoGst });
+                      }}
+                      disabled={disabled}
+                      placeholder="0.00"
+                      className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-right text-xs font-black text-slate-800 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100"
+                    />
+                  </td>
+
+                  <td className="p-2 align-top">
+                    <select
+                      value={row.gstTreatment}
+                      onChange={(event) => updateTreatment(index, event.target.value)}
+                      disabled={disabled}
+                      className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-bold text-slate-700 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100"
+                    >
+                      <option value="standard">Standard 9%</option>
+                      <option value="zero_rated">Zero-rated</option>
+                      <option value="exempt">Exempt / Out of scope</option>
+                      <option value="no_gst">No GST charged</option>
+                    </select>
+                  </td>
+
+                  <td className="p-2 align-top">
+                    <input
+                      type="number"
+                      min="0"
+                      max={amounts.grossAmount || undefined}
+                      step="0.01"
+                      value={row.gstAmount}
+                      onChange={(event) => updateRow(index, { gstAmount: event.target.value })}
+                      disabled={disabled || row.gstTreatment !== 'standard'}
+                      placeholder="0.00"
+                      title="Defaults to 9/109 of the tax-included amount. You can adjust it to match the supplier tax invoice exactly."
+                      className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-right text-xs font-black text-emerald-700 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100"
+                    />
+                  </td>
+
+                  <td className="p-2 text-right align-top font-mono text-xs font-bold text-slate-600">
+                    ${formatMoney(amounts.exGstAmount)}
+                  </td>
+
+                  <td className="p-2 text-center align-top">
+                    <button
+                      type="button"
+                      onClick={() => postRow(index)}
+                      disabled={disabled}
+                      className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {row.status === 'saving' ? 'Saving' : row.status === 'posted' ? 'Posted' : 'Post'}
+                    </button>
                   </td>
 
                   <td className="p-2 pr-5 text-center align-top">
-                    <div className="flex justify-center gap-1">
+                    <div className="flex items-center justify-center gap-1">
                       <button
                         type="button"
-                        title="Duplicate row"
                         onClick={() => duplicateRow(index)}
-                        disabled={row.status === 'saving'}
+                        disabled={disabled}
+                        title="Duplicate row"
                         className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30"
                       >
                         <Plus size={15} />
                       </button>
                       <button
                         type="button"
-                        title="Remove row"
                         onClick={() => removeRow(index)}
-                        disabled={row.status === 'saving'}
+                        disabled={disabled}
+                        title="Remove row"
                         className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30"
                       >
                         <Trash2 size={15} />
@@ -1048,16 +797,11 @@ function PurchaseEntryTable({ suppliers, inventory, onPost }) {
           </tbody>
         </table>
       </div>
-
-      <div className="flex flex-col gap-2 border-t border-slate-100 bg-slate-50 px-5 py-3 text-xs text-slate-500 md:flex-row md:items-center md:justify-between">
-        <span>Enter purchases row-by-row. Calculated GST and totals update immediately.</span>
-        <span className="font-semibold">Post only when the row has been checked.</span>
-      </div>
     </div>
   );
 }
 
-function GstQuarterReport({ report, monthlyReport, salesRows, purchaseRows, creditNotes = [], onPrint }) {
+function GstQuarterReport({ report, monthlyReport, salesRows, purchaseRows, onPrint }) {
   const [showInvoiceDetail, setShowInvoiceDetail] = useState(true);
   const [showPurchaseDetail, setShowPurchaseDetail] = useState(true);
 
@@ -1190,44 +934,16 @@ function GstQuarterReport({ report, monthlyReport, salesRows, purchaseRows, cred
                 <td className="px-2 py-2 text-right font-mono font-bold">{report.includedSalesCount}</td>
               </tr>
               <tr className="border-b border-slate-300">
-                <td className="px-2 py-2 font-semibold">Gross sales value ex-GST</td>
+                <td className="px-2 py-2 font-semibold">Sales value ex-GST</td>
                 {monthlyReport.map((month) => (
                   <td key={month.key} className="px-2 py-2 text-right font-mono">{money(month.salesSubtotal)}</td>
                 ))}
-                <td className="px-2 py-2 text-right font-mono font-bold">{money(report.grossTaxableSales)}</td>
+                <td className="px-2 py-2 text-right font-mono font-bold">{money(report.taxableSales)}</td>
               </tr>
               <tr className="border-b border-slate-300">
-                <td className="px-2 py-2 font-semibold">Less: sales returns / credit notes ex-GST</td>
-                {monthlyReport.map((month) => (
-                  <td key={month.key} className="px-2 py-2 text-right font-mono">-{money(month.creditNoteSubtotal)}</td>
-                ))}
-                <td className="px-2 py-2 text-right font-mono font-bold">-{money(report.creditNoteSubtotal)}</td>
-              </tr>
-              <tr className="border-b border-slate-300 font-bold">
-                <td className="px-2 py-2">Adjusted sales value ex-GST</td>
-                {monthlyReport.map((month) => (
-                  <td key={month.key} className="px-2 py-2 text-right font-mono">{money(month.adjustedSalesSubtotal)}</td>
-                ))}
-                <td className="px-2 py-2 text-right font-mono">{money(report.taxableSales)}</td>
-              </tr>
-              <tr className="border-b border-slate-300">
-                <td className="px-2 py-2 font-semibold">Gross Output GST — Sales</td>
+                <td className="px-2 py-2 font-semibold">Output GST — Sales</td>
                 {monthlyReport.map((month) => (
                   <td key={month.key} className="px-2 py-2 text-right font-mono">{money(month.salesGst)}</td>
-                ))}
-                <td className="px-2 py-2 text-right font-mono font-bold">{money(report.grossOutputGst)}</td>
-              </tr>
-              <tr className="border-b border-slate-300">
-                <td className="px-2 py-2 font-semibold">Less: GST reversed on sales returns</td>
-                {monthlyReport.map((month) => (
-                  <td key={month.key} className="px-2 py-2 text-right font-mono">-{money(month.creditNoteGst)}</td>
-                ))}
-                <td className="px-2 py-2 text-right font-mono font-bold">-{money(report.creditNoteGst)}</td>
-              </tr>
-              <tr className="border-b border-slate-300">
-                <td className="px-2 py-2 font-semibold">Adjusted Output GST — Sales</td>
-                {monthlyReport.map((month) => (
-                  <td key={month.key} className="px-2 py-2 text-right font-mono">{money(month.salesGst - month.creditNoteGst)}</td>
                 ))}
                 <td className="px-2 py-2 text-right font-mono font-bold">{money(report.outputGst)}</td>
               </tr>
@@ -1248,7 +964,7 @@ function GstQuarterReport({ report, monthlyReport, salesRows, purchaseRows, cred
               <tr className="border-t-2 border-black font-bold">
                 <td className="px-2 py-2">Net GST {report.netPayable >= 0 ? 'Payable' : 'Claimable'}</td>
                 {monthlyReport.map((month) => (
-                  <td key={month.key} className="px-2 py-2 text-right font-mono">{money(month.salesGst - month.creditNoteGst - month.purchaseGst)}</td>
+                  <td key={month.key} className="px-2 py-2 text-right font-mono">{money(month.salesGst - month.purchaseGst)}</td>
                 ))}
                 <td className="px-2 py-2 text-right font-mono">{money(Math.abs(report.netPayable))}</td>
               </tr>
@@ -1309,45 +1025,6 @@ function GstQuarterReport({ report, monthlyReport, salesRows, purchaseRows, cred
                   <td className="px-2 py-2 text-right font-mono">{money(report.taxableSales + report.outputGst)}</td>
                 </tr>
               </tfoot>
-            </table>
-          </section>
-        )}
-
-        {creditNotes.length > 0 && (
-          <section className="mt-7 print-page-break">
-            <div className="border-y-2 border-black py-2">
-              <h2 className="text-sm font-bold">Sales Returns / Credit Notes</h2>
-              <p className="mt-1 text-[10px] text-slate-600">Credit note GST is deducted from output GST in the period the credit note is issued.</p>
-            </div>
-            <table className="mt-2 w-full border-collapse text-xs">
-              <thead><tr className="border-b border-black">
-                <th className="px-2 py-2 text-left font-bold">Date</th>
-                <th className="px-2 py-2 text-left font-bold">Credit Note</th>
-                <th className="px-2 py-2 text-left font-bold">Invoice No.</th>
-                <th className="px-2 py-2 text-left font-bold">Customer</th>
-                <th className="px-2 py-2 text-right font-bold">Value ex-GST</th>
-                <th className="px-2 py-2 text-right font-bold">GST Reversed</th>
-                <th className="px-2 py-2 text-right font-bold">Credit Total</th>
-              </tr></thead>
-              <tbody>
-                {[...creditNotes].sort((a,b) => String(a.credit_note_number || '').localeCompare(String(b.credit_note_number || ''), undefined, { numeric: true, sensitivity: 'base' })).map((note) => (
-                  <tr key={note.id} className="border-b border-slate-200">
-                    <td className="px-2 py-1.5">{note.credit_note_date || '-'}</td>
-                    <td className="px-2 py-1.5 font-mono">{note.credit_note_number}</td>
-                    <td className="px-2 py-1.5 font-mono">#{note.invoice_number}</td>
-                    <td className="px-2 py-1.5">{note.customer_name || '-'}</td>
-                    <td className="px-2 py-1.5 text-right font-mono">-{money(note.subtotal_ex_gst)}</td>
-                    <td className="px-2 py-1.5 text-right font-mono">-{money(note.gst_amount)}</td>
-                    <td className="px-2 py-1.5 text-right font-mono font-semibold">-{money(note.total_amount)}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot><tr className="border-t-2 border-black font-bold">
-                <td colSpan="4" className="px-2 py-2">Total Credit Notes</td>
-                <td className="px-2 py-2 text-right font-mono">-{money(report.creditNoteSubtotal)}</td>
-                <td className="px-2 py-2 text-right font-mono">-{money(report.creditNoteGst)}</td>
-                <td className="px-2 py-2 text-right font-mono">-{money(report.creditNoteSubtotal + report.creditNoteGst)}</td>
-              </tr></tfoot>
             </table>
           </section>
         )}
@@ -1460,13 +1137,10 @@ export function GSTModule({ sys }) {
   const [exclusionInvoice, setExclusionInvoice] = useState(null);
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
   const [notification, setNotification] = useState(null);
-  const [creditNotes, setCreditNotes] = useState([]);
-  const [creditNotesLoading, setCreditNotesLoading] = useState(false);
 
   const safeInvoices = Array.isArray(sys?.invoices) ? sys.invoices : [];
   const safeGstRecords = Array.isArray(sys?.gstRecords) ? sys.gstRecords : [];
   const safeSuppliers = Array.isArray(sys?.suppliers) ? sys.suppliers : [];
-  const safeInventory = Array.isArray(sys?.inventory) ? sys.inventory : [];
 
   const quarterRange = useMemo(
     () => getQuarterDateRange(Number(selectedYear), selectedQuarter),
@@ -1476,34 +1150,6 @@ export function GSTModule({ sys }) {
   useEffect(() => {
     saveStoredSalesExclusions(salesExclusions);
   }, [salesExclusions]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadCreditNotes = async () => {
-      setCreditNotesLoading(true);
-      try {
-        const { data, error } = await supabase
-          .from('credit_notes')
-          .select('id, credit_note_number, invoice_id, invoice_number, customer_name, credit_note_date, subtotal_ex_gst, gst_amount, total_amount, status, reason')
-          .gte('credit_note_date', quarterRange.start.toISOString().slice(0, 10))
-          .lte('credit_note_date', quarterRange.end.toISOString().slice(0, 10))
-          .eq('status', 'issued')
-          .order('credit_note_date', { ascending: true });
-
-        if (error) throw error;
-        if (!cancelled) setCreditNotes(Array.isArray(data) ? data : []);
-      } catch (error) {
-        console.warn('GST credit-note adjustments unavailable:', error);
-        if (!cancelled) setCreditNotes([]);
-      } finally {
-        if (!cancelled) setCreditNotesLoading(false);
-      }
-    };
-
-    loadCreditNotes();
-    return () => { cancelled = true; };
-  }, [quarterRange]);
 
   const showNotification = (message, type = 'success') => {
     setNotification({ message, type });
@@ -1574,24 +1220,15 @@ export function GSTModule({ sys }) {
     const includedSales = salesRows.filter((row) => !row.isExcluded);
     const excludedSales = salesRows.filter((row) => row.isExcluded);
 
-    const grossTaxableSales = includedSales.reduce((sum, row) => sum + row.subtotal, 0);
-    const grossOutputGst = includedSales.reduce((sum, row) => sum + row.gstAmount, 0);
-    const creditNoteSubtotal = creditNotes.reduce((sum, note) => sum + roundMoney(note?.subtotal_ex_gst), 0);
-    const creditNoteGst = creditNotes.reduce((sum, note) => sum + roundMoney(note?.gst_amount), 0);
-    const taxableSales = Math.max(0, roundMoney(grossTaxableSales - creditNoteSubtotal));
-    const outputGst = Math.max(0, roundMoney(grossOutputGst - creditNoteGst));
+    const taxableSales = includedSales.reduce((sum, row) => sum + row.subtotal, 0);
+    const outputGst = includedSales.reduce((sum, row) => sum + row.gstAmount, 0);
     const taxablePurchases = purchaseRows.reduce((sum, record) => sum + roundMoney(record?.amount), 0);
     const inputGst = purchaseRows.reduce((sum, record) => sum + roundMoney(record?.gst), 0);
     const reviewCount = salesRows.filter((row) => row.gstSource !== 'saved').length;
 
     return {
       taxableSales,
-      grossTaxableSales,
       outputGst,
-      grossOutputGst,
-      creditNoteSubtotal,
-      creditNoteGst,
-      creditNoteCount: creditNotes.length,
       taxablePurchases,
       inputGst,
       netPayable: outputGst - inputGst,
@@ -1602,7 +1239,7 @@ export function GSTModule({ sys }) {
       year: Number(selectedYear),
       quarterLabel: `${selectedQuarter} ${selectedYear}`,
     };
-  }, [salesRows, purchaseRows, creditNotes, selectedYear, selectedQuarter]);
+  }, [salesRows, purchaseRows]);
 
 
   const monthlyReport = useMemo(() => {
@@ -1626,29 +1263,12 @@ export function GSTModule({ sys }) {
         salesCount: monthSales.length,
         salesSubtotal: monthSales.reduce((sum, row) => sum + row.subtotal, 0),
         salesGst: monthSales.reduce((sum, row) => sum + row.gstAmount, 0),
-        adjustedSalesSubtotal: 0,
-        adjustedSalesGst: 0,
-        creditNoteCount: creditNotes.filter((note) => {
-          const date = new Date(note?.credit_note_date || '');
-          return date.getFullYear() === Number(selectedYear) && date.getMonth() === monthIndex;
-        }).length,
-        creditNoteSubtotal: creditNotes.filter((note) => {
-          const date = new Date(note?.credit_note_date || '');
-          return date.getFullYear() === Number(selectedYear) && date.getMonth() === monthIndex;
-        }).reduce((sum, note) => sum + roundMoney(note?.subtotal_ex_gst), 0),
-        creditNoteGst: creditNotes.filter((note) => {
-          const date = new Date(note?.credit_note_date || '');
-          return date.getFullYear() === Number(selectedYear) && date.getMonth() === monthIndex;
-        }).reduce((sum, note) => sum + roundMoney(note?.gst_amount), 0),
         purchaseCount: monthPurchases.length,
         purchaseSubtotal: monthPurchases.reduce((sum, row) => sum + roundMoney(row?.amount), 0),
         purchaseGst: monthPurchases.reduce((sum, row) => sum + roundMoney(row?.gst), 0),
       };
-      month.adjustedSalesSubtotal = Math.max(0, roundMoney(month.salesSubtotal - month.creditNoteSubtotal));
-      month.adjustedSalesGst = Math.max(0, roundMoney(month.salesGst - month.creditNoteGst));
-      return month;
     });
-  }, [selectedYear, selectedQuarter, salesRows, purchaseRows, creditNotes]);
+  }, [selectedYear, selectedQuarter, salesRows, purchaseRows]);
 
   const reviewIssues = useMemo(() => {
     const issues = [];
@@ -1776,6 +1396,42 @@ export function GSTModule({ sys }) {
       });
     }
 
+    const purchaseInvoiceMap = new Map();
+    purchaseRows.forEach((row) => {
+      const invoiceNumber = getPurchaseInvoiceNumber(row).trim().toUpperCase();
+      if (!invoiceNumber) return;
+      const key = `${String(getPurchaseSupplierName(row)).trim().toUpperCase()}::${invoiceNumber}`;
+      purchaseInvoiceMap.set(key, (purchaseInvoiceMap.get(key) || 0) + 1);
+    });
+    const duplicatePurchaseInvoices = Array.from(purchaseInvoiceMap.values()).filter((count) => count > 1).length;
+    if (duplicatePurchaseInvoices > 0) {
+      issues.push({
+        id: 'duplicate-purchase-invoices',
+        severity: 'high',
+        title: 'Potential duplicate purchase invoices',
+        detail: `${duplicatePurchaseInvoices} supplier invoice${duplicatePurchaseInvoices === 1 ? '' : 's'} appear more than once in this quarter. Check before claiming input GST twice.`,
+        action: 'purchases',
+      });
+    }
+
+    const manuallyAdjustedGstCount = purchaseRows.filter((row) => {
+      if (String(row?.gst || '') === '') return false;
+      const gross = roundMoney(toMoneyNumber(row?.amount) + toMoneyNumber(row?.gst));
+      const treatment = String(row?.desc || '').toLowerCase();
+      if (!treatment.includes('standard-rated 9%')) return false;
+      const expected = roundMoney(gross * GST_RATE / (1 + GST_RATE));
+      return Math.abs(roundMoney(row?.gst) - expected) > 0.01;
+    }).length;
+    if (manuallyAdjustedGstCount > 0) {
+      issues.push({
+        id: 'purchase-gst-adjusted',
+        severity: 'low',
+        title: 'Purchase GST values were manually adjusted',
+        detail: `${manuallyAdjustedGstCount} standard-rated purchase${manuallyAdjustedGstCount === 1 ? '' : 's'} use a GST amount different from the automatic 9/109 calculation. Verify it against the supplier tax invoice.`,
+        action: 'purchases',
+      });
+    }
+
     return issues;
   }, [salesRows, purchaseRows]);
 
@@ -1837,77 +1493,45 @@ export function GSTModule({ sys }) {
   };
 
   const handleSavePurchase = async (purchase) => {
-    const supplier = safeSuppliers.find((entry) => String(entry?.id || getSupplierName(entry)) === String(purchase.supplierId));
-    const supplierName = getSupplierName(supplier);
-    const purchaseRecordId = `purchase_${Date.now()}`;
+    const supplier = safeSuppliers.find((entry) => (
+      String(entry?.id || getSupplierName(entry)) === String(purchase.supplierId) ||
+      getSupplierName(entry).toLowerCase() === String(purchase.supplierName || '').trim().toLowerCase()
+    ));
 
-    const purchasedItemNames = purchase.items.map((line) => {
-      const product = safeInventory.find((entry) => String(getInventoryIdentity(entry)) === String(line.productId));
-      return `${getInventoryName(product)} x ${line.quantity}`;
-    });
+    const supplierName = getSupplierName(supplier || { name: purchase.supplierName });
+    const purchaseRecordId = `purchase_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const amount = roundMoney(purchase.subtotal);
+    const gst = roundMoney(purchase.gstAmount);
+    const total = roundMoney(purchase.total ?? amount + gst);
+    const treatmentLabels = {
+      standard: 'Standard-rated 9%',
+      zero_rated: 'Zero-rated',
+      exempt: 'Exempt / Out of scope',
+      no_gst: 'No GST charged',
+    };
 
     const gstRecord = {
       id: purchaseRecordId,
       date: purchase.invoiceDate,
       type: 'input',
-      desc: `${supplierName} • Invoice ${purchase.supplierInvoiceNumber} • ${purchasedItemNames.join(', ')}`,
+      desc: `${supplierName} • Invoice ${purchase.supplierInvoiceNumber} • ${treatmentLabels[purchase.gstTreatment] || 'GST purchase'}`,
       supplierName,
       supplierInvoiceNumber: purchase.supplierInvoiceNumber,
       supplierGstRegistrationNumber: getSupplierGstRegistrationNumber(supplier),
-      description: purchasedItemNames.join(', '),
+      description: purchase.notes || 'Supplier purchase',
       category: purchase.category,
-      amount: Number(purchase.subtotal.toFixed(2)),
-      gst: Number(purchase.gstAmount.toFixed(2)),
+      amount,
+      gst,
     };
 
     const { error: gstError } = await supabase.from('gst_records').insert([gstRecord]);
     if (gstError) throw gstError;
 
-    const updatedInventory = [...safeInventory];
-
-    for (const line of purchase.items) {
-      const productIndex = updatedInventory.findIndex((entry) => String(getInventoryIdentity(entry)) === String(line.productId));
-      if (productIndex === -1) continue;
-
-      const product = updatedInventory[productIndex];
-      const currentStock = toMoneyNumber(product?.stock ?? product?.Stock);
-      const nextStock = currentStock + toMoneyNumber(line.quantity);
-      const costPrice = toMoneyNumber(line.unitCost);
-
-      const payload = {
-        stock: nextStock,
-        'cost_price (SGD)': costPrice,
-      };
-
-      let updateQuery = supabase.from('product_list').update(payload);
-      if (product?.id) {
-        updateQuery = updateQuery.eq('id', product.id);
-      } else if (product?.Name || product?.name || product?.Items) {
-        updateQuery = updateQuery.eq('Name', getInventoryName(product));
-      } else {
-        continue;
-      }
-
-      const { data, error } = await updateQuery.select().single();
-      if (error) throw error;
-
-      updatedInventory[productIndex] = {
-        ...product,
-        ...(data || {}),
-        stock: nextStock,
-        'cost_price (SGD)': costPrice,
-      };
-    }
-
     if (sys?.setGstRecords) {
       sys.setGstRecords([...safeGstRecords, gstRecord]);
     }
-    if (sys?.setInventory) {
-      sys.setInventory(updatedInventory);
-    }
 
-    setIsPurchaseModalOpen(false);
-    showNotification('Purchase posted, input GST recorded, and inventory stock increased.');
+    showNotification('Purchase GST recorded. No inventory update was made.');
   };
 
   const handlePrintGSTReport = () => {
@@ -2178,7 +1802,6 @@ export function GSTModule({ sys }) {
                 <div>
                   <h3 className="text-sm font-black text-slate-800">Sales GST Snapshot</h3>
                   <p className="mt-1 text-xs font-medium text-slate-400">Latest automated sales invoices in this quarter.</p>
-                  {report.creditNoteCount > 0 && <p className="mt-1 text-[10px] font-bold text-slate-600">{report.creditNoteCount} credit note{report.creditNoteCount === 1 ? '' : 's'} · GST reversed ${formatMoney(report.creditNoteGst)}</p>}
                 </div>
                 <button type="button" onClick={() => setActiveTab('sales')} className="text-xs font-black text-indigo-600 hover:text-indigo-800">View all</button>
               </div>
@@ -2329,7 +1952,6 @@ export function GSTModule({ sys }) {
               monthlyReport={monthlyReport}
               salesRows={salesRows}
               purchaseRows={purchaseRows}
-              creditNotes={creditNotes}
               onPrint={handlePrintGSTReport}
             />
           </div>
@@ -2340,7 +1962,6 @@ export function GSTModule({ sys }) {
             {sys?.hasPerm?.('manage_gst') && (
               <PurchaseEntryTable
                 suppliers={safeSuppliers}
-                inventory={safeInventory}
                 onPost={handleSavePurchase}
               />
             )}
@@ -2371,9 +1992,9 @@ export function GSTModule({ sys }) {
                       <th className="p-4 pl-6">Date</th>
                       <th className="p-4">Supplier / Purchase Details</th>
                       <th className="p-4">Category</th>
-                      <th className="p-4 text-right">Value ex-GST</th>
+                      <th className="p-4 text-right">Total incl. GST</th>
                       <th className="p-4 text-right">Input GST</th>
-                      <th className="p-4 text-right">Total</th>
+                      <th className="p-4 text-right">Value ex-GST</th>
                       <th className="p-4 pr-6 text-center">Delete</th>
                     </tr>
                   </thead>
@@ -2386,9 +2007,9 @@ export function GSTModule({ sys }) {
                           <td className="p-4 pl-6 font-bold text-slate-500">{record.date || '-'}</td>
                           <td className="p-4 font-black text-slate-800">{record.desc || 'Supplier purchase'}</td>
                           <td className="p-4 font-bold text-slate-500">{record.category || 'Purchase'}</td>
-                          <td className="p-4 text-right font-mono font-bold text-slate-600">${formatMoney(amount)}</td>
-                          <td className="p-4 text-right font-mono font-black text-emerald-600">${formatMoney(gst)}</td>
                           <td className="p-4 text-right font-mono font-black text-slate-900">${formatMoney(amount + gst)}</td>
+                          <td className="p-4 text-right font-mono font-black text-emerald-600">${formatMoney(gst)}</td>
+                          <td className="p-4 text-right font-mono font-bold text-slate-600">${formatMoney(amount)}</td>
                           <td className="p-4 pr-6 text-center">
                             {sys?.hasPerm?.('manage_gst') ? (
                               <button
@@ -2426,7 +2047,7 @@ export function GSTModule({ sys }) {
           <div>
             <p className="font-black">Temporary database compatibility mode</p>
             <p className="mt-1 text-xs font-semibold leading-5 text-blue-700">
-              Purchase GST is stored in your existing <code>gst_records</code> table and stock is updated in <code>product_list</code>. Sales exclusions are browser-local until the Supabase adjustment table is added. Formal purchase invoices, line items, stock movements, and shared exclusions should be added in the next database migration.
+              Purchase GST is stored in your existing <code>gst_records</code> table. The purchase entry records the supplier invoice total including GST, the GST amount, and the value excluding GST. Inventory is intentionally not changed by this GST entry workflow.
             </p>
           </div>
         </div>
