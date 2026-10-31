@@ -142,6 +142,7 @@ export function BillingModule({ sys: _sys }) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   });
   const [creditNotePdfLoading, setCreditNotePdfLoading] = useState(null);
+  const [creditNotePreview, setCreditNotePreview] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -263,128 +264,271 @@ export function BillingModule({ sys: _sys }) {
     return new Date(year, month - 1, 1).toLocaleDateString('en-SG', { month: 'long', year: 'numeric' });
   };
 
-  const handlePrintCreditNote = async (note) => {
-    if (!note?.id) return;
-    setCreditNotePdfLoading(note.id);
+  const buildCreditNotePdf = async (note) => {
+    if (!note?.id) throw new Error('Credit note record is missing.');
 
-    try {
-      const { data: items, error: itemsError } = await supabase
-        .from('credit_note_items')
-        .select('*')
-        .eq('credit_note_id', note.id);
+    const { data: items, error: itemsError } = await supabase
+      .from('credit_note_items')
+      .select('*')
+      .eq('credit_note_id', note.id)
+      .order('invoice_item_index', { ascending: true });
 
-      if (itemsError) throw itemsError;
+    if (itemsError) throw itemsError;
 
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const margin = 18;
-      const pageWidth = 210;
-      let y = 20;
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pageWidth = 210;
+    const pageHeight = 297;
+    const margin = 18;
+    const contentWidth = pageWidth - margin * 2;
+    let y = 18;
 
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(18);
-      pdf.text('THREE LEAVES', margin, y);
-      y += 7;
-      pdf.setFontSize(9);
-      pdf.setFont('helvetica', 'normal');
-      pdf.text('CREDIT NOTE', margin, y);
-      pdf.setDrawColor(40, 40, 40);
-      pdf.line(margin, y + 4, pageWidth - margin, y + 4);
-      y += 14;
+    const money = (value) => `$${Number(value || 0).toFixed(2)}`;
+    const status = String(note.status || '').toLowerCase();
+    const isVoid = status === 'void';
+    const itemRows = Array.isArray(items) ? items : [];
 
+    const addPageHeader = () => {
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(15);
-      pdf.text(note.credit_note_number || 'CREDIT NOTE', pageWidth - margin, y, { align: 'right' });
+      pdf.setTextColor(20, 20, 20);
+      pdf.text('THREE LEAVES', margin, 17);
       pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(9);
-      pdf.text(`Date: ${note.credit_note_date || '—'}`, pageWidth - margin, y + 6, { align: 'right' });
-      pdf.text(`Original Invoice: ${note.invoice_number || '—'}`, pageWidth - margin, y + 11, { align: 'right' });
-      if (String(note.status || '').toLowerCase() === 'void') {
-        pdf.setFont('helvetica', 'bold');
-        pdf.text('CANCELLED', pageWidth - margin, y + 17, { align: 'right' });
-      }
-
-      y += 23;
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(10);
-      pdf.text('CUSTOMER', margin, y);
-      pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(9);
-      pdf.text(String(note.customer_name || '—'), margin, y + 6);
-      if (note.customer_address) {
-        const addressLines = pdf.splitTextToSize(String(note.customer_address), 78);
-        pdf.text(addressLines, margin, y + 11);
-      }
-
-      y += 30;
-      pdf.setFillColor(245, 245, 245);
-      pdf.rect(margin, y, pageWidth - margin * 2, 8, 'F');
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(8);
-      pdf.text('RETURNED ITEM', margin + 2, y + 5);
-      pdf.text('QTY', 118, y + 5, { align: 'right' });
-      pdf.text('UNIT PRICE', 151, y + 5, { align: 'right' });
-      pdf.text('AMOUNT', pageWidth - margin - 2, y + 5, { align: 'right' });
-      y += 13;
-
-      pdf.setFont('helvetica', 'normal');
-      const itemRows = Array.isArray(items) ? items : [];
-      itemRows.forEach((item) => {
-        if (y > 258) {
-          pdf.addPage();
-          y = 20;
-        }
-        const name = String(item.product_name || item.item_name || item.description || 'Returned item');
-        const lines = pdf.splitTextToSize(name, 82);
-        pdf.text(lines, margin + 2, y);
-        pdf.text(String(item.returned_qty ?? item.quantity ?? 0), 118, y, { align: 'right' });
-        pdf.text(formatDashboardMoney(item.unit_price || 0).replace('S$ ', '$'), 151, y, { align: 'right' });
-        pdf.text(formatDashboardMoney(item.amount_ex_gst ?? item.line_amount ?? 0).replace('S$ ', '$'), pageWidth - margin - 2, y, { align: 'right' });
-        y += Math.max(6, lines.length * 4.5);
-        pdf.setDrawColor(225, 225, 225);
-        pdf.line(margin, y - 2, pageWidth - margin, y - 2);
-      });
-
-      y += 8;
-      const labelX = 132;
-      const valueX = pageWidth - margin;
-      pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(9);
-      pdf.text('Amount excluding GST', labelX, y);
-      pdf.text(`$${Number(note.subtotal_ex_gst || 0).toFixed(2)}`, valueX, y, { align: 'right' });
-      y += 6;
-      pdf.text('GST reversed', labelX, y);
-      pdf.text(`$${Number(note.gst_amount || 0).toFixed(2)}`, valueX, y, { align: 'right' });
-      y += 7;
-      pdf.setDrawColor(30, 30, 30);
-      pdf.line(labelX, y - 3, valueX, y - 3);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('CREDIT NOTE TOTAL', labelX, y + 3);
-      pdf.text(`$${Number(note.total_amount || 0).toFixed(2)}`, valueX, y + 3, { align: 'right' });
-
-      y += 18;
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('RETURN DETAILS', margin, y);
-      pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(9);
-      pdf.text(`Reason: ${note.reason || 'Customer return'}`, margin, y + 6);
-      if (note.remarks) pdf.text(pdf.splitTextToSize(`Remarks: ${note.remarks}`, pageWidth - margin * 2), margin, y + 12);
-      pdf.text(`Settlement: ${String(note.settlement_method || 'invoice_adjustment').replace(/_/g, ' ')}`, margin, y + (note.remarks ? 24 : 12));
-
-      const footerY = 282;
-      pdf.setDrawColor(180, 180, 180);
-      pdf.line(margin, footerY - 5, pageWidth - margin, footerY - 5);
       pdf.setFontSize(7.5);
-      pdf.setTextColor(90, 90, 90);
-      pdf.text('This credit note relates to the original invoice stated above.', margin, footerY);
-      pdf.text('THREE LEAVES', pageWidth - margin, footerY, { align: 'right' });
+      pdf.setTextColor(95, 95, 95);
+      pdf.text('SALES CREDIT NOTE', margin, 22);
+      pdf.setDrawColor(30, 30, 30);
+      pdf.setLineWidth(0.35);
+      pdf.line(margin, 26, pageWidth - margin, 26);
+    };
 
-      pdf.save(`${note.credit_note_number || 'credit-note'}.pdf`);
+    const addFooter = (pageNumber) => {
+      const footerY = pageHeight - 12;
+      pdf.setDrawColor(190, 190, 190);
+      pdf.setLineWidth(0.2);
+      pdf.line(margin, footerY - 4, pageWidth - margin, footerY - 4);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(7);
+      pdf.setTextColor(100, 100, 100);
+      pdf.text('This credit note is issued against the original invoice stated above.', margin, footerY);
+      pdf.text(`Page ${pageNumber}`, pageWidth - margin, footerY, { align: 'right' });
+    };
+
+    addPageHeader();
+
+    // Document identity block
+    pdf.setTextColor(20, 20, 20);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(20);
+    pdf.text('CREDIT NOTE', pageWidth - margin, 18, { align: 'right' });
+    pdf.setFontSize(10);
+    pdf.text(String(note.credit_note_number || '—'), pageWidth - margin, 24, { align: 'right' });
+
+    y = 36;
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(8);
+    pdf.setTextColor(90, 90, 90);
+    pdf.text('CUSTOMER', margin, y);
+    pdf.text('DOCUMENT DETAILS', 116, y);
+
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(9);
+    pdf.setTextColor(25, 25, 25);
+    pdf.text(String(note.customer_name || '—'), margin, y + 6);
+    if (note.customer_address) {
+      const addressLines = pdf.splitTextToSize(String(note.customer_address), 82);
+      pdf.text(addressLines, margin, y + 12);
+    }
+
+    const detailX = 116;
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Credit Note Date', detailX, y + 6);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(String(note.credit_note_date || '—'), pageWidth - margin, y + 6, { align: 'right' });
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Original Invoice', detailX, y + 12);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(String(note.invoice_number || '—'), pageWidth - margin, y + 12, { align: 'right' });
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Status', detailX, y + 18);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(isVoid ? 'CANCELLED' : 'ISSUED', pageWidth - margin, y + 18, { align: 'right' });
+
+    y = 75;
+    pdf.setDrawColor(30, 30, 30);
+    pdf.setLineWidth(0.3);
+    pdf.line(margin, y, pageWidth - margin, y);
+    y += 7;
+
+    // Returned-item table — explicitly shows what was returned.
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(8);
+    pdf.setTextColor(35, 35, 35);
+    pdf.text('RETURNED ITEMS', margin, y);
+    y += 6;
+
+    const tableTop = y;
+    const col = {
+      item: margin + 2,
+      qty: 122,
+      unit: 154,
+      amount: pageWidth - margin - 2,
+    };
+    pdf.setFillColor(245, 245, 245);
+    pdf.rect(margin, tableTop, contentWidth, 9, 'F');
+    pdf.setDrawColor(180, 180, 180);
+    pdf.setLineWidth(0.2);
+    pdf.rect(margin, tableTop, contentWidth, 9);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(7.5);
+    pdf.text('ITEM RETURNED', col.item, tableTop + 5.8);
+    pdf.text('QTY', col.qty, tableTop + 5.8, { align: 'right' });
+    pdf.text('UNIT PRICE', col.unit, tableTop + 5.8, { align: 'right' });
+    pdf.text('AMOUNT EX-GST', col.amount, tableTop + 5.8, { align: 'right' });
+    y = tableTop + 9;
+
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(8.5);
+    pdf.setTextColor(25, 25, 25);
+
+    if (itemRows.length === 0) {
+      pdf.text('No returned-item detail was stored for this credit note.', col.item, y + 7);
+      y += 14;
+    } else {
+      itemRows.forEach((item, index) => {
+        const name = String(item.product_name || item.item_name || item.description || item.name || `Returned item ${index + 1}`);
+        const lines = pdf.splitTextToSize(name, 82);
+        const rowHeight = Math.max(10, lines.length * 4.2 + 5);
+        if (y + rowHeight > pageHeight - 30) {
+          addFooter(pdf.getNumberOfPages());
+          pdf.addPage();
+          addPageHeader();
+          y = 35;
+        }
+        if (index % 2 === 0) {
+          pdf.setFillColor(250, 250, 250);
+          pdf.rect(margin, y, contentWidth, rowHeight, 'F');
+        }
+        pdf.setDrawColor(220, 220, 220);
+        pdf.rect(margin, y, contentWidth, rowHeight);
+        pdf.text(lines, col.item, y + 6);
+        pdf.text(String(item.returned_qty ?? item.quantity ?? 0), col.qty, y + 6, { align: 'right' });
+        pdf.text(money(item.unit_price), col.unit, y + 6, { align: 'right' });
+        pdf.text(money(item.amount_ex_gst ?? item.line_amount), col.amount, y + 6, { align: 'right' });
+        y += rowHeight;
+      });
+    }
+
+    // Totals block
+    y += 10;
+    const totalsX = 126;
+    const totalsValueX = pageWidth - margin;
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(8.5);
+    pdf.setTextColor(40, 40, 40);
+    pdf.text('Amount excluding GST', totalsX, y);
+    pdf.text(money(note.subtotal_ex_gst), totalsValueX, y, { align: 'right' });
+    y += 6;
+    pdf.text('GST reversed', totalsX, y);
+    pdf.text(money(note.gst_amount), totalsValueX, y, { align: 'right' });
+    y += 7;
+    pdf.setDrawColor(25, 25, 25);
+    pdf.setLineWidth(0.4);
+    pdf.line(totalsX, y - 4, totalsValueX, y - 4);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(10);
+    pdf.text('CREDIT NOTE TOTAL', totalsX, y + 3);
+    pdf.text(money(note.total_amount), totalsValueX, y + 3, { align: 'right' });
+
+    // Return and settlement details
+    y += 20;
+    if (y > pageHeight - 55) {
+      addFooter(pdf.getNumberOfPages());
+      pdf.addPage();
+      addPageHeader();
+      y = 35;
+    }
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(8);
+    pdf.setTextColor(90, 90, 90);
+    pdf.text('RETURN / SETTLEMENT DETAILS', margin, y);
+    y += 7;
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(8.5);
+    pdf.setTextColor(30, 30, 30);
+    pdf.text(`Reason: ${String(note.reason || 'Customer return')}`, margin, y);
+    y += 6;
+    pdf.text(`Settlement: ${String(note.settlement_method || 'invoice_adjustment').replace(/_/g, ' ')}`, margin, y);
+    if (note.remarks) {
+      y += 6;
+      const remarkLines = pdf.splitTextToSize(`Remarks: ${String(note.remarks)}`, contentWidth);
+      pdf.text(remarkLines, margin, y);
+      y += Math.max(5, remarkLines.length * 4.2);
+    }
+
+    if (isVoid && note.cancellation_reason) {
+      y += 6;
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Cancellation reason:', margin, y);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(String(note.cancellation_reason), margin + 33, y);
+    }
+
+    if (isVoid) {
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(24);
+      pdf.setTextColor(70, 70, 70);
+      pdf.text('CANCELLED', pageWidth - margin, 58, { align: 'right' });
+    }
+
+    addFooter(pdf.getNumberOfPages());
+    return { pdf, items: itemRows };
+  };
+
+  const handlePreviewCreditNote = async (note) => {
+    if (!note?.id) return;
+    setCreditNotePdfLoading(note.id);
+    try {
+      if (creditNotePreview?.url) URL.revokeObjectURL(creditNotePreview.url);
+      const { pdf, items } = await buildCreditNotePdf(note);
+      const blob = pdf.output('blob');
+      const url = URL.createObjectURL(blob);
+      setCreditNotePreview({ note, items, url, blob });
     } catch (error) {
-      console.error('Credit note PDF generation failed:', error);
-      alert(error?.message || 'Unable to generate the credit note PDF.');
+      console.error('Credit note PDF preview failed:', error);
+      alert(error?.message || 'Unable to preview the credit note PDF.');
     } finally {
       setCreditNotePdfLoading(null);
     }
+  };
+
+  const handleDownloadCreditNote = async () => {
+    if (!creditNotePreview?.note) return;
+    setCreditNotePdfLoading(creditNotePreview.note.id);
+    try {
+      let blob = creditNotePreview.blob;
+      if (!blob) {
+        const { pdf } = await buildCreditNotePdf(creditNotePreview.note);
+        blob = pdf.output('blob');
+      }
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `${creditNotePreview.note.credit_note_number || 'credit-note'}.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      console.error('Credit note PDF download failed:', error);
+      alert(error?.message || 'Unable to download the credit note PDF.');
+    } finally {
+      setCreditNotePdfLoading(null);
+    }
+  };
+
+  const closeCreditNotePreview = () => {
+    if (creditNotePreview?.url) URL.revokeObjectURL(creditNotePreview.url);
+    setCreditNotePreview(null);
   };
 
   useEffect(() => {
@@ -1592,8 +1736,8 @@ export function BillingModule({ sys: _sys }) {
                           <td className="whitespace-nowrap px-4 py-3.5 text-slate-600">{settlement}</td>
                           <td className="whitespace-nowrap px-4 py-3.5"><span className="inline-flex rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-slate-700">{isVoid ? 'Cancelled' : 'Issued'}</span></td>
                           <td className="whitespace-nowrap px-5 py-3.5 text-right">
-                            <button type="button" onClick={() => handlePrintCreditNote(note)} disabled={creditNotePdfLoading === note.id} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[10px] font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50" title="Download credit note PDF">
-                              {creditNotePdfLoading === note.id ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />} PDF
+                            <button type="button" onClick={() => handlePreviewCreditNote(note)} disabled={creditNotePdfLoading === note.id} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[10px] font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50" title="Preview credit note PDF">
+                              {creditNotePdfLoading === note.id ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />} Preview
                             </button>
                           </td>
                         </tr>
@@ -1606,6 +1750,32 @@ export function BillingModule({ sys: _sys }) {
           </div>
         </div>
       </div>
+
+      {creditNotePreview && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-label="Credit note PDF preview">
+          <div className="flex h-[94vh] w-full max-w-[1180px] flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-2xl">
+            <div className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 px-5 py-3">
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Credit Note Preview</p>
+                <p className="mt-0.5 truncate text-sm font-semibold text-slate-900">{creditNotePreview.note.credit_note_number || 'Credit Note'} · {creditNotePreview.note.customer_name || 'Customer'}</p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <button type="button" onClick={handleDownloadCreditNote} disabled={creditNotePdfLoading === creditNotePreview.note.id} className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-900 bg-slate-900 px-4 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50">
+                  {creditNotePdfLoading === creditNotePreview.note.id ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                  Download PDF
+                </button>
+                <button type="button" onClick={closeCreditNotePreview} className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50" aria-label="Close preview">
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+            <div className="min-h-0 flex-1 bg-slate-100 p-4">
+              <iframe title={`Credit note preview ${creditNotePreview.note.credit_note_number || ''}`} src={creditNotePreview.url} className="h-full w-full rounded-md border border-slate-300 bg-white shadow-sm" />
+            </div>
+          </div>
+        </div>
+      )}
+
     );
   }
 
