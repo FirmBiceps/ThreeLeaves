@@ -47,6 +47,17 @@ const PURCHASE_CATEGORIES = [
   'Utilities',
   'Other Purchase',
 ];
+const PURCHASE_CATEGORY_STORAGE_KEY = 'three-leaves-gst-purchase-categories-v1';
+
+function loadLocalPurchaseCategories() {
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(PURCHASE_CATEGORY_STORAGE_KEY) || 'null');
+    if (Array.isArray(stored) && stored.length) return stored.filter(Boolean);
+  } catch (error) {
+    console.warn('Unable to load local purchase categories:', error);
+  }
+  return PURCHASE_CATEGORIES;
+}
 
 const EXCLUSION_REASONS = [
   'Cancelled invoice',
@@ -429,9 +440,10 @@ function getSupplierSearchScore(supplier, query) {
   return 99;
 }
 
-function SupplierTypeahead({ value, selectedSupplierId, suppliers, disabled, onChange, onSelect }) {
+function SupplierTypeahead({ value, selectedSupplierId, suppliers, disabled, onChange, onSelect, onAddNew }) {
   const [isOpen, setIsOpen] = useState(false);
   const safeSuppliers = Array.isArray(suppliers) ? suppliers : [];
+  const safeCategories = Array.isArray(categories) && categories.length ? categories : PURCHASE_CATEGORIES;
   const query = String(value || '');
 
   const suggestions = useMemo(() => {
@@ -452,35 +464,52 @@ function SupplierTypeahead({ value, selectedSupplierId, suppliers, disabled, onC
         value={query}
         disabled={disabled}
         autoComplete="off"
-        placeholder="Type supplier name..."
+        placeholder="Search supplier..."
         onFocus={() => setIsOpen(true)}
         onChange={(event) => {
           onChange(event.target.value);
           setIsOpen(true);
         }}
-        onBlur={() => window.setTimeout(() => setIsOpen(false), 160)}
+        onBlur={() => window.setTimeout(() => setIsOpen(false), 180)}
         className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-bold text-slate-700 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100"
       />
-      {isOpen && !disabled && suggestions.length > 0 && (
-        <div className="absolute left-0 right-0 top-full z-[120] mt-1 max-h-64 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-xl">
-          {suggestions.map((supplier) => {
-            const supplierId = String(supplier?.id || getSupplierName(supplier));
-            const isSelected = String(selectedSupplierId || '') === supplierId;
-            return (
-              <button
-                key={supplierId}
-                type="button"
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => {
-                  onSelect(supplier);
-                  setIsOpen(false);
-                }}
-                className={`block w-full rounded-md px-3 py-2 text-left text-xs font-bold ${isSelected ? 'bg-emerald-50 text-emerald-800' : 'text-slate-700 hover:bg-slate-50'}`}
-              >
-                {getSupplierName(supplier)}
-              </button>
-            );
-          })}
+      {isOpen && !disabled && (
+        <div className="absolute left-0 right-0 top-full z-[120] mt-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl">
+          <div className="max-h-52 overflow-y-auto p-1">
+            {suggestions.map((supplier) => {
+              const supplierId = String(supplier?.id || getSupplierName(supplier));
+              const isSelected = String(selectedSupplierId || '') === supplierId;
+              return (
+                <button
+                  key={supplierId}
+                  type="button"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => {
+                    onSelect(supplier);
+                    setIsOpen(false);
+                  }}
+                  className={`block w-full rounded-md px-3 py-2 text-left text-xs font-bold ${isSelected ? 'bg-emerald-50 text-emerald-800' : 'text-slate-700 hover:bg-slate-50'}`}
+                >
+                  {getSupplierName(supplier)}
+                </button>
+              );
+            })}
+            {query.trim() && suggestions.length === 0 && (
+              <div className="px-3 py-2 text-[11px] font-semibold text-slate-400">No matching supplier found.</div>
+            )}
+          </div>
+          <button
+            type="button"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={async () => {
+              const created = await onAddNew(query.trim());
+              if (created) onSelect(created);
+              setIsOpen(false);
+            }}
+            className="flex w-full items-center gap-2 border-t border-slate-100 bg-slate-50 px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-widest text-emerald-700 hover:bg-emerald-50"
+          >
+            <Plus size={14} /> Add new supplier{query.trim() ? ` “${query.trim()}”` : ''}
+          </button>
         </div>
       )}
     </div>
@@ -507,7 +536,117 @@ function getPurchaseAmounts(row) {
   };
 }
 
-function PurchaseEntryTable({ suppliers, onPost }) {
+
+function NewSupplierModal({ initialName = '', onClose, onCreated }) {
+  const [form, setForm] = useState({ name: initialName, contactPerson: '', contactNumber: '', address: '' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const save = async (event) => {
+    event.preventDefault();
+    const name = String(form.name || '').trim();
+    if (!name) {
+      setError('Enter the supplier name.');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      const { data, error: insertError } = await supabase
+        .from('suppliers')
+        .insert([{
+          name,
+          contactPerson: String(form.contactPerson || '').trim() || null,
+          contactNumber: String(form.contactNumber || '').trim() || null,
+          address: String(form.address || '').trim() || null,
+        }])
+        .select('*')
+        .single();
+      if (insertError) throw insertError;
+      await onCreated(data);
+      onClose();
+    } catch (err) {
+      setError(err?.message || 'Unable to create supplier.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[6000] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+      <form onSubmit={save} className="w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+          <div>
+            <h3 className="text-sm font-black text-slate-900">Add New Supplier</h3>
+            <p className="mt-1 text-xs text-slate-500">Create the supplier here without leaving GST entry.</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={17} /></button>
+        </div>
+        <div className="space-y-4 p-5">
+          <div>
+            <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-slate-500">Supplier name *</label>
+            <input autoFocus required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-bold outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <input placeholder="Contact person" value={form.contactPerson} onChange={(e) => setForm({ ...form, contactPerson: e.target.value })} className="rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-emerald-400" />
+            <input placeholder="Contact number" value={form.contactNumber} onChange={(e) => setForm({ ...form, contactNumber: e.target.value })} className="rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-emerald-400" />
+          </div>
+          <textarea rows={2} placeholder="Business address (optional)" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className="w-full resize-none rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-emerald-400" />
+          {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{error}</p>}
+        </div>
+        <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
+          <button type="button" onClick={onClose} className="rounded-lg px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100">Cancel</button>
+          <button type="submit" disabled={saving} className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-black uppercase tracking-widest text-white disabled:opacity-50">{saving ? 'Saving...' : 'Create Supplier'}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function PurchaseCategoryManager({ categories, onClose, onAdd, onRename, onRemove }) {
+  const [newCategory, setNewCategory] = useState('');
+  const [editing, setEditing] = useState(null);
+  const [draft, setDraft] = useState('');
+
+  return (
+    <div className="fixed inset-0 z-[6000] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+          <div><h3 className="text-sm font-black text-slate-900">Purchase Categories</h3><p className="mt-1 text-xs text-slate-500">Add, rename or remove options shown in the purchase entry dropdown.</p></div>
+          <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={17} /></button>
+        </div>
+        <div className="max-h-[55vh] space-y-2 overflow-y-auto p-5">
+          {categories.map((category) => (
+            <div key={category} className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
+              {editing === category ? (
+                <input autoFocus value={draft} onChange={(e) => setDraft(e.target.value)} className="min-w-0 flex-1 rounded-md border border-slate-200 px-2 py-1.5 text-sm font-semibold outline-none focus:border-emerald-400" />
+              ) : <span className="min-w-0 flex-1 text-sm font-bold text-slate-700">{category}</span>}
+              {editing === category ? (
+                <>
+                  <button type="button" onClick={async () => { await onRename(category, draft); setEditing(null); }} className="rounded-md px-2 py-1.5 text-xs font-black text-emerald-700 hover:bg-emerald-50">Save</button>
+                  <button type="button" onClick={() => setEditing(null)} className="rounded-md px-2 py-1.5 text-xs font-bold text-slate-400">Cancel</button>
+                </>
+              ) : (
+                <>
+                  <button type="button" onClick={() => { setEditing(category); setDraft(category); }} className="rounded-md px-2 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-100">Edit</button>
+                  <button type="button" onClick={() => onRemove(category)} className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"><Trash2 size={14} /></button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="border-t border-slate-200 bg-slate-50 p-5">
+          <div className="flex gap-2">
+            <input value={newCategory} onChange={(e) => setNewCategory(e.target.value)} placeholder="New category name" className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold outline-none focus:border-emerald-400" />
+            <button type="button" onClick={async () => { if (newCategory.trim()) { await onAdd(newCategory.trim()); setNewCategory(''); } }} className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-black uppercase tracking-widest text-white">Add</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PurchaseEntryTable({ suppliers, categories, onPost, onAddSupplier, onAddCategory }) {
   const [rows, setRows] = useState(() => [createEmptyPurchaseDraft()]);
   const safeSuppliers = Array.isArray(suppliers) ? suppliers : [];
 
@@ -680,6 +819,7 @@ function PurchaseEntryTable({ suppliers, onPost }) {
                       disabled={disabled}
                       onChange={(value) => updateRow(index, { supplierName: value, supplierId: '' })}
                       onSelect={(supplier) => selectSupplier(index, supplier)}
+                      onAddNew={(name) => onAddSupplier?.(name, index)}
                     />
                   </td>
 
@@ -694,16 +834,27 @@ function PurchaseEntryTable({ suppliers, onPost }) {
                   </td>
 
                   <td className="p-2 align-top">
-                    <select
-                      value={row.category}
-                      onChange={(event) => updateRow(index, { category: event.target.value })}
-                      disabled={disabled}
-                      className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-bold text-slate-700 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100"
-                    >
-                      {PURCHASE_CATEGORIES.map((category) => (
-                        <option key={category} value={category}>{category}</option>
-                      ))}
-                    </select>
+                    <div className="flex items-center gap-1">
+                      <select
+                        value={row.category}
+                        onChange={(event) => updateRow(index, { category: event.target.value })}
+                        disabled={disabled}
+                        className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-bold text-slate-700 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100"
+                      >
+                        {safeCategories.map((category) => (
+                          <option key={category} value={category}>{category}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => onAddCategory?.()}
+                        disabled={disabled}
+                        title="Manage purchase categories"
+                        className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50 hover:text-slate-800 disabled:opacity-40"
+                      >
+                        <SlidersHorizontal size={14} />
+                      </button>
+                    </div>
                   </td>
 
                   <td className="p-2 align-top">
@@ -1137,10 +1288,18 @@ export function GSTModule({ sys }) {
   const [exclusionInvoice, setExclusionInvoice] = useState(null);
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
   const [notification, setNotification] = useState(null);
+  const [purchaseSuppliers, setPurchaseSuppliers] = useState(() => (Array.isArray(sys?.suppliers) ? sys.suppliers : []));
+  const [purchaseCategories, setPurchaseCategories] = useState(() => loadLocalPurchaseCategories());
+  const [supplierModal, setSupplierModal] = useState(null);
+  const [categoryManagerOpen, setCategoryManagerOpen] = useState(false);
 
   const safeInvoices = Array.isArray(sys?.invoices) ? sys.invoices : [];
   const safeGstRecords = Array.isArray(sys?.gstRecords) ? sys.gstRecords : [];
   const safeSuppliers = Array.isArray(sys?.suppliers) ? sys.suppliers : [];
+
+  useEffect(() => {
+    setPurchaseSuppliers(safeSuppliers);
+  }, [sys?.suppliers]);
 
   const quarterRange = useMemo(
     () => getQuarterDateRange(Number(selectedYear), selectedQuarter),
@@ -1154,6 +1313,90 @@ export function GSTModule({ sys }) {
   const showNotification = (message, type = 'success') => {
     setNotification({ message, type });
     window.setTimeout(() => setNotification(null), 5000);
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadCategories = async () => {
+      const { data, error } = await supabase
+        .from('gst_purchase_categories')
+        .select('name, sort_order')
+        .eq('active', true)
+        .order('sort_order', { ascending: true })
+        .order('name', { ascending: true });
+      if (!cancelled && !error && Array.isArray(data) && data.length) {
+        setPurchaseCategories(data.map((row) => row.name).filter(Boolean));
+      }
+    };
+    void loadCategories();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    try { window.localStorage.setItem(PURCHASE_CATEGORY_STORAGE_KEY, JSON.stringify(purchaseCategories)); } catch (error) { /* ignore storage errors */ }
+  }, [purchaseCategories]);
+
+  const createSupplierFromPurchase = (name) => new Promise((resolve) => {
+    const cleanName = String(name || '').trim();
+    if (!cleanName) { resolve(null); return; }
+    const existing = purchaseSuppliers.find((supplier) => getSupplierName(supplier).toLowerCase() === cleanName.toLowerCase());
+    if (existing) {
+      showNotification(`Supplier already exists: ${getSupplierName(existing)}`, 'warning');
+      resolve(existing);
+      return;
+    }
+    setSupplierModal({ initialName: cleanName, resolve });
+  });
+
+  const handleSupplierCreated = async (supplier) => {
+    const next = [...purchaseSuppliers.filter((item) => String(item.id) !== String(supplier.id)), supplier]
+      .sort((a, b) => getSupplierName(a).localeCompare(getSupplierName(b)));
+    setPurchaseSuppliers(next);
+    if (sys?.setSuppliers) sys.setSuppliers(next);
+    showNotification(`Supplier added: ${getSupplierName(supplier)}`);
+    return supplier;
+  };
+
+  const savePurchaseCategory = async (name) => {
+    const cleanName = String(name || '').trim();
+    if (!cleanName) return;
+    if (purchaseCategories.some((item) => item.toLowerCase() === cleanName.toLowerCase())) return;
+    const nextSort = purchaseCategories.length;
+    const { data, error } = await supabase
+      .from('gst_purchase_categories')
+      .insert([{ name: cleanName, sort_order: nextSort, active: true }])
+      .select('name')
+      .single();
+    if (error) {
+      showNotification(`Unable to add category: ${error.message}`, 'error');
+      return;
+    }
+    setPurchaseCategories((current) => [...current, data.name]);
+  };
+
+  const renamePurchaseCategory = async (oldName, newName) => {
+    const cleanName = String(newName || '').trim();
+    if (!cleanName || cleanName.toLowerCase() === oldName.toLowerCase()) return;
+    const { error } = await supabase.from('gst_purchase_categories').update({ name: cleanName }).eq('name', oldName);
+    if (error) {
+      showNotification(`Unable to rename category: ${error.message}`, 'error');
+      return;
+    }
+    setPurchaseCategories((current) => current.map((item) => item === oldName ? cleanName : item));
+  };
+
+  const removePurchaseCategory = async (name) => {
+    if (purchaseCategories.length <= 1) {
+      showNotification('Keep at least one purchase category.', 'error');
+      return;
+    }
+    if (!window.confirm(`Remove “${name}” from the purchase category list? Existing records are not changed.`)) return;
+    const { error } = await supabase.from('gst_purchase_categories').update({ active: false }).eq('name', name);
+    if (error) {
+      showNotification(`Unable to remove category: ${error.message}`, 'error');
+      return;
+    }
+    setPurchaseCategories((current) => current.filter((item) => item !== name));
   };
 
   const salesRows = useMemo(() => {
@@ -2059,6 +2302,27 @@ export function GSTModule({ sys }) {
           existing={salesExclusions[String(exclusionInvoice?.id || exclusionInvoice?.number || '')]}
           onClose={() => setExclusionInvoice(null)}
           onSave={(details) => handleExcludeInvoice(exclusionInvoice, details)}
+        />
+      )}
+
+      {supplierModal && (
+        <NewSupplierModal
+          initialName={supplierModal.initialName}
+          onClose={() => { supplierModal.resolve?.(null); setSupplierModal(null); }}
+          onCreated={async (supplier) => {
+            const created = await handleSupplierCreated(supplier);
+            supplierModal.resolve?.(created);
+          }}
+        />
+      )}
+
+      {categoryManagerOpen && (
+        <PurchaseCategoryManager
+          categories={purchaseCategories}
+          onClose={() => setCategoryManagerOpen(false)}
+          onAdd={savePurchaseCategory}
+          onRename={renamePurchaseCategory}
+          onRemove={removePurchaseCategory}
         />
       )}
 
