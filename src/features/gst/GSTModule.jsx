@@ -1057,7 +1057,7 @@ function PurchaseEntryTable({ suppliers, inventory, onPost }) {
   );
 }
 
-function GstQuarterReport({ report, monthlyReport, salesRows, purchaseRows, onPrint }) {
+function GstQuarterReport({ report, monthlyReport, salesRows, purchaseRows, creditNotes = [], onPrint }) {
   const [showInvoiceDetail, setShowInvoiceDetail] = useState(true);
   const [showPurchaseDetail, setShowPurchaseDetail] = useState(true);
 
@@ -1190,16 +1190,44 @@ function GstQuarterReport({ report, monthlyReport, salesRows, purchaseRows, onPr
                 <td className="px-2 py-2 text-right font-mono font-bold">{report.includedSalesCount}</td>
               </tr>
               <tr className="border-b border-slate-300">
-                <td className="px-2 py-2 font-semibold">Sales value ex-GST</td>
+                <td className="px-2 py-2 font-semibold">Gross sales value ex-GST</td>
                 {monthlyReport.map((month) => (
                   <td key={month.key} className="px-2 py-2 text-right font-mono">{money(month.salesSubtotal)}</td>
                 ))}
-                <td className="px-2 py-2 text-right font-mono font-bold">{money(report.taxableSales)}</td>
+                <td className="px-2 py-2 text-right font-mono font-bold">{money(report.grossTaxableSales)}</td>
               </tr>
               <tr className="border-b border-slate-300">
-                <td className="px-2 py-2 font-semibold">Output GST — Sales</td>
+                <td className="px-2 py-2 font-semibold">Less: sales returns / credit notes ex-GST</td>
+                {monthlyReport.map((month) => (
+                  <td key={month.key} className="px-2 py-2 text-right font-mono">-{money(month.creditNoteSubtotal)}</td>
+                ))}
+                <td className="px-2 py-2 text-right font-mono font-bold">-{money(report.creditNoteSubtotal)}</td>
+              </tr>
+              <tr className="border-b border-slate-300 font-bold">
+                <td className="px-2 py-2">Adjusted sales value ex-GST</td>
+                {monthlyReport.map((month) => (
+                  <td key={month.key} className="px-2 py-2 text-right font-mono">{money(month.adjustedSalesSubtotal)}</td>
+                ))}
+                <td className="px-2 py-2 text-right font-mono">{money(report.taxableSales)}</td>
+              </tr>
+              <tr className="border-b border-slate-300">
+                <td className="px-2 py-2 font-semibold">Gross Output GST — Sales</td>
                 {monthlyReport.map((month) => (
                   <td key={month.key} className="px-2 py-2 text-right font-mono">{money(month.salesGst)}</td>
+                ))}
+                <td className="px-2 py-2 text-right font-mono font-bold">{money(report.grossOutputGst)}</td>
+              </tr>
+              <tr className="border-b border-slate-300">
+                <td className="px-2 py-2 font-semibold">Less: GST reversed on sales returns</td>
+                {monthlyReport.map((month) => (
+                  <td key={month.key} className="px-2 py-2 text-right font-mono">-{money(month.creditNoteGst)}</td>
+                ))}
+                <td className="px-2 py-2 text-right font-mono font-bold">-{money(report.creditNoteGst)}</td>
+              </tr>
+              <tr className="border-b border-slate-300">
+                <td className="px-2 py-2 font-semibold">Adjusted Output GST — Sales</td>
+                {monthlyReport.map((month) => (
+                  <td key={month.key} className="px-2 py-2 text-right font-mono">{money(month.salesGst - month.creditNoteGst)}</td>
                 ))}
                 <td className="px-2 py-2 text-right font-mono font-bold">{money(report.outputGst)}</td>
               </tr>
@@ -1220,7 +1248,7 @@ function GstQuarterReport({ report, monthlyReport, salesRows, purchaseRows, onPr
               <tr className="border-t-2 border-black font-bold">
                 <td className="px-2 py-2">Net GST {report.netPayable >= 0 ? 'Payable' : 'Claimable'}</td>
                 {monthlyReport.map((month) => (
-                  <td key={month.key} className="px-2 py-2 text-right font-mono">{money(month.salesGst - month.purchaseGst)}</td>
+                  <td key={month.key} className="px-2 py-2 text-right font-mono">{money(month.salesGst - month.creditNoteGst - month.purchaseGst)}</td>
                 ))}
                 <td className="px-2 py-2 text-right font-mono">{money(Math.abs(report.netPayable))}</td>
               </tr>
@@ -1281,6 +1309,45 @@ function GstQuarterReport({ report, monthlyReport, salesRows, purchaseRows, onPr
                   <td className="px-2 py-2 text-right font-mono">{money(report.taxableSales + report.outputGst)}</td>
                 </tr>
               </tfoot>
+            </table>
+          </section>
+        )}
+
+        {creditNotes.length > 0 && (
+          <section className="mt-7 print-page-break">
+            <div className="border-y-2 border-black py-2">
+              <h2 className="text-sm font-bold">Sales Returns / Credit Notes</h2>
+              <p className="mt-1 text-[10px] text-slate-600">Credit note GST is deducted from output GST in the period the credit note is issued.</p>
+            </div>
+            <table className="mt-2 w-full border-collapse text-xs">
+              <thead><tr className="border-b border-black">
+                <th className="px-2 py-2 text-left font-bold">Date</th>
+                <th className="px-2 py-2 text-left font-bold">Credit Note</th>
+                <th className="px-2 py-2 text-left font-bold">Invoice No.</th>
+                <th className="px-2 py-2 text-left font-bold">Customer</th>
+                <th className="px-2 py-2 text-right font-bold">Value ex-GST</th>
+                <th className="px-2 py-2 text-right font-bold">GST Reversed</th>
+                <th className="px-2 py-2 text-right font-bold">Credit Total</th>
+              </tr></thead>
+              <tbody>
+                {[...creditNotes].sort((a,b) => String(a.credit_note_number || '').localeCompare(String(b.credit_note_number || ''), undefined, { numeric: true, sensitivity: 'base' })).map((note) => (
+                  <tr key={note.id} className="border-b border-slate-200">
+                    <td className="px-2 py-1.5">{note.credit_note_date || '-'}</td>
+                    <td className="px-2 py-1.5 font-mono">{note.credit_note_number}</td>
+                    <td className="px-2 py-1.5 font-mono">#{note.invoice_number}</td>
+                    <td className="px-2 py-1.5">{note.customer_name || '-'}</td>
+                    <td className="px-2 py-1.5 text-right font-mono">-{money(note.subtotal_ex_gst)}</td>
+                    <td className="px-2 py-1.5 text-right font-mono">-{money(note.gst_amount)}</td>
+                    <td className="px-2 py-1.5 text-right font-mono font-semibold">-{money(note.total_amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot><tr className="border-t-2 border-black font-bold">
+                <td colSpan="4" className="px-2 py-2">Total Credit Notes</td>
+                <td className="px-2 py-2 text-right font-mono">-{money(report.creditNoteSubtotal)}</td>
+                <td className="px-2 py-2 text-right font-mono">-{money(report.creditNoteGst)}</td>
+                <td className="px-2 py-2 text-right font-mono">-{money(report.creditNoteSubtotal + report.creditNoteGst)}</td>
+              </tr></tfoot>
             </table>
           </section>
         )}
@@ -1393,6 +1460,8 @@ export function GSTModule({ sys }) {
   const [exclusionInvoice, setExclusionInvoice] = useState(null);
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
   const [notification, setNotification] = useState(null);
+  const [creditNotes, setCreditNotes] = useState([]);
+  const [creditNotesLoading, setCreditNotesLoading] = useState(false);
 
   const safeInvoices = Array.isArray(sys?.invoices) ? sys.invoices : [];
   const safeGstRecords = Array.isArray(sys?.gstRecords) ? sys.gstRecords : [];
@@ -1407,6 +1476,34 @@ export function GSTModule({ sys }) {
   useEffect(() => {
     saveStoredSalesExclusions(salesExclusions);
   }, [salesExclusions]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadCreditNotes = async () => {
+      setCreditNotesLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('credit_notes')
+          .select('id, credit_note_number, invoice_id, invoice_number, customer_name, credit_note_date, subtotal_ex_gst, gst_amount, total_amount, status, reason')
+          .gte('credit_note_date', quarterRange.start.toISOString().slice(0, 10))
+          .lte('credit_note_date', quarterRange.end.toISOString().slice(0, 10))
+          .eq('status', 'issued')
+          .order('credit_note_date', { ascending: true });
+
+        if (error) throw error;
+        if (!cancelled) setCreditNotes(Array.isArray(data) ? data : []);
+      } catch (error) {
+        console.warn('GST credit-note adjustments unavailable:', error);
+        if (!cancelled) setCreditNotes([]);
+      } finally {
+        if (!cancelled) setCreditNotesLoading(false);
+      }
+    };
+
+    loadCreditNotes();
+    return () => { cancelled = true; };
+  }, [quarterRange]);
 
   const showNotification = (message, type = 'success') => {
     setNotification({ message, type });
@@ -1477,15 +1574,24 @@ export function GSTModule({ sys }) {
     const includedSales = salesRows.filter((row) => !row.isExcluded);
     const excludedSales = salesRows.filter((row) => row.isExcluded);
 
-    const taxableSales = includedSales.reduce((sum, row) => sum + row.subtotal, 0);
-    const outputGst = includedSales.reduce((sum, row) => sum + row.gstAmount, 0);
+    const grossTaxableSales = includedSales.reduce((sum, row) => sum + row.subtotal, 0);
+    const grossOutputGst = includedSales.reduce((sum, row) => sum + row.gstAmount, 0);
+    const creditNoteSubtotal = creditNotes.reduce((sum, note) => sum + roundMoney(note?.subtotal_ex_gst), 0);
+    const creditNoteGst = creditNotes.reduce((sum, note) => sum + roundMoney(note?.gst_amount), 0);
+    const taxableSales = Math.max(0, roundMoney(grossTaxableSales - creditNoteSubtotal));
+    const outputGst = Math.max(0, roundMoney(grossOutputGst - creditNoteGst));
     const taxablePurchases = purchaseRows.reduce((sum, record) => sum + roundMoney(record?.amount), 0);
     const inputGst = purchaseRows.reduce((sum, record) => sum + roundMoney(record?.gst), 0);
     const reviewCount = salesRows.filter((row) => row.gstSource !== 'saved').length;
 
     return {
       taxableSales,
+      grossTaxableSales,
       outputGst,
+      grossOutputGst,
+      creditNoteSubtotal,
+      creditNoteGst,
+      creditNoteCount: creditNotes.length,
       taxablePurchases,
       inputGst,
       netPayable: outputGst - inputGst,
@@ -1496,7 +1602,7 @@ export function GSTModule({ sys }) {
       year: Number(selectedYear),
       quarterLabel: `${selectedQuarter} ${selectedYear}`,
     };
-  }, [salesRows, purchaseRows]);
+  }, [salesRows, purchaseRows, creditNotes, selectedYear, selectedQuarter]);
 
 
   const monthlyReport = useMemo(() => {
@@ -1520,12 +1626,29 @@ export function GSTModule({ sys }) {
         salesCount: monthSales.length,
         salesSubtotal: monthSales.reduce((sum, row) => sum + row.subtotal, 0),
         salesGst: monthSales.reduce((sum, row) => sum + row.gstAmount, 0),
+        adjustedSalesSubtotal: 0,
+        adjustedSalesGst: 0,
+        creditNoteCount: creditNotes.filter((note) => {
+          const date = new Date(note?.credit_note_date || '');
+          return date.getFullYear() === Number(selectedYear) && date.getMonth() === monthIndex;
+        }).length,
+        creditNoteSubtotal: creditNotes.filter((note) => {
+          const date = new Date(note?.credit_note_date || '');
+          return date.getFullYear() === Number(selectedYear) && date.getMonth() === monthIndex;
+        }).reduce((sum, note) => sum + roundMoney(note?.subtotal_ex_gst), 0),
+        creditNoteGst: creditNotes.filter((note) => {
+          const date = new Date(note?.credit_note_date || '');
+          return date.getFullYear() === Number(selectedYear) && date.getMonth() === monthIndex;
+        }).reduce((sum, note) => sum + roundMoney(note?.gst_amount), 0),
         purchaseCount: monthPurchases.length,
         purchaseSubtotal: monthPurchases.reduce((sum, row) => sum + roundMoney(row?.amount), 0),
         purchaseGst: monthPurchases.reduce((sum, row) => sum + roundMoney(row?.gst), 0),
       };
+      month.adjustedSalesSubtotal = Math.max(0, roundMoney(month.salesSubtotal - month.creditNoteSubtotal));
+      month.adjustedSalesGst = Math.max(0, roundMoney(month.salesGst - month.creditNoteGst));
+      return month;
     });
-  }, [selectedYear, selectedQuarter, salesRows, purchaseRows]);
+  }, [selectedYear, selectedQuarter, salesRows, purchaseRows, creditNotes]);
 
   const reviewIssues = useMemo(() => {
     const issues = [];
@@ -2055,6 +2178,7 @@ export function GSTModule({ sys }) {
                 <div>
                   <h3 className="text-sm font-black text-slate-800">Sales GST Snapshot</h3>
                   <p className="mt-1 text-xs font-medium text-slate-400">Latest automated sales invoices in this quarter.</p>
+                  {report.creditNoteCount > 0 && <p className="mt-1 text-[10px] font-bold text-slate-600">{report.creditNoteCount} credit note{report.creditNoteCount === 1 ? '' : 's'} · GST reversed ${formatMoney(report.creditNoteGst)}</p>}
                 </div>
                 <button type="button" onClick={() => setActiveTab('sales')} className="text-xs font-black text-indigo-600 hover:text-indigo-800">View all</button>
               </div>
@@ -2205,6 +2329,7 @@ export function GSTModule({ sys }) {
               monthlyReport={monthlyReport}
               salesRows={salesRows}
               purchaseRows={purchaseRows}
+              creditNotes={creditNotes}
               onPrint={handlePrintGSTReport}
             />
           </div>
