@@ -1090,6 +1090,8 @@ export function CustomerModule({ sys }) {
   const [editingCustomer, setEditingCustomer] = useState(EMPTY_CUSTOMER);
   const [selectedCustomerId, setSelectedCustomerId] = useState(null);
   const [detailTab, setDetailTab] = useState('overview');
+  const [customerCreditBalance, setCustomerCreditBalance] = useState(0);
+  const [customerCreditLoading, setCustomerCreditLoading] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
@@ -1127,6 +1129,32 @@ export function CustomerModule({ sys }) {
   useEffect(() => () => {
     if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadCustomerCredit = async () => {
+      if (!selectedCustomerId) {
+        setCustomerCreditBalance(0);
+        return;
+      }
+      setCustomerCreditLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('customer_credit_ledger')
+          .select('amount')
+          .eq('customer_id', String(selectedCustomerId));
+        if (error) throw error;
+        const balance = (Array.isArray(data) ? data : []).reduce((sum, row) => sum + Number(row?.amount || 0), 0);
+        if (!cancelled) setCustomerCreditBalance(Math.max(0, Number(balance.toFixed(2))));
+      } catch (error) {
+        if (!cancelled) setCustomerCreditBalance(0);
+      } finally {
+        if (!cancelled) setCustomerCreditLoading(false);
+      }
+    };
+    loadCustomerCredit();
+    return () => { cancelled = true; };
+  }, [selectedCustomerId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1511,7 +1539,7 @@ export function CustomerModule({ sys }) {
 
         {detailTab === 'overview' && (
           <div className="space-y-6">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"><SummaryCard label="Lifetime Sales" value={`$${formatMoneyWhole(selectedCustomer.totalRevenue)}`} subtext={`Normal $${formatMoneyWhole(selectedCustomer.normalRevenue)} · Cash $${formatMoneyWhole(selectedCustomer.cashRevenue)}`} icon={TrendingUp} tone="blue"/><SummaryCard label="Total Orders" value={selectedCustomer.orderCount} subtext={`Normal ${selectedCustomer.normalOrderCount} · Cash ${selectedCustomer.cashOrderCount}`} icon={FileText} tone="emerald"/><SummaryCard label="Average Order" value={`$${formatMoneyWhole(selectedCustomer.avgValue)}`} subtext="Normal + Cash activity" icon={Activity} tone="violet"/><SummaryCard label="Outstanding" value={`$${formatMoneyWhole(selectedCustomer.totalOutstanding)}`} subtext={`Normal $${formatMoneyWhole(selectedCustomer.normalOutstanding)} · Cash $${formatMoneyWhole(selectedCustomer.cashOutstanding)}`} icon={AlertCircle} tone={selectedCustomer.totalOutstanding > 0 ? 'amber' : 'emerald'}/></div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5"><SummaryCard label="Lifetime Sales" value={`$${formatMoneyWhole(selectedCustomer.totalRevenue)}`} subtext={`Normal $${formatMoneyWhole(selectedCustomer.normalRevenue)} · Cash $${formatMoneyWhole(selectedCustomer.cashRevenue)}`} icon={TrendingUp} tone="blue"/><SummaryCard label="Total Orders" value={selectedCustomer.orderCount} subtext={`Normal ${selectedCustomer.normalOrderCount} · Cash ${selectedCustomer.cashOrderCount}`} icon={FileText} tone="emerald"/><SummaryCard label="Average Order" value={`$${formatMoneyWhole(selectedCustomer.avgValue)}`} subtext="Normal + Cash activity" icon={Activity} tone="violet"/><SummaryCard label="Outstanding" value={`$${formatMoneyWhole(selectedCustomer.totalOutstanding)}`} subtext={`Normal $${formatMoneyWhole(selectedCustomer.normalOutstanding)} · Cash $${formatMoneyWhole(selectedCustomer.cashOutstanding)}`} icon={AlertCircle} tone={selectedCustomer.totalOutstanding > 0 ? 'amber' : 'emerald'}/><SummaryCard label="Customer Credit" value={customerCreditLoading ? '…' : `$${formatMoney(customerCreditBalance)}`} subtext="Available return credit" icon={CheckCircle2} tone={customerCreditBalance > 0 ? 'blue' : 'emerald'}/></div>
 
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
               <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm xl:col-span-2">
