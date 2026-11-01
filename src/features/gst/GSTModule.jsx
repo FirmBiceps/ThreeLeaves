@@ -443,6 +443,8 @@ function getSupplierSearchScore(supplier, query) {
 
 function SupplierTypeahead({ value, selectedSupplierId, suppliers, disabled, onChange, onSelect, onAddNew }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [menuStyle, setMenuStyle] = useState(null);
+  const inputRef = React.useRef(null);
   const safeSuppliers = Array.isArray(suppliers) ? suppliers : [];
   const query = String(value || '');
 
@@ -458,24 +460,74 @@ function SupplierTypeahead({ value, selectedSupplierId, suppliers, disabled, onC
       .map(({ supplier }) => supplier);
   }, [query, safeSuppliers]);
 
+  const updateMenuPosition = React.useCallback(() => {
+    if (!inputRef.current) return;
+    const rect = inputRef.current.getBoundingClientRect();
+    const viewportPadding = 10;
+    const menuWidth = Math.max(rect.width, 260);
+    const left = Math.min(
+      Math.max(viewportPadding, rect.left),
+      Math.max(viewportPadding, window.innerWidth - menuWidth - viewportPadding)
+    );
+    const spaceBelow = window.innerHeight - rect.bottom - viewportPadding;
+    const spaceAbove = rect.top - viewportPadding;
+    const openUp = spaceBelow < 260 && spaceAbove > spaceBelow;
+    const maxHeight = Math.max(150, Math.min(280, openUp ? spaceAbove - 8 : spaceBelow - 8));
+
+    setMenuStyle({
+      position: 'fixed',
+      left,
+      width: Math.min(menuWidth, window.innerWidth - viewportPadding * 2),
+      ...(openUp
+        ? { bottom: window.innerHeight - rect.top + 6 }
+        : { top: rect.bottom + 6 }),
+      maxHeight,
+      zIndex: 10000,
+    });
+  }, []);
+
+  React.useEffect(() => {
+    if (!isOpen || disabled) return undefined;
+
+    updateMenuPosition();
+
+    const handleViewportChange = () => updateMenuPosition();
+    window.addEventListener('resize', handleViewportChange);
+    window.addEventListener('scroll', handleViewportChange, true);
+
+    return () => {
+      window.removeEventListener('resize', handleViewportChange);
+      window.removeEventListener('scroll', handleViewportChange, true);
+    };
+  }, [isOpen, disabled, updateMenuPosition, query]);
+
   return (
     <div className="relative">
       <input
+        ref={inputRef}
         value={query}
         disabled={disabled}
         autoComplete="off"
         placeholder="Search supplier..."
-        onFocus={() => setIsOpen(true)}
+        onFocus={() => {
+          setIsOpen(true);
+          window.requestAnimationFrame(updateMenuPosition);
+        }}
         onChange={(event) => {
           onChange(event.target.value);
           setIsOpen(true);
+          window.requestAnimationFrame(updateMenuPosition);
         }}
         onBlur={() => window.setTimeout(() => setIsOpen(false), 180)}
-        className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-bold text-slate-700 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100"
+        className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-bold text-slate-700 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100"
       />
-      {isOpen && !disabled && (
-        <div className="absolute left-0 right-0 top-full z-[120] mt-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl">
-          <div className="max-h-52 overflow-y-auto p-1">
+
+      {isOpen && !disabled && menuStyle && (
+        <div
+          style={menuStyle}
+          className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl ring-1 ring-slate-900/5"
+        >
+          <div className="overflow-y-auto p-1" style={{ maxHeight: Math.max(110, menuStyle.maxHeight - 44) }}>
             {suggestions.map((supplier) => {
               const supplierId = String(supplier?.id || getSupplierName(supplier));
               const isSelected = String(selectedSupplierId || '') === supplierId;
@@ -488,27 +540,36 @@ function SupplierTypeahead({ value, selectedSupplierId, suppliers, disabled, onC
                     onSelect(supplier);
                     setIsOpen(false);
                   }}
-                  className={`block w-full rounded-md px-3 py-2 text-left text-xs font-bold ${isSelected ? 'bg-emerald-50 text-emerald-800' : 'text-slate-700 hover:bg-slate-50'}`}
+                  className={`block w-full rounded-lg px-3 py-2.5 text-left text-xs font-bold transition ${
+                    isSelected
+                      ? 'bg-emerald-50 text-emerald-800'
+                      : 'text-slate-700 hover:bg-slate-50'
+                  }`}
                 >
-                  {getSupplierName(supplier)}
+                  <span className="block truncate">{getSupplierName(supplier)}</span>
                 </button>
               );
             })}
+
             {query.trim() && suggestions.length === 0 && (
-              <div className="px-3 py-2 text-[11px] font-semibold text-slate-400">No matching supplier found.</div>
+              <div className="px-3 py-3 text-[11px] font-semibold text-slate-400">
+                No matching supplier found.
+              </div>
             )}
           </div>
+
           <button
             type="button"
             onMouseDown={(event) => event.preventDefault()}
             onClick={async () => {
-              const created = await onAddNew(query.trim());
+              const created = await onAddNew?.(query.trim());
               if (created) onSelect(created);
               setIsOpen(false);
             }}
-            className="flex w-full items-center gap-2 border-t border-slate-100 bg-slate-50 px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-widest text-emerald-700 hover:bg-emerald-50"
+            className="flex w-full items-center gap-2 border-t border-slate-100 bg-slate-50 px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-widest text-emerald-700 transition hover:bg-emerald-50"
           >
-            <Plus size={14} /> Add new supplier{query.trim() ? ` “${query.trim()}”` : ''}
+            <Plus size={14} />
+            Add new supplier{query.trim() ? ` “${query.trim()}”` : ''}
           </button>
         </div>
       )}
@@ -763,11 +824,11 @@ function PurchaseEntryTable({ suppliers, categories, onPost, onAddSupplier, onAd
 
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex flex-col gap-3 border-b border-slate-200 bg-white px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h3 className="text-sm font-black text-slate-800">Purchase GST Entry</h3>
+          <div className="flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700"><ReceiptText size={15} /></span><h3 className="text-sm font-black text-slate-800">Purchase GST Entry</h3></div>
           <p className="mt-1 text-xs font-medium text-slate-500">
-            Enter the supplier invoice total as shown on the tax invoice. GST and the pre-GST amount are calculated automatically.
+            Enter the supplier invoice details once. GST and the pre-GST value are calculated automatically from the tax invoice total.
           </p>
         </div>
         <button
@@ -780,7 +841,7 @@ function PurchaseEntryTable({ suppliers, categories, onPost, onAddSupplier, onAd
       </div>
 
       <div className="overflow-x-auto">
-        <table className="min-w-[1250px] w-full text-left">
+        <table className="w-full min-w-[1250px] text-left">
           <thead className="border-b border-slate-200 bg-white text-[10px] font-black uppercase tracking-widest text-slate-400">
             <tr>
               <th className="w-[120px] p-3 pl-5">Date</th>
@@ -1742,9 +1803,10 @@ export function GSTModule({ sys }) {
     const supplier = purchaseSuppliers.find((entry) => (
       String(entry?.id || getSupplierName(entry)) === String(purchase.supplierId) ||
       getSupplierName(entry).toLowerCase() === String(purchase.supplierName || '').trim().toLowerCase()
-    ));
-
-    if (!supplier) throw new Error('The selected supplier could not be found. Please select it again.');
+    )) || {
+      id: purchase.supplierId,
+      name: purchase.supplierName,
+    };
 
     const supplierName = getSupplierName(supplier);
     const purchaseRecordId = `purchase_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
