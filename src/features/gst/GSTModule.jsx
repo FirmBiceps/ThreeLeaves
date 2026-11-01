@@ -266,14 +266,15 @@ function getPurchaseSupplierName(record) {
 }
 
 function getPurchaseSupplierGstRegistrationNumber(record) {
-  return String(
+  const stored =
     record?.supplierGstRegistrationNumber ||
     record?.supplier_gst_registration_number ||
     record?.supplierGstNo ||
     record?.supplier_gst_no ||
-    record?.gstRegistrationNumber ||
-    ''
-  );
+    record?.gstRegistrationNumber;
+  if (stored) return String(stored);
+  const match = String(record?.desc || '').match(/GST\s*Reg(?:istration)?\.?\s*(?:No\.?\s*)?[:#]?\s*([^•]+)/i);
+  return match?.[1]?.trim() || '';
 }
 
 function getPurchaseDescription(record) {
@@ -443,7 +444,6 @@ function getSupplierSearchScore(supplier, query) {
 function SupplierTypeahead({ value, selectedSupplierId, suppliers, disabled, onChange, onSelect, onAddNew }) {
   const [isOpen, setIsOpen] = useState(false);
   const safeSuppliers = Array.isArray(suppliers) ? suppliers : [];
-  const safeCategories = Array.isArray(categories) && categories.length ? categories : PURCHASE_CATEGORIES;
   const query = String(value || '');
 
   const suggestions = useMemo(() => {
@@ -649,6 +649,9 @@ function PurchaseCategoryManager({ categories, onClose, onAdd, onRename, onRemov
 function PurchaseEntryTable({ suppliers, categories, onPost, onAddSupplier, onAddCategory }) {
   const [rows, setRows] = useState(() => [createEmptyPurchaseDraft()]);
   const safeSuppliers = Array.isArray(suppliers) ? suppliers : [];
+  const safeCategories = Array.isArray(categories) && categories.length
+    ? categories
+    : PURCHASE_CATEGORIES;
 
   const updateRow = (index, patch) => {
     setRows((current) => current.map((row, rowIndex) => (
@@ -1736,42 +1739,52 @@ export function GSTModule({ sys }) {
   };
 
   const handleSavePurchase = async (purchase) => {
-    const supplier = safeSuppliers.find((entry) => (
+    const supplier = purchaseSuppliers.find((entry) => (
       String(entry?.id || getSupplierName(entry)) === String(purchase.supplierId) ||
       getSupplierName(entry).toLowerCase() === String(purchase.supplierName || '').trim().toLowerCase()
     ));
 
-    const supplierName = getSupplierName(supplier || { name: purchase.supplierName });
+    if (!supplier) throw new Error('The selected supplier could not be found. Please select it again.');
+
+    const supplierName = getSupplierName(supplier);
     const purchaseRecordId = `purchase_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const amount = roundMoney(purchase.subtotal);
     const gst = roundMoney(purchase.gstAmount);
-    const total = roundMoney(purchase.total ?? amount + gst);
     const treatmentLabels = {
       standard: 'Standard-rated 9%',
       zero_rated: 'Zero-rated',
       exempt: 'Exempt / Out of scope',
       no_gst: 'No GST charged',
     };
+    const supplierGstNo = getSupplierGstRegistrationNumber(supplier);
+    const descriptionParts = [
+      treatmentLabels[purchase.gstTreatment] || 'GST purchase',
+      supplierGstNo ? `GST Reg. No. ${supplierGstNo}` : '',
+      String(purchase.notes || '').trim(),
+    ].filter(Boolean);
 
+    // Match the existing public.gst_records schema exactly:
+    // id, date, type, desc, amount, gst, category.
+    // amount stores value excluding GST; gst stores the tax amount.
+    // Supplier/invoice metadata is retained in desc for backward compatibility.
     const gstRecord = {
       id: purchaseRecordId,
       date: purchase.invoiceDate,
       type: 'input',
-      desc: `${supplierName} • Invoice ${purchase.supplierInvoiceNumber} • ${treatmentLabels[purchase.gstTreatment] || 'GST purchase'}`,
-      supplierName,
-      supplierInvoiceNumber: purchase.supplierInvoiceNumber,
-      supplierGstRegistrationNumber: getSupplierGstRegistrationNumber(supplier),
-      description: purchase.notes || 'Supplier purchase',
-      category: purchase.category,
+      desc: `${supplierName} • Invoice ${purchase.supplierInvoiceNumber} • ${descriptionParts.join(' • ')}`,
       amount,
       gst,
+      category: purchase.category || 'Inventory Purchase',
     };
 
-    const { error: gstError } = await supabase.from('gst_records').insert([gstRecord]);
-    if (gstError) throw gstError;
-
-    if (sys?.setGstRecords) {
-      sys.setGstRecords([...safeGstRecords, gstRecord]);
+    // The central hook updates local state and upserts the existing records.
+    // Avoid inserting once directly and then upserting the same row a second time.
+    if (typeof sys?.setGstRecords === 'function') {
+      const saved = await sys.setGstRecords([...safeGstRecords, gstRecord]);
+      if (saved === false) throw new Error('Supabase did not save the purchase GST record. Check the browser console and gst_records RLS policies.');
+    } else {
+      const { error } = await supabase.from('gst_records').insert([gstRecord]);
+      if (error) throw error;
     }
 
     showNotification('Purchase GST recorded. No inventory update was made.');
@@ -2204,8 +2217,11 @@ export function GSTModule({ sys }) {
           <div className="space-y-5 p-5">
             {sys?.hasPerm?.('manage_gst') && (
               <PurchaseEntryTable
-                suppliers={safeSuppliers}
+                suppliers={purchaseSuppliers}
+                categories={purchaseCategories}
                 onPost={handleSavePurchase}
+                onAddSupplier={createSupplierFromPurchase}
+                onAddCategory={() => setCategoryManagerOpen(true)}
               />
             )}
 
