@@ -2281,15 +2281,13 @@ export function GSTModule({ sys }) {
 
         {activeTab === 'purchases' && (
           <div className="space-y-5 p-5">
-            {sys?.hasPerm?.('manage_gst') && (
-              <PurchaseEntryTable
-                suppliers={purchaseSuppliers}
-                categories={purchaseCategories}
-                onPost={handleSavePurchase}
-                onAddSupplier={createSupplierFromPurchase}
-                onAddCategory={() => setCategoryManagerOpen(true)}
-              />
-            )}
+            <PurchaseEntryTable
+              suppliers={purchaseSuppliers}
+              categories={purchaseCategories}
+              onPost={handleSavePurchase}
+              onAddSupplier={createSupplierFromPurchase}
+              onAddCategory={() => setCategoryManagerOpen(true)}
+            />
 
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
               <div className="flex flex-col justify-between gap-4 border-b border-slate-100 px-5 py-4 lg:flex-row lg:items-center">
@@ -2336,17 +2334,14 @@ export function GSTModule({ sys }) {
                           <td className="p-4 text-right font-mono font-black text-emerald-600">${formatMoney(gst)}</td>
                           <td className="p-4 text-right font-mono font-bold text-slate-600">${formatMoney(amount)}</td>
                           <td className="p-4 pr-6 text-center">
-                            {sys?.hasPerm?.('manage_gst') ? (
-                              <button
-                                type="button"
-                                onClick={() => handleDeletePurchaseRecord(record)}
-                                className="rounded-lg p-2 text-slate-300 hover:bg-red-50 hover:text-red-600"
-                              >
-                                <Trash2 size={17} />
-                              </button>
-                            ) : (
-                              <Info size={16} className="inline text-slate-300" />
-                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleDeletePurchaseRecord(record)}
+                              className="rounded-lg p-2 text-slate-300 hover:bg-red-50 hover:text-red-600"
+                              title="Delete purchase GST record"
+                            >
+                              <Trash2 size={17} />
+                            </button>
                           </td>
                         </tr>
                       );
