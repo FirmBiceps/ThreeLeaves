@@ -616,6 +616,10 @@ function NewSupplierModal({ initialName = '', onClose, onCreated }) {
       const { data, error: insertError } = await supabase
         .from('suppliers')
         .insert([{
+          // The existing suppliers table requires an explicit non-null id.
+          // Generate it client-side so creation from the GST search bar works
+          // even when the database column has no DEFAULT/identity value.
+          id: (globalThis.crypto?.randomUUID?.() || `supplier_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`),
           name,
           contactPerson: String(form.contactPerson || '').trim() || null,
           contactNumber: String(form.contactNumber || '').trim() || null,
@@ -2366,9 +2370,7 @@ export function GSTModule({ sys }) {
         <div className="flex items-start gap-3">
           <Info size={19} className="mt-0.5 shrink-0 text-blue-600" />
           <div>
-            <p className="font-black">Temporary database compatibility mode</p>
             <p className="mt-1 text-xs font-semibold leading-5 text-blue-700">
-              Purchase GST is stored in your existing <code>gst_records</code> table. The purchase entry records the supplier invoice total including GST, the GST amount, and the value excluding GST. Inventory is intentionally not changed by this GST entry workflow.
             </p>
           </div>
         </div>
