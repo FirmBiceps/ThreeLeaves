@@ -1749,7 +1749,6 @@ export function BillingModule({ sys: _sys }) {
             )}
           </div>
         </div>
-      </div>
 
       {creditNotePreview && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-label="Credit note PDF preview">
@@ -1775,7 +1774,7 @@ export function BillingModule({ sys: _sys }) {
           </div>
         </div>
       )}
-
+      </div>
     );
   }
 
