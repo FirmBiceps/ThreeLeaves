@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AlertCircle, AlertTriangle, ArrowUpDown, Boxes, CheckCircle, ChevronDown,
+  AlertCircle, AlertTriangle, ArrowUpDown, Boxes, CheckCircle, ChevronDown, ClipboardCheck,
   ChevronLeft, ChevronRight, CircleDollarSign, Download, Edit, FileText,
   History, LoaderCircle, Package, Plus, RotateCcw, Save, Search, Trash2,
   TrendingUp, Users, X,
@@ -1676,6 +1676,284 @@ function InventoryPdfColumnPicker({
   );
 }
 
+
+function InventoryStocktakePanel({ inventory, onNotify }) {
+  const [view, setView] = useState('stocktake');
+  const [stocktakes, setStocktakes] = useState([]);
+  const [movements, setMovements] = useState([]);
+  const [selectedId, setSelectedId] = useState('');
+  const [lines, setLines] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState('');
+  const [movementSearch, setMovementSearch] = useState('');
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [stocktakeResult, movementResult] = await Promise.all([
+        supabase
+          .from('inventory_stock_counts')
+          .select('id,stocktake_reference,stocktake_date,status,notes,created_at,completed_at')
+          .order('stocktake_date', { ascending: false })
+          .order('created_at', { ascending: false })
+          .limit(30),
+        supabase
+          .from('inventory_movement_ledger')
+          .select('*')
+          .order('movement_date', { ascending: false })
+          .limit(250),
+      ]);
+
+      if (stocktakeResult.error) throw stocktakeResult.error;
+      if (movementResult.error) throw movementResult.error;
+
+      setStocktakes(Array.isArray(stocktakeResult.data) ? stocktakeResult.data : []);
+      setMovements(Array.isArray(movementResult.data) ? movementResult.data : []);
+    } catch (error) {
+      onNotify('Inventory records could not be loaded', 'error', error?.message || 'Check that the inventory ledger migration has been applied.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { loadData(); }, []);
+
+  const createStocktake = async () => {
+    setSaving(true);
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const reference = `ST-${today.replace(/-/g, '')}-${String(Date.now()).slice(-4)}`;
+      const header = await supabase.from('inventory_stock_counts').insert({
+        stocktake_reference: reference,
+        stocktake_date: today,
+        status: 'in_progress',
+      }).select().single();
+      if (header.error) throw header.error;
+
+      const countable = inventory.filter((item) => getInventoryId(item) != null);
+      const rows = countable.map((item) => ({
+        stock_count_id: header.data.id,
+        product_id: getInventoryId(item),
+        system_quantity: getInventoryStock(item),
+        physical_quantity: null,
+        count_status: 'pending',
+        unit_of_measure: getInventoryUnit(item),
+      }));
+
+      if (rows.length) {
+        const lineResult = await supabase.from('inventory_stock_count_lines').insert(rows);
+        if (lineResult.error) {
+          await supabase.from('inventory_stock_counts').delete().eq('id', header.data.id);
+          throw lineResult.error;
+        }
+      }
+
+      await loadData();
+      setSelectedId(header.data.id);
+      await loadLines(header.data.id);
+      onNotify('Stocktake created', 'success', `${reference} is ready for physical counting.`);
+    } catch (error) {
+      onNotify('Could not create stocktake', 'error', error?.message || 'Unknown error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const loadLines = async (id) => {
+    if (!id) return setLines([]);
+    const result = await supabase
+      .from('inventory_stock_count_lines')
+      .select('id,stock_count_id,product_id,system_quantity,physical_quantity,variance_quantity,count_status,unit_of_measure,notes,counted_by,counted_at,product_list:product_id(id,Name,SKU,Unit,Packing)')
+      .eq('stock_count_id', id)
+      .order('created_at', { ascending: true });
+    if (result.error) {
+      onNotify('Stocktake lines could not be loaded', 'error', result.error.message);
+      return;
+    }
+    setLines(Array.isArray(result.data) ? result.data : []);
+  };
+
+  useEffect(() => {
+    if (selectedId) loadLines(selectedId);
+  }, [selectedId]);
+
+  const selectedStocktake = stocktakes.find((row) => String(row.id) === String(selectedId));
+
+  const updateLine = async (lineId, patch) => {
+    const derivedCountState = patch.physical_quantity !== undefined && patch.count_status === undefined
+      ? {
+          count_status: patch.physical_quantity === null ? 'pending' : 'counted',
+          counted_at: patch.physical_quantity === null ? null : new Date().toISOString(),
+        }
+      : {};
+    const result = await supabase.from('inventory_stock_count_lines').update({
+      ...patch,
+      ...derivedCountState,
+    }).eq('id', lineId);
+    if (result.error) throw result.error;
+    setLines((current) => current.map((line) => String(line.id) === String(lineId)
+      ? { ...line, ...patch, ...derivedCountState }
+      : line));
+  };
+
+  const markNotCountable = async (line) => {
+    try {
+      await updateLine(line.id, { physical_quantity: null, count_status: 'not_countable', counted_at: null });
+    } catch (error) {
+      onNotify('Could not update line', 'error', error?.message || 'Unknown error');
+    }
+  };
+
+  const saveCount = async (line, raw) => {
+    const value = raw === '' ? null : Number(raw);
+    if (value !== null && (!Number.isFinite(value) || value < 0)) return;
+    try {
+      await updateLine(line.id, { physical_quantity: value });
+    } catch (error) {
+      onNotify('Could not save count', 'error', error?.message || 'Unknown error');
+    }
+  };
+
+  const completeStocktake = async () => {
+    if (!selectedStocktake || selectedStocktake.status !== 'in_progress') return;
+    const pending = lines.filter((line) => line.count_status === 'pending');
+    if (pending.length) {
+      onNotify('Stocktake is not ready', 'warning', `${pending.length} line(s) are still pending. Count them or mark them Not Countable.`);
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const result = await supabase.rpc('finalize_inventory_stocktake', {
+        p_stock_count_id: selectedStocktake.id,
+      });
+      if (result.error) throw result.error;
+
+      await loadData();
+      await loadLines(selectedStocktake.id);
+      onNotify('Stocktake completed and posted', 'success', 'Counted variances were posted atomically to product stock and the movement ledger.');
+    } catch (error) {
+      onNotify('Could not complete stocktake', 'error', error?.message || 'Unknown error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const filteredLines = useMemo(() => {
+    const q = normalise(search);
+    return lines.filter((line) => {
+      const product = line.product_list || {};
+      return !q || [product.Name, product.SKU, product.Packing, line.unit_of_measure].map(normalise).join(' ').includes(q);
+    });
+  }, [lines, search]);
+
+  const stocktakeStats = useMemo(() => {
+    const counted = lines.filter((line) => line.count_status === 'counted');
+    const excluded = lines.filter((line) => ['not_countable', 'excluded'].includes(line.count_status));
+    const variance = counted.reduce((sum, line) => sum + Number(line.variance_quantity || 0), 0);
+    return { counted: counted.length, excluded: excluded.length, pending: lines.length - counted.length - excluded.length, variance };
+  }, [lines]);
+
+  const filteredMovements = useMemo(() => {
+    const q = normalise(movementSearch);
+    return movements.filter((row) => !q || [row.product_name, row.sku, row.movement_type, row.reference_id, row.notes].map(normalise).join(' ').includes(q));
+  }, [movements, movementSearch]);
+
+  return (
+    <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex flex-col gap-4 border-b border-slate-200 bg-slate-900 px-5 py-4 text-white lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="rounded-xl bg-blue-500/15 p-2.5 text-blue-300"><ClipboardCheck size={20} /></div>
+          <div>
+            <h2 className="text-sm font-black">Stock Control</h2>
+            <p className="mt-0.5 text-xs text-slate-400">Physical stocktakes and the inventory movement audit trail.</p>
+          </div>
+        </div>
+        <div className="flex rounded-xl bg-white/10 p-1">
+          {[
+            ['stocktake', 'Stocktake'],
+            ['ledger', 'Movement Ledger'],
+          ].map(([value, label]) => (
+            <button key={value} type="button" onClick={() => setView(value)} className={`rounded-lg px-3 py-2 text-xs font-black ${view === value ? 'bg-white text-slate-900' : 'text-slate-300 hover:bg-white/10'}`}>{label}</button>
+          ))}
+        </div>
+      </div>
+
+      {view === 'stocktake' ? (
+        <div className="grid min-h-[520px] grid-cols-1 lg:grid-cols-[280px_1fr]">
+          <aside className="border-b border-slate-200 bg-slate-50 p-4 lg:border-b-0 lg:border-r">
+            <button type="button" disabled={saving} onClick={createStocktake} className="mb-4 flex w-full items-center justify-center rounded-xl bg-blue-600 px-4 py-3 text-xs font-black text-white shadow-sm hover:bg-blue-700 disabled:opacity-50">
+              <ClipboardCheck size={15} className="mr-2" /> New Stocktake
+            </button>
+            <p className="mb-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Recent stocktakes</p>
+            <div className="space-y-2">
+              {stocktakes.map((row) => (
+                <button key={row.id} type="button" onClick={() => setSelectedId(row.id)} className={`w-full rounded-xl border p-3 text-left ${String(row.id) === String(selectedId) ? 'border-blue-300 bg-blue-50' : 'border-slate-200 bg-white hover:bg-slate-50'}`}>
+                  <div className="flex items-center justify-between gap-2"><span className="text-xs font-black text-slate-800">{row.stocktake_reference}</span><span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${row.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{row.status.replace('_', ' ')}</span></div>
+                  <p className="mt-1 text-[11px] text-slate-500">{row.stocktake_date}</p>
+                </button>
+              ))}
+              {!stocktakes.length && !loading && <div className="rounded-xl border border-dashed border-slate-200 bg-white p-4 text-center text-xs text-slate-400">No stocktakes yet.</div>}
+            </div>
+          </aside>
+
+          <section className="min-w-0 p-4 sm:p-5">
+            {!selectedStocktake ? (
+              <div className="flex min-h-[440px] items-center justify-center text-center"><div><ClipboardCheck size={42} className="mx-auto text-slate-300" /><p className="mt-3 text-sm font-black text-slate-700">Start a stocktake</p><p className="mt-1 max-w-sm text-xs leading-5 text-slate-400">Create a session to capture a frozen system quantity and record the physical count without changing your existing inventory numbers.</p></div></div>
+            ) : (
+              <>
+                <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-blue-600">{selectedStocktake.stocktake_reference}</p><h3 className="mt-1 text-lg font-black text-slate-900">Physical Count — {selectedStocktake.stocktake_date}</h3></div>
+                  <div className="flex flex-wrap gap-2">
+                    <span className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">Counted {stocktakeStats.counted}/{lines.length}</span>
+                    <span className={`rounded-xl px-3 py-2 text-xs font-bold ${stocktakeStats.variance === 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>Variance {stocktakeStats.variance > 0 ? '+' : ''}{stocktakeStats.variance}</span>
+                    {selectedStocktake.status === 'in_progress' && <button type="button" disabled={saving} onClick={completeStocktake} className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white hover:bg-emerald-700 disabled:opacity-50">Complete Stocktake</button>}
+                  </div>
+                </div>
+
+                <div className="mt-4 flex items-center gap-3">
+                  <div className="relative flex-1"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search SKU or product..." className="w-full rounded-xl border border-slate-200 py-2.5 pl-9 pr-3 text-sm outline-none" /></div>
+                  <span className="hidden rounded-xl bg-slate-100 px-3 py-2.5 text-xs font-bold text-slate-500 sm:block">Pending {stocktakeStats.pending}</span>
+                </div>
+
+                <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200">
+                  <div className="max-h-[470px] overflow-auto">
+                    <table className="w-full min-w-[760px] text-left">
+                      <thead className="sticky top-0 z-10 bg-slate-900 text-[10px] font-black uppercase tracking-[0.12em] text-white">
+                        <tr><th className="px-3 py-3">Product</th><th className="px-3 py-3 text-right">System</th><th className="px-3 py-3 text-right">Physical</th><th className="px-3 py-3 text-right">Variance</th><th className="px-3 py-3 text-center">Status</th><th className="px-3 py-3 text-center">Action</th></tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {filteredLines.map((line) => {
+                          const product = line.product_list || {};
+                          const variance = Number(line.variance_quantity || 0);
+                          return <tr key={line.id} className="hover:bg-slate-50">
+                            <td className="px-3 py-3"><p className="text-xs font-black text-slate-800">{product.Name || 'Unnamed product'}</p><p className="mt-1 text-[10px] font-mono text-slate-400">{product.SKU || '—'} · {line.unit_of_measure || product.Unit || '—'}</p></td>
+                            <td className="px-3 py-3 text-right text-xs font-bold text-slate-600">{line.system_quantity}</td>
+                            <td className="px-3 py-3 text-right"><input disabled={selectedStocktake.status !== 'in_progress' || line.count_status === 'not_countable'} type="number" min="0" step="0.01" value={line.physical_quantity ?? ''} onChange={(e) => setLines((current) => current.map((row) => row.id === line.id ? { ...row, physical_quantity: e.target.value === '' ? null : Number(e.target.value), variance_quantity: e.target.value === '' ? null : Number(e.target.value) - Number(row.system_quantity || 0) } : row))} onBlur={(e) => saveCount(line, e.target.value)} className="w-24 rounded-lg border border-slate-200 px-2 py-2 text-right text-sm font-black outline-none focus:border-blue-400 disabled:bg-slate-100" /></td>
+                            <td className={`px-3 py-3 text-right text-xs font-black ${variance < 0 ? 'text-red-600' : variance > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>{line.variance_quantity == null ? '—' : `${variance > 0 ? '+' : ''}${variance}`}</td>
+                            <td className="px-3 py-3 text-center"><span className={`rounded-full px-2 py-1 text-[9px] font-black uppercase ${line.count_status === 'counted' ? 'bg-emerald-100 text-emerald-700' : line.count_status === 'not_countable' ? 'bg-slate-100 text-slate-500' : 'bg-amber-100 text-amber-700'}`}>{line.count_status.replace('_', ' ')}</span></td>
+                            <td className="px-3 py-3 text-center">{selectedStocktake.status === 'in_progress' && <button type="button" onClick={() => markNotCountable(line)} className="rounded-lg border border-slate-200 px-2 py-1.5 text-[9px] font-black text-slate-500 hover:bg-slate-50">Not Countable</button>}</td>
+                          </tr>;
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            )}
+          </section>
+        </div>
+      ) : (
+        <div className="p-4 sm:p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h3 className="text-base font-black text-slate-900">Inventory Movement Ledger</h3><p className="mt-1 text-xs text-slate-500">Historical movement records, references and audit context.</p></div><div className="relative w-full sm:w-80"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={movementSearch} onChange={(e) => setMovementSearch(e.target.value)} placeholder="Search product, SKU or reference..." className="w-full rounded-xl border border-slate-200 py-2.5 pl-9 pr-3 text-sm outline-none" /></div></div>
+          <div className="mt-4 overflow-auto rounded-2xl border border-slate-200"><table className="w-full min-w-[900px] text-left"><thead className="bg-slate-900 text-[10px] font-black uppercase tracking-[0.12em] text-white"><tr><th className="px-3 py-3">Date</th><th className="px-3 py-3">Product</th><th className="px-3 py-3">Movement</th><th className="px-3 py-3 text-right">Change</th><th className="px-3 py-3">Reference</th><th className="px-3 py-3">Notes</th></tr></thead><tbody className="divide-y divide-slate-100">{filteredMovements.map((row) => <tr key={row.id} className="hover:bg-slate-50"><td className="whitespace-nowrap px-3 py-3 text-xs text-slate-500">{formatHistoryDate(row.movement_date)}</td><td className="px-3 py-3"><p className="text-xs font-black text-slate-800">{row.product_name || '—'}</p><p className="text-[10px] font-mono text-slate-400">{row.sku || '—'}</p></td><td className="px-3 py-3"><span className="rounded-full bg-blue-50 px-2 py-1 text-[9px] font-black uppercase text-blue-700">{String(row.movement_type || '').replace(/_/g, ' ')}</span></td><td className={`px-3 py-3 text-right text-xs font-black ${Number(row.quantity_change) < 0 ? 'text-red-600' : 'text-emerald-600'}`}>{Number(row.quantity_change) > 0 ? '+' : ''}{row.quantity_change}</td><td className="px-3 py-3 text-xs text-slate-500">{row.reference_type || '—'}{row.reference_id ? ` · ${row.reference_id}` : ''}</td><td className="px-3 py-3 text-xs text-slate-500">{row.notes || '—'}</td></tr>)}{!filteredMovements.length && <tr><td colSpan="6" className="p-10 text-center text-xs font-bold text-slate-400">No movement records found.</td></tr>}</tbody></table></div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function InventoryModule({ sys }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -1690,6 +1968,7 @@ export function InventoryModule({ sys }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [pdfOpen, setPdfOpen] = useState(false);
+  const [stockControlOpen, setStockControlOpen] = useState(false);
   const [suppliers, setSuppliers] = useState([]);
   const [pricingGroups, setPricingGroups] = useState([]);
 
@@ -2229,6 +2508,10 @@ export function InventoryModule({ sys }) {
               className="inline-flex items-center rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-indigo-700 shadow-sm hover:bg-indigo-100">
               <FileText size={16} className="mr-2" /> PDF Catalogue
             </button>
+            <button type="button" onClick={() => setStockControlOpen((value) => !value)}
+              className={`inline-flex items-center rounded-xl border px-4 py-2.5 text-xs font-black uppercase tracking-wider shadow-sm ${stockControlOpen ? 'border-blue-300 bg-blue-600 text-white' : 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'}`}>
+              <ClipboardCheck size={16} className="mr-2" /> Stock Control
+            </button>
             <button type="button" onClick={() => { setEditingItem(null); setModalOpen(true); }}
               className="inline-flex items-center rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg hover:bg-blue-700">
               <Plus size={18} className="mr-2" /> Add Product
@@ -2250,6 +2533,13 @@ export function InventoryModule({ sys }) {
             subtext="Current stock × catalogue selling price"
             icon={TrendingUp} tone="violet" />
         </div>
+
+        {stockControlOpen && (
+          <InventoryStocktakePanel
+            inventory={inventory}
+            onNotify={notify}
+          />
+        )}
 
         <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-col gap-4 border-b border-slate-200 bg-gradient-to-r from-amber-50/80 via-white to-white p-5 lg:flex-row lg:items-center lg:justify-between">
