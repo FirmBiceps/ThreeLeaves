@@ -25,7 +25,7 @@ import {
   CalendarDays,
   Filter,
   Gauge,
-  Map,
+  Map as MapIcon,
   SlidersHorizontal,
   Sparkles,
   Target,
@@ -1310,7 +1310,7 @@ export function DashboardModule({
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-12">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-7">
-          <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-blue-600"><Map size={14} /> Geographic intelligence</div>
+          <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-blue-600"><MapIcon size={14} /> Geographic intelligence</div>
           <h2 className="mt-1 text-lg font-semibold text-slate-900">Revenue concentration by region</h2>
           <div className="mt-5 space-y-3">
             {intelligence.regionPerformance.length === 0 ? <p className="py-10 text-center text-xs text-slate-400">No regional data available in the selected period.</p> : intelligence.regionPerformance.slice(0, 8).map((r) => <div key={r.region}><div className="flex items-center justify-between text-xs"><span className="font-semibold text-slate-700">{r.region}</span><span className="font-mono text-slate-500">${formatMoney(r.sales)} · {r.orders} orders</span></div><div className="mt-1.5 h-3 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600" style={{ width: `${(r.sales / maxRegion) * 100}%` }} /></div></div>)}
