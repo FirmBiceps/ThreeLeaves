@@ -19,6 +19,17 @@ import {
   UserPlus,
   Users,
   WalletCards,
+  Activity,
+  BarChart3,
+  BrainCircuit,
+  CalendarDays,
+  Filter,
+  Gauge,
+  Map,
+  SlidersHorizontal,
+  Sparkles,
+  Target,
+  TriangleAlert,
 } from 'lucide-react';
 import { ShortcutBtn } from '../../components/shared/ShortcutBtn';
 import { supabase } from '../../lib/supabaseClient';
@@ -771,9 +782,17 @@ export function DashboardModule({
   lowStockThreshold = LOW_STOCK_THRESHOLD,
 }) {
   const [cashInvoices, setCashInvoices] = useState([]);
+  const [creditNotes, setCreditNotes] = useState([]);
+  const [inventoryMovements, setInventoryMovements] = useState([]);
   const [cashLoading, setCashLoading] = useState(true);
+  const [analyticsLoading, setAnalyticsLoading] = useState(true);
   const [cashError, setCashError] = useState('');
-  const [cashRefreshNonce, setCashRefreshNonce] = useState(0);
+  const [refreshNonce, setRefreshNonce] = useState(0);
+  const [period, setPeriod] = useState('30');
+  const [metric, setMetric] = useState('sales');
+  const [customerFilter, setCustomerFilter] = useState('all');
+  const [productFilter, setProductFilter] = useState('all');
+  const [riskFilter, setRiskFilter] = useState('all');
 
   const customers = Array.isArray(sys?.customers) ? sys.customers : [];
   const invoices = Array.isArray(sys?.invoices) ? sys.invoices : [];
@@ -781,6 +800,14 @@ export function DashboardModule({
   const users = Array.isArray(sys?.users) ? sys.users : [];
 
   const today = getTodayString();
+  const todayDate = useMemo(() => new Date(`${today}T00:00:00`), [today]);
+  const periodDays = Number(period) || 30;
+  const periodStart = useMemo(() => {
+    const d = new Date(todayDate);
+    d.setDate(d.getDate() - periodDays + 1);
+    return d.toISOString().slice(0, 10);
+  }, [todayDate, periodDays]);
+
   const monthKey = String(today || '').slice(0, 7);
   const monthStart = `${monthKey}-01`;
   const nextMonthStart = getNextMonthStart(monthKey);
@@ -788,1068 +815,555 @@ export function DashboardModule({
   useEffect(() => {
     let cancelled = false;
 
-    const fetchCashInvoices = async () => {
+    const loadDashboardSources = async () => {
       setCashLoading(true);
+      setAnalyticsLoading(true);
       setCashError('');
 
       try {
-        const collected = [];
-        let from = 0;
+        const cashPromise = supabase
+          .from('cash_invoices')
+          .select('*')
+          .gte('date', periodStart)
+          .lte('date', today)
+          .order('date', { ascending: false })
+          .limit(5000);
 
-        while (true) {
-          const to = from + CASH_FETCH_PAGE_SIZE - 1;
+        const creditPromise = supabase
+          .from('credit_notes')
+          .select('*')
+          .gte('created_at', `${periodStart}T00:00:00`)
+          .lte('created_at', `${today}T23:59:59`)
+          .order('created_at', { ascending: false })
+          .limit(5000);
 
-          const { data, error } = await supabase
-            .from('cash_invoices')
-            .select('*')
-            .gte('date', monthStart)
-            .lt('date', nextMonthStart)
-            .order('date', { ascending: false })
-            .order('number', { ascending: false })
-            .range(from, to);
+        const movementPromise = supabase
+          .from('inventory_movements')
+          .select('*')
+          .gte('movement_date', `${periodStart}T00:00:00`)
+          .lte('movement_date', `${today}T23:59:59`)
+          .order('movement_date', { ascending: false })
+          .limit(10000);
 
-          if (error) throw error;
+        const [cashResult, creditResult, movementResult] = await Promise.all([
+          cashPromise,
+          creditPromise,
+          movementPromise,
+        ]);
 
-          const batch = Array.isArray(data) ? data : [];
-          collected.push(...batch);
-
-          if (batch.length < CASH_FETCH_PAGE_SIZE) {
-            break;
+        if (!cancelled) {
+          if (cashResult.error) {
+            setCashInvoices([]);
+            setCashError(cashResult.error.message || 'Unable to load Cash data.');
+          } else {
+            setCashInvoices(Array.isArray(cashResult.data) ? cashResult.data : []);
           }
 
-          from += CASH_FETCH_PAGE_SIZE;
-        }
-
-        if (!cancelled) {
-          setCashInvoices(collected);
+          setCreditNotes(
+            creditResult.error || !Array.isArray(creditResult.data)
+              ? []
+              : creditResult.data
+          );
+          setInventoryMovements(
+            movementResult.error || !Array.isArray(movementResult.data)
+              ? []
+              : movementResult.data
+          );
         }
       } catch (error) {
-        console.error('Failed to load dashboard Cash invoices:', error);
-
+        console.error('Failed to load dashboard intelligence sources:', error);
         if (!cancelled) {
           setCashInvoices([]);
-          setCashError(
-            error instanceof Error
-              ? error.message
-              : 'Unable to load Cash summary.'
-          );
+          setCreditNotes([]);
+          setInventoryMovements([]);
+          setCashError(error instanceof Error ? error.message : 'Unable to load dashboard data.');
         }
       } finally {
         if (!cancelled) {
           setCashLoading(false);
+          setAnalyticsLoading(false);
         }
       }
     };
 
-    if (monthKey && nextMonthStart) {
-      void fetchCashInvoices();
-    } else {
-      setCashInvoices([]);
-      setCashLoading(false);
+    void loadDashboardSources();
+    return () => { cancelled = true; };
+  }, [periodStart, today, refreshNonce]);
+
+  const intelligence = useMemo(() => {
+    const normal = invoices.filter((i) => {
+      const d = getInvoiceDate(i);
+      return d >= periodStart && d <= today;
+    });
+    const cash = cashInvoices.filter((i) => {
+      const d = getInvoiceDate(i);
+      return d >= periodStart && d <= today;
+    });
+    const allTransactions = [
+      ...normal.map((invoice) => ({ invoice, type: 'Invoice' })),
+      ...cash.map((invoice) => ({ invoice, type: 'Cash' })),
+    ];
+
+    const filteredTransactions = allTransactions.filter(({ invoice }) => {
+      const customer = findCustomerForInvoice(invoice, customers);
+      const customerId = String(customer?.id ?? invoice?.customerId ?? invoice?.customer_id ?? '');
+      const customerName = normaliseLookupValue(getInvoiceCustomerName(invoice));
+      const productMatch = productFilter === 'all' || getInvoiceItems(invoice).some((item) => {
+        const id = String(item?.productId ?? item?.product_id ?? item?.id ?? item?.sku ?? '');
+        return id === productFilter;
+      });
+      const customerMatch = customerFilter === 'all' || customerId === customerFilter || customerName === normaliseLookupValue(customerFilter);
+      return customerMatch && productMatch;
+    });
+
+    const summary = buildLedgerSummary(filteredTransactions.map((x) => x.invoice));
+    const previousStartDate = new Date(`${periodStart}T00:00:00`);
+    previousStartDate.setDate(previousStartDate.getDate() - periodDays);
+    const previousStart = previousStartDate.toISOString().slice(0, 10);
+    const previousEndDate = new Date(`${periodStart}T00:00:00`);
+    previousEndDate.setDate(previousEndDate.getDate() - 1);
+    const previousEnd = previousEndDate.toISOString().slice(0, 10);
+    const previousTransactions = [
+      ...invoices.filter((i) => getInvoiceDate(i) >= previousStart && getInvoiceDate(i) <= previousEnd),
+      ...cashInvoices.filter((i) => getInvoiceDate(i) >= previousStart && getInvoiceDate(i) <= previousEnd),
+    ];
+    const previousSummary = buildLedgerSummary(previousTransactions);
+
+    const salesChange = previousSummary.subtotal === 0
+      ? null
+      : ((summary.subtotal - previousSummary.subtotal) / Math.abs(previousSummary.subtotal)) * 100;
+    const profitChange = previousSummary.profit === 0
+      ? null
+      : ((summary.profit - previousSummary.profit) / Math.abs(previousSummary.profit)) * 100;
+
+    const dailyMap = new Map();
+    for (let i = periodDays - 1; i >= 0; i -= 1) {
+      const d = new Date(todayDate);
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      dailyMap.set(key, { date: key, sales: 0, profit: 0, orders: 0, units: 0 });
     }
 
-    return () => {
-      cancelled = true;
-    };
-  }, [monthKey, monthStart, nextMonthStart, cashRefreshNonce]);
+    filteredTransactions.forEach(({ invoice }) => {
+      const key = getInvoiceDate(invoice);
+      if (!dailyMap.has(key)) return;
+      const row = dailyMap.get(key);
+      row.sales += getSubtotalExGst(invoice);
+      row.orders += 1;
+      const profitStatus = getProfitStatus(invoice);
+      if (profitStatus.profit !== null) row.profit += profitStatus.profit;
+      row.units += getInvoiceItems(invoice).reduce((sum, item) => sum + getLineQty(item), 0);
+    });
 
-  const dashboardData = useMemo(() => {
-    const todayNormal = invoices.filter(
-      (invoice) => getInvoiceDate(invoice) === today
-    );
+    const dailySeries = Array.from(dailyMap.values());
+    const nonZeroSales = dailySeries.filter((d) => d.sales > 0);
+    const mean = nonZeroSales.length
+      ? nonZeroSales.reduce((s, d) => s + d.sales, 0) / nonZeroSales.length
+      : 0;
+    const variance = nonZeroSales.length > 1
+      ? nonZeroSales.reduce((s, d) => s + ((d.sales - mean) ** 2), 0) / (nonZeroSales.length - 1)
+      : 0;
+    const stdDev = Math.sqrt(variance);
 
-    const monthNormal = invoices.filter((invoice) =>
-      getInvoiceDate(invoice).startsWith(`${monthKey}-`)
-    );
+    const anomalies = dailySeries
+      .filter((d) => stdDev > 0 && Math.abs((d.sales - mean) / stdDev) >= 2)
+      .map((d) => ({ ...d, z: (d.sales - mean) / stdDev }));
 
-    const todayCash = cashInvoices.filter(
-      (invoice) => getInvoiceDate(invoice) === today
-    );
+    const recent = dailySeries.slice(-7);
+    const recentMean = recent.length ? recent.reduce((s, d) => s + d.sales, 0) / recent.length : 0;
+    const prior = dailySeries.slice(-14, -7);
+    const priorMean = prior.length ? prior.reduce((s, d) => s + d.sales, 0) / prior.length : 0;
+    const weeklyMomentum = priorMean === 0 ? null : ((recentMean - priorMean) / Math.abs(priorMean)) * 100;
 
-    const monthCash = cashInvoices.filter((invoice) =>
-      getInvoiceDate(invoice).startsWith(`${monthKey}-`)
-    );
+    const regressionSource = dailySeries.map((d, index) => ({ x: index, y: d.sales }));
+    const n = regressionSource.length;
+    const sumX = regressionSource.reduce((s, p) => s + p.x, 0);
+    const sumY = regressionSource.reduce((s, p) => s + p.y, 0);
+    const sumXY = regressionSource.reduce((s, p) => s + p.x * p.y, 0);
+    const sumXX = regressionSource.reduce((s, p) => s + p.x * p.x, 0);
+    const denominator = n * sumXX - sumX * sumX;
+    const slope = denominator === 0 ? 0 : (n * sumXY - sumX * sumY) / denominator;
+    const intercept = n === 0 ? 0 : (sumY - slope * sumX) / n;
+    const forecast = Array.from({ length: 7 }, (_, i) => {
+      const x = n + i;
+      return Math.max(0, intercept + slope * x);
+    });
 
-    const todayNormalSummary = buildLedgerSummary(todayNormal);
-    const todayCashSummary = buildLedgerSummary(todayCash);
-    const monthNormalSummary = buildLedgerSummary(monthNormal);
-    const monthCashSummary = buildLedgerSummary(monthCash);
+    const customerMap = new Map();
+    filteredTransactions.forEach(({ invoice }) => {
+      const customer = findCustomerForInvoice(invoice, customers);
+      const id = String(customer?.id ?? invoice?.customerId ?? invoice?.customer_id ?? getInvoiceCustomerName(invoice));
+      const name = getCustomerName(customer) || getInvoiceCustomerName(invoice);
+      if (!customerMap.has(id)) customerMap.set(id, { id, name, sales: 0, orders: 0, lastDate: '', profit: 0 });
+      const row = customerMap.get(id);
+      row.sales += getSubtotalExGst(invoice);
+      row.orders += 1;
+      row.lastDate = row.lastDate > getInvoiceDate(invoice) ? row.lastDate : getInvoiceDate(invoice);
+      const ps = getProfitStatus(invoice);
+      if (ps.profit !== null) row.profit += ps.profit;
+    });
 
-    const todayCombined = {
-      subtotal:
-        todayNormalSummary.subtotal + todayCashSummary.subtotal,
-      profit:
-        todayNormalSummary.profit + todayCashSummary.profit,
-      count: todayNormalSummary.count + todayCashSummary.count,
-      profitCount:
-        todayNormalSummary.profitCount + todayCashSummary.profitCount,
-      costReviewCount:
-        todayNormalSummary.costReviewCount +
-        todayCashSummary.costReviewCount,
-    };
+    const customerSignals = Array.from(customerMap.values()).map((c) => {
+      const daysSince = c.lastDate ? Math.max(0, Math.round((todayDate - new Date(`${c.lastDate}T00:00:00`)) / 86400000)) : periodDays;
+      const expectedGap = c.orders > 1 ? periodDays / c.orders : periodDays;
+      const risk = Math.min(100, Math.round((daysSince / Math.max(expectedGap * 1.5, 7)) * 100));
+      return { ...c, daysSince, expectedGap, risk: Math.max(0, risk) };
+    }).sort((a, b) => b.sales - a.sales);
 
-    const monthCombined = {
-      billed: monthNormalSummary.total + monthCashSummary.total,
-      paid: monthNormalSummary.paid + monthCashSummary.paid,
-      outstanding:
-        monthNormalSummary.outstanding + monthCashSummary.outstanding,
-      gst: monthNormalSummary.gst + monthCashSummary.gst,
-      unpaidCount:
-        monthNormalSummary.unpaidCount + monthCashSummary.unpaidCount,
-    };
+    const productMap = new Map();
+    filteredTransactions.forEach(({ invoice }) => {
+      getInvoiceItems(invoice).forEach((item) => {
+        const id = String(item?.productId ?? item?.product_id ?? item?.id ?? item?.sku ?? item?.name ?? 'unknown');
+        const name = String(item?.name ?? item?.productName ?? item?.product_name ?? item?.description ?? id);
+        if (!productMap.has(id)) productMap.set(id, { id, name, units: 0, sales: 0, orders: 0 });
+        const row = productMap.get(id);
+        row.units += getLineQty(item);
+        row.sales += getLineQty(item) * getLinePrice(item);
+        row.orders += 1;
+      });
+    });
+
+    const productPerformance = Array.from(productMap.values()).sort((a, b) => b.sales - a.sales);
+    const totalProductSales = productPerformance.reduce((s, p) => s + p.sales, 0);
+    let cumulative = 0;
+    const abcProducts = productPerformance.map((p) => {
+      cumulative += p.sales;
+      const share = totalProductSales ? cumulative / totalProductSales : 0;
+      return { ...p, abc: share <= 0.8 ? 'A' : share <= 0.95 ? 'B' : 'C' };
+    });
 
     const lowStockItems = inventory
-      .map((item) => ({
-        item,
-        stock: getInventoryStock(item),
-      }))
+      .map((item) => ({ item, stock: getInventoryStock(item) }))
       .filter(({ stock }) => stock < lowStockThreshold)
-      .sort((left, right) => left.stock - right.stock);
+      .sort((a, b) => a.stock - b.stock);
 
-    const outOfStockItems = lowStockItems.filter(
-      ({ stock }) => stock <= 0
-    );
+    const inventoryRisk = inventory.map((item) => {
+      const name = getInventoryName(item);
+      const id = String(item?.id ?? item?.SKU ?? item?.sku ?? name);
+      const match = productPerformance.find((p) => normaliseLookupValue(p.name) === normaliseLookupValue(name) || String(p.id) === id || String(p.id) === String(item?.SKU ?? item?.sku ?? ''));
+      const dailyDemand = match ? match.units / Math.max(periodDays, 1) : 0;
+      const stock = getInventoryStock(item);
+      const daysCover = dailyDemand > 0 ? stock / dailyDemand : Infinity;
+      const risk = dailyDemand > 0 ? Math.max(0, Math.min(100, Math.round((1 - Math.min(daysCover / 30, 1)) * 100))) : (stock < lowStockThreshold ? 70 : 0);
+      return { item, name, stock, dailyDemand, daysCover, risk, matchedSales: match?.sales ?? 0 };
+    }).sort((a, b) => b.risk - a.risk);
 
-    const deliveryRecords = todayNormal.map((invoice) => {
+    const regionMap = new Map();
+    filteredTransactions.forEach(({ invoice }) => {
       const customer = findCustomerForInvoice(invoice, customers);
-      const region = getDeliveryRegion(invoice, customer);
-      const address = getDeliveryAddress(invoice, customer);
-
-      return {
-        invoice,
-        customer,
-        region,
-        address,
-      };
+      const region = getDeliveryRegion(invoice, customer) || 'Unassigned';
+      const row = regionMap.get(region) || { region, sales: 0, orders: 0 };
+      row.sales += getSubtotalExGst(invoice);
+      row.orders += 1;
+      regionMap.set(region, row);
     });
 
-    const regionCounts = {
-      North: 0,
-      West: 0,
-      East: 0,
-      Central: 0,
-      Unassigned: 0,
-    };
+    const regionPerformance = Array.from(regionMap.values()).sort((a, b) => b.sales - a.sales);
+    const grossMargin = summary.subtotal ? (summary.profit / summary.subtotal) * 100 : 0;
+    const collectionRate = summary.total ? (summary.paid / summary.total) * 100 : 0;
+    const creditNoteValue = creditNotes.reduce((sum, cn) => sum + toNumber(cn?.total_amount ?? cn?.total ?? cn?.amount, 0), 0);
+    const movementUnits = inventoryMovements.reduce((sum, m) => sum + Math.abs(toNumber(m?.quantity_change)), 0);
 
-    deliveryRecords.forEach((record) => {
-      if (Object.prototype.hasOwnProperty.call(regionCounts, record.region)) {
-        regionCounts[record.region] += 1;
-      } else {
-        regionCounts.Unassigned += 1;
-      }
-    });
-
-    const missingDeliveryAddressCount = deliveryRecords.filter(
-      (record) => !record.address
-    ).length;
-
-    const recentTransactions = [
-      ...monthNormal.map((invoice) => ({
-        type: 'Invoice',
-        invoice,
+    const riskItems = [
+      ...inventoryRisk.filter((x) => x.risk >= 70).slice(0, 5).map((x) => ({
+        key: `stock-${x.name}`,
+        severity: x.risk >= 90 ? 'critical' : 'warning',
+        title: `${x.name} has elevated stockout risk`,
+        detail: x.dailyDemand > 0 ? `${Math.max(0, Math.round(x.daysCover))} days of estimated cover at current demand.` : `Stock is below the ${lowStockThreshold}-unit threshold.`,
+        action: 'Inventory',
+        tab: 'inventory',
       })),
-      ...monthCash.map((invoice) => ({
-        type: 'Cash',
-        invoice,
+      ...customerSignals.filter((x) => x.risk >= 70).slice(0, 4).map((x) => ({
+        key: `customer-${x.id}`,
+        severity: x.risk >= 90 ? 'critical' : 'warning',
+        title: `${x.name} is showing weaker purchase cadence`,
+        detail: `${x.daysSince} days since last order versus an estimated ${Math.round(x.expectedGap)}-day cycle.`,
+        action: 'Customers',
+        tab: 'customers',
       })),
-    ]
-      .sort((left, right) => {
-        const dateCompare = getInvoiceDate(right.invoice).localeCompare(
-          getInvoiceDate(left.invoice)
-        );
-
-        if (dateCompare !== 0) return dateCompare;
-
-        return getInvoiceNumber(right.invoice).localeCompare(
-          getInvoiceNumber(left.invoice),
-          undefined,
-          { numeric: true }
-        );
-      })
-      .slice(0, RECENT_TRANSACTION_LIMIT);
+      ...anomalies.slice(-3).map((x) => ({
+        key: `anomaly-${x.date}`,
+        severity: Math.abs(x.z) >= 3 ? 'critical' : 'warning',
+        title: `Sales anomaly detected on ${formatDisplayDate(x.date)}`,
+        detail: `${x.z > 0 ? 'Above' : 'Below'} the recent statistical baseline by ${Math.abs(x.z).toFixed(1)} standard deviations.`,
+        action: 'Invoices',
+        tab: 'invoices',
+      })),
+    ].filter((item, index, arr) => arr.findIndex((x) => x.key === item.key) === index);
 
     return {
-      todayNormal,
-      monthNormal,
-      todayCash,
-      monthCash,
-      todayNormalSummary,
-      todayCashSummary,
-      monthNormalSummary,
-      monthCashSummary,
-      todayCombined,
-      monthCombined,
+      normal,
+      cash,
+      filteredTransactions,
+      summary,
+      previousSummary,
+      salesChange,
+      profitChange,
+      dailySeries,
+      mean,
+      stdDev,
+      anomalies,
+      weeklyMomentum,
+      forecast,
+      customerSignals,
+      abcProducts,
+      productPerformance,
+      inventoryRisk,
       lowStockItems,
-      outOfStockItems,
-      deliveryRecords,
-      regionCounts,
-      missingDeliveryAddressCount,
-      recentTransactions,
+      regionPerformance,
+      grossMargin,
+      collectionRate,
+      creditNoteValue,
+      movementUnits,
+      riskItems,
     };
   }, [
     cashInvoices,
+    creditNotes,
     customers,
-    inventory,
     invoices,
+    inventory,
+    inventoryMovements,
     lowStockThreshold,
-    monthKey,
+    periodDays,
+    periodStart,
+    productFilter,
+    customerFilter,
     today,
+    todayDate,
   ]);
 
-  const attentionItems = useMemo(() => {
-    const items = [];
+  const filteredRisks = intelligence.riskItems.filter((item) => {
+    if (riskFilter === 'all') return true;
+    return item.severity === riskFilter;
+  });
 
-    if (dashboardData.lowStockItems.length > 0) {
-      items.push({
-        key: 'low-stock',
-        icon: Package,
-        title: `${dashboardData.lowStockItems.length} low-stock product${
-          dashboardData.lowStockItems.length === 1 ? '' : 's'
-        }`,
-        detail:
-          dashboardData.outOfStockItems.length > 0
-            ? `${dashboardData.outOfStockItems.length} ${
-                dashboardData.outOfStockItems.length === 1
-                  ? 'item is'
-                  : 'items are'
-              } already out of stock.`
-            : `All are below the ${lowStockThreshold}-unit dashboard threshold.`,
-        tone: dashboardData.outOfStockItems.length > 0 ? 'rose' : 'amber',
-        actionLabel: 'Inventory',
-        onClick: () => setActiveTab('inventory'),
-      });
-    }
+  const customerOptions = useMemo(() => {
+    return customers
+      .map((c) => ({ id: String(c?.id ?? ''), name: getCustomerName(c) }))
+      .filter((c) => c.id && c.name)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [customers]);
 
-    if (dashboardData.monthNormalSummary.costReviewCount > 0) {
-      items.push({
-        key: 'normal-cost-review',
-        icon: AlertCircle,
-        title: `${dashboardData.monthNormalSummary.costReviewCount} normal invoice${
-          dashboardData.monthNormalSummary.costReviewCount === 1 ? '' : 's'
-        } need profit cost review`,
-        detail:
-          'Gross profit is excluded where a safe historical product cost is not available.',
-        tone: 'amber',
-        actionLabel: 'Invoices',
-        onClick: () => setActiveTab('invoices'),
-      });
-    }
+  const productOptions = useMemo(() => {
+    const fromInventory = inventory.map((item) => ({
+      id: String(item?.id ?? item?.SKU ?? item?.sku ?? ''),
+      name: getInventoryName(item),
+    }));
+    return fromInventory.filter((p) => p.id && p.name).sort((a, b) => a.name.localeCompare(b.name));
+  }, [inventory]);
 
-    if (dashboardData.monthCashSummary.costReviewCount > 0) {
-      items.push({
-        key: 'cash-cost-review',
-        icon: AlertCircle,
-        title: `${dashboardData.monthCashSummary.costReviewCount} Cash invoice${
-          dashboardData.monthCashSummary.costReviewCount === 1 ? '' : 's'
-        } need profit cost review`,
-        detail:
-          'Open Cash and use the Profit breakdown to resolve or lock available product costs.',
-        tone: 'amber',
-        actionLabel: 'Cash',
-        onClick: () => setActiveTab('cash'),
-      });
-    }
-
-    if (dashboardData.monthNormalSummary.unpaidCount > 0) {
-      items.push({
-        key: 'normal-outstanding',
-        icon: Receipt,
-        title: `${dashboardData.monthNormalSummary.unpaidCount} normal invoice${
-          dashboardData.monthNormalSummary.unpaidCount === 1 ? '' : 's'
-        } unpaid this month`,
-        detail: `$${formatMoney(
-          dashboardData.monthNormalSummary.outstanding
-        )} remains outstanding in the normal invoice ledger.`,
-        tone: 'blue',
-        actionLabel: 'Billing',
-        onClick: () => setActiveTab('billing'),
-      });
-    }
-
-    if (dashboardData.monthCashSummary.unpaidCount > 0) {
-      items.push({
-        key: 'cash-outstanding',
-        icon: WalletCards,
-        title: `${dashboardData.monthCashSummary.unpaidCount} Cash invoice${
-          dashboardData.monthCashSummary.unpaidCount === 1 ? '' : 's'
-        } unpaid this month`,
-        detail: `$${formatMoney(
-          dashboardData.monthCashSummary.outstanding
-        )} remains outstanding in the Cash ledger.`,
-        tone: 'violet',
-        actionLabel: 'Cash',
-        onClick: () => setActiveTab('cash'),
-      });
-    }
-
-    if (dashboardData.missingDeliveryAddressCount > 0) {
-      items.push({
-        key: 'missing-address',
-        icon: MapPinned,
-        title: `${dashboardData.missingDeliveryAddressCount} delivery ${
-          dashboardData.missingDeliveryAddressCount === 1
-            ? 'record is'
-            : 'records are'
-        } missing an address today`,
-        detail:
-          'Add the customer delivery address or invoice delivery address so Logistics can map the stop.',
-        tone: 'rose',
-        actionLabel: 'Delivery Map',
-        onClick: () => setActiveTab('logistics'),
-      });
-    }
-
-    return items;
-  }, [dashboardData, lowStockThreshold, setActiveTab]);
-
-  const hasAttentionItems = attentionItems.length > 0;
+  const maxDaily = Math.max(1, ...intelligence.dailySeries.map((d) => d[metric === 'profit' ? 'profit' : 'sales']));
+  const maxRegion = Math.max(1, ...intelligence.regionPerformance.map((r) => r.sales));
+  const maxProduct = Math.max(1, ...intelligence.productPerformance.slice(0, 8).map((p) => p.sales));
 
   return (
-    <div className="mx-auto w-full max-w-[1700px] space-y-6 pb-8">
-      {/* EXECUTIVE HEADER */}
-      <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-950 shadow-sm">
-        <div className="flex flex-col gap-5 px-5 py-6 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-blue-300">
-                Three Leaves ERP
-              </span>
-              <span className="h-1 w-1 rounded-full bg-slate-600" />
-              <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-slate-500">
-                Operations
-              </span>
+    <div className="mx-auto w-full max-w-[1700px] space-y-5 pb-10">
+      <section className="rounded-2xl border border-slate-800 bg-slate-950 px-5 py-5 text-white shadow-sm sm:px-6">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div>
+            <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-blue-300">
+              <Sparkles size={13} /> Situational Intelligence
             </div>
-
-            <h1 className="mt-2 text-2xl font-semibold tracking-[-0.025em] text-white sm:text-[30px]">
-              Operations Dashboard
-            </h1>
-
-            <p className="mt-2 text-sm leading-6 text-slate-400">
-              {formatDisplayDate(today)} · a consolidated view of sales,
-              profitability, receivables, stock and delivery workload.
+            <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">Operations Situation</h1>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
+              A live management view of demand, customers, inventory, profitability and operational risk. Statistical signals are derived from the ERP data currently available; predictive models become stronger as historical data accumulates.
             </p>
           </div>
-
           <div className="flex flex-wrap items-center gap-2">
-            <div
-              className={`inline-flex items-center rounded-lg border px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.1em] ${
-                sys?.storageMode === 'supabase'
-                  ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300'
-                  : 'border-slate-700 bg-slate-900 text-slate-400'
-              }`}
-            >
-              <ShieldCheck size={13} className="mr-1.5" />
-              {sys?.storageMode === 'supabase'
-                ? 'Supabase Connected'
-                : 'Demo / Local Mode'}
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setCashRefreshNonce((value) => value + 1)}
-              disabled={cashLoading}
-              className="inline-flex items-center rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-300 transition hover:border-slate-600 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <RefreshCw
-                size={13}
-                className={`mr-1.5 ${cashLoading ? 'animate-spin' : ''}`}
-              />
-              Refresh Cash
+            <button type="button" onClick={() => setRefreshNonce((v) => v + 1)} className="inline-flex items-center rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-300 hover:bg-slate-800">
+              <RefreshCw size={13} className={`mr-1.5 ${analyticsLoading ? 'animate-spin' : ''}`} /> Refresh
             </button>
+            <span className="inline-flex items-center rounded-lg border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-emerald-300">
+              <ShieldCheck size={13} className="mr-1.5" /> {sys?.storageMode === 'supabase' ? 'Live Data' : 'Local Data'}
+            </span>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 divide-y divide-white/10 border-t border-white/10 bg-slate-900/40 sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4">
-          <ExecutiveMetric
-            label="Sales Today · excl. GST"
-            value={`$${formatMoney(dashboardData.todayCombined.subtotal)}`}
-            subtext={`Normal $${formatMoney(
-              dashboardData.todayNormalSummary.subtotal
-            )} · Cash ${
-              cashLoading
-                ? 'loading…'
-                : `$${formatMoney(dashboardData.todayCashSummary.subtotal)}`
-            }`}
-            icon={ShoppingCart}
-            tone="blue"
-            onClick={() => setActiveTab('invoices')}
-          />
-
-          <ExecutiveMetric
-            label="Gross Profit Today"
-            value={`$${formatMoney(dashboardData.todayCombined.profit)}`}
-            subtext={
-              dashboardData.todayCombined.costReviewCount > 0
-                ? `${dashboardData.todayCombined.costReviewCount} transaction${
-                    dashboardData.todayCombined.costReviewCount === 1 ? '' : 's'
-                  } excluded pending cost review`
-                : `${dashboardData.todayCombined.profitCount} transaction${
-                    dashboardData.todayCombined.profitCount === 1 ? '' : 's'
-                  } included`
-            }
-            icon={TrendingUp}
-            tone={
-              dashboardData.todayCombined.costReviewCount > 0
-                ? 'amber'
-                : 'emerald'
-            }
-          />
-
-          <ExecutiveMetric
-            label={`${formatMonthLabel(monthKey)} Outstanding`}
-            value={`$${formatMoney(dashboardData.monthCombined.outstanding)}`}
-            subtext={`${dashboardData.monthCombined.unpaidCount} unpaid · Normal $${formatMoney(
-              dashboardData.monthNormalSummary.outstanding
-            )} · Cash $${formatMoney(
-              dashboardData.monthCashSummary.outstanding
-            )}`}
-            icon={CircleDollarSign}
-            tone="violet"
-            onClick={() => setActiveTab('billing')}
-          />
-
-          <ExecutiveMetric
-            label="Deliveries Today"
-            value={dashboardData.deliveryRecords.length}
-            subtext={
-              dashboardData.missingDeliveryAddressCount > 0
-                ? `${dashboardData.missingDeliveryAddressCount} missing delivery address`
-                : 'All delivery records have an address'
-            }
-            icon={Truck}
-            tone={
-              dashboardData.missingDeliveryAddressCount > 0
-                ? 'amber'
-                : 'emerald'
-            }
-            onClick={() => setActiveTab('logistics')}
-          />
+        <div className="mt-5 grid grid-cols-2 gap-2 lg:grid-cols-5">
+          {[['7', '7 Days'], ['30', '30 Days'], ['90', '90 Days'], ['180', '6 Months'], ['365', '12 Months']].map(([value, label]) => (
+            <button key={value} type="button" onClick={() => setPeriod(value)} className={`rounded-lg border px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider transition ${period === value ? 'border-blue-400/40 bg-blue-400/10 text-blue-200' : 'border-slate-800 bg-slate-900/70 text-slate-500 hover:text-slate-300'}`}>
+              {label}
+            </button>
+          ))}
         </div>
       </section>
 
-      {/* SYSTEM ALERTS */}
-      {(cashError || sys?.lastSyncError) && (
-        <section className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-          {cashError && (
-            <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-red-800">
-              <AlertCircle size={17} className="mt-0.5 shrink-0" />
-              <div>
-                <p className="text-sm font-semibold">
-                  Cash dashboard data could not be loaded
-                </p>
-                <p className="mt-1 text-xs leading-5 text-red-600">
-                  {cashError}
-                </p>
-              </div>
-            </div>
-          )}
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+          <SlidersHorizontal size={14} /> Analysis slices
+        </div>
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <label className="text-[11px] font-medium text-slate-500">
+            Customer
+            <select value={customerFilter} onChange={(e) => setCustomerFilter(e.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-800 outline-none focus:border-blue-400">
+              <option value="all">All customers</option>
+              {customerOptions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </label>
+          <label className="text-[11px] font-medium text-slate-500">
+            Product
+            <select value={productFilter} onChange={(e) => setProductFilter(e.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-800 outline-none focus:border-blue-400">
+              <option value="all">All products</option>
+              {productOptions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </label>
+          <label className="text-[11px] font-medium text-slate-500">
+            Chart metric
+            <select value={metric} onChange={(e) => setMetric(e.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-800 outline-none focus:border-blue-400">
+              <option value="sales">Sales</option>
+              <option value="profit">Gross profit</option>
+            </select>
+          </label>
+          <label className="text-[11px] font-medium text-slate-500">
+            Risk view
+            <select value={riskFilter} onChange={(e) => setRiskFilter(e.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-800 outline-none focus:border-blue-400">
+              <option value="all">All signals</option>
+              <option value="critical">Critical</option>
+              <option value="warning">Warning</option>
+            </select>
+          </label>
+        </div>
+      </section>
 
-          {sys?.lastSyncError && (
-            <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800">
-              <AlertTriangle size={17} className="mt-0.5 shrink-0" />
-              <div>
-                <p className="text-sm font-semibold">ERP sync needs attention</p>
-                <p className="mt-1 text-xs leading-5 text-amber-700">
-                  Some figures may not include the latest remote changes until
-                  synchronization succeeds.
-                </p>
-              </div>
-            </div>
-          )}
-        </section>
-      )}
+      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-6">
+        {[
+          ['Revenue', `$${formatMoney(intelligence.summary.subtotal)}`, intelligence.salesChange, ShoppingCart],
+          ['Gross profit', `$${formatMoney(intelligence.summary.profit)}`, intelligence.profitChange, TrendingUp],
+          ['Gross margin', `${intelligence.grossMargin.toFixed(1)}%`, null, Gauge],
+          ['Orders', intelligence.summary.count, null, FileText],
+          ['Collection', `${intelligence.collectionRate.toFixed(1)}%`, null, CircleDollarSign],
+          ['Credit notes', `$${formatMoney(intelligence.creditNoteValue)}`, null, Receipt],
+        ].map(([label, value, change, Icon]) => (
+          <div key={label} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="flex items-center justify-between"><span className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">{label}</span><Icon size={15} className="text-slate-400" /></div>
+            <div className="mt-2 text-xl font-semibold tracking-tight text-slate-900">{value}</div>
+            {change !== null && <div className={`mt-1 text-[10px] font-semibold ${change >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{change >= 0 ? '↑' : '↓'} {Math.abs(change).toFixed(1)}% vs prior period</div>}
+          </div>
+        ))}
+      </section>
 
-      {/* ACTION CENTRE + DAILY WORKFLOW */}
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-12">
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm xl:col-span-7">
-          <div className="border-b border-slate-200 px-5 py-4 sm:px-6">
-            <SectionHeader
-              eyebrow="Action Centre"
-              title="Items requiring follow-up"
-              subtitle="Priority operational exceptions are surfaced here so they can be resolved without searching through each module."
-              action={
-                hasAttentionItems ? (
-                  <span className="inline-flex rounded-lg bg-amber-50 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-amber-700">
-                    {attentionItems.length} open
-                  </span>
-                ) : null
-              }
-            />
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-8">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div><div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-blue-600"><BarChart3 size={14} /> Demand signal</div><h2 className="mt-1 text-lg font-semibold text-slate-900">Actual performance + short-term trend</h2><p className="mt-1 text-xs text-slate-500">The dotted extension is a transparent linear trend projection, not a black-box promise.</p></div>
+            <div className="text-right"><div className="text-[10px] uppercase tracking-wider text-slate-400">7D momentum</div><div className={`mt-1 text-lg font-semibold ${intelligence.weeklyMomentum !== null && intelligence.weeklyMomentum >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{intelligence.weeklyMomentum === null ? '—' : `${intelligence.weeklyMomentum >= 0 ? '+' : ''}${intelligence.weeklyMomentum.toFixed(1)}%`}</div></div>
           </div>
-
-          <div className="px-5 sm:px-6">
-            {hasAttentionItems ? (
-              attentionItems.map((item) => (
-                <AttentionItem
-                  key={item.key}
-                  icon={item.icon}
-                  title={item.title}
-                  detail={item.detail}
-                  tone={item.tone}
-                  actionLabel={item.actionLabel}
-                  onClick={item.onClick}
-                />
-              ))
-            ) : (
-              <div className="flex items-center gap-3 py-6">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100">
-                  <CheckCircle2 size={19} />
-                </div>
-
-                <div>
-                  <p className="text-sm font-semibold text-slate-800">
-                    No urgent operational exceptions
-                  </p>
-                  <p className="mt-1 text-xs leading-5 text-slate-500">
-                    No low-stock, outstanding, missing-address or profit-review
-                    alerts were detected in the current dashboard scope.
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 xl:col-span-5">
-          <SectionHeader
-            eyebrow="Today's Workflow"
-            title="Operational workload"
-            subtitle="A compact view of the work moving through invoicing, delivery and picking today."
-          />
-
-          <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3 xl:grid-cols-1">
-            <WorkflowCard
-              eyebrow="Transactions"
-              title="Invoice workload"
-              value={dashboardData.todayCombined.count}
-              detail={`${dashboardData.todayNormal.length} normal · ${dashboardData.todayCash.length} Cash`}
-              icon={FileText}
-              tone="blue"
-            >
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('invoices')}
-                  className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-left transition hover:bg-white"
-                >
-                  <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-slate-400">
-                    Normal
-                  </p>
-                  <p className="mt-1 text-xs font-semibold text-slate-700">
-                    ${formatMoney(dashboardData.todayNormalSummary.total)}
-                  </p>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('cash')}
-                  className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-left transition hover:bg-white"
-                >
-                  <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-slate-400">
-                    Cash
-                  </p>
-                  <p className="mt-1 text-xs font-semibold text-slate-700">
-                    ${formatMoney(dashboardData.todayCashSummary.total)}
-                  </p>
-                </button>
-              </div>
-            </WorkflowCard>
-
-            <WorkflowCard
-              eyebrow="Delivery"
-              title="Regional workload"
-              value={dashboardData.deliveryRecords.length}
-              detail={
-                dashboardData.missingDeliveryAddressCount > 0
-                  ? `${dashboardData.missingDeliveryAddressCount} address exception${
-                      dashboardData.missingDeliveryAddressCount === 1 ? '' : 's'
-                    }`
-                  : 'All delivery addresses ready'
-              }
-              icon={MapPinned}
-              tone={
-                dashboardData.missingDeliveryAddressCount > 0
-                  ? 'amber'
-                  : 'violet'
-              }
-              onClick={() => setActiveTab('logistics')}
-            >
-              <div className="mt-3 grid grid-cols-4 gap-1.5">
-                {[
-                  ['N', dashboardData.regionCounts.North],
-                  ['W', dashboardData.regionCounts.West],
-                  ['E', dashboardData.regionCounts.East],
-                  ['C', dashboardData.regionCounts.Central],
-                ].map(([label, count]) => (
-                  <div
-                    key={label}
-                    className="rounded-lg bg-slate-50 px-2 py-2 text-center"
-                  >
-                    <p className="text-[9px] font-semibold text-slate-400">
-                      {label}
-                    </p>
-                    <p className="mt-0.5 text-xs font-semibold text-slate-700">
-                      {count}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </WorkflowCard>
-
-            <WorkflowCard
-              eyebrow="Picking"
-              title="Pick-list workload"
-              value={dashboardData.todayNormal.length}
-              detail="Today's normal invoices available to the picking workflow."
-              icon={ClipboardList}
-              tone="amber"
-              onClick={() => setActiveTab('picking')}
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* MONTHLY FINANCIAL SNAPSHOT */}
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-200 px-5 py-4 sm:px-6">
-          <SectionHeader
-            eyebrow="Financial Snapshot"
-            title={formatMonthLabel(monthKey)}
-            subtitle="Normal and Cash ledgers remain separate while Paid, Outstanding and GST provide a consolidated operating view."
-            action={
-              <button
-                type="button"
-                onClick={() => setActiveTab('billing')}
-                className="inline-flex items-center text-[11px] font-semibold text-slate-600 transition hover:text-slate-900"
-              >
-                Open Billing
-                <ArrowRight size={12} className="ml-1.5" />
-              </button>
-            }
-          />
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 sm:p-5 xl:grid-cols-5">
-          <SmallFinancialCard
-            label="Normal Billing"
-            value={`$${formatMoney(dashboardData.monthNormalSummary.total)}`}
-            subtext={`${dashboardData.monthNormalSummary.count} invoice${
-              dashboardData.monthNormalSummary.count === 1 ? '' : 's'
-            }`}
-            icon={FileText}
-            onClick={() => setActiveTab('billing')}
-          />
-
-          <SmallFinancialCard
-            label="Cash Billing"
-            value={
-              cashLoading
-                ? 'Loading…'
-                : `$${formatMoney(dashboardData.monthCashSummary.total)}`
-            }
-            subtext={`${dashboardData.monthCashSummary.count} Cash invoice${
-              dashboardData.monthCashSummary.count === 1 ? '' : 's'
-            }`}
-            icon={WalletCards}
-            onClick={() => setActiveTab('cash')}
-          />
-
-          <SmallFinancialCard
-            label="Paid"
-            value={`$${formatMoney(dashboardData.monthCombined.paid)}`}
-            subtext="Normal + Cash · incl. GST"
-            icon={CheckCircle2}
-            onClick={() => setActiveTab('billing')}
-          />
-
-          <SmallFinancialCard
-            label="Outstanding"
-            value={`$${formatMoney(dashboardData.monthCombined.outstanding)}`}
-            subtext={`${dashboardData.monthCombined.unpaidCount} unpaid transaction${
-              dashboardData.monthCombined.unpaidCount === 1 ? '' : 's'
-            }`}
-            icon={CircleDollarSign}
-            onClick={() => setActiveTab('billing')}
-          />
-
-          <SmallFinancialCard
-            label="GST"
-            value={`$${formatMoney(dashboardData.monthCombined.gst)}`}
-            subtext="GST recorded in Normal + Cash"
-            icon={Receipt}
-            onClick={() => setActiveTab('gst')}
-          />
-        </div>
-      </section>
-
-      {/* INVENTORY + QUICK ACCESS */}
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-12">
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 xl:col-span-5">
-          <SectionHeader
-            eyebrow="Inventory"
-            title="Stock exceptions"
-            subtitle={`${dashboardData.lowStockItems.length} product${
-              dashboardData.lowStockItems.length === 1 ? '' : 's'
-            } below the ${lowStockThreshold}-unit dashboard threshold.`}
-            action={
-              <button
-                type="button"
-                onClick={() => setActiveTab('inventory')}
-                className="inline-flex items-center text-[11px] font-semibold text-slate-600 transition hover:text-slate-900"
-              >
-                View Inventory
-                <ArrowRight size={12} className="ml-1.5" />
-              </button>
-            }
-          />
-
-          <div className="mt-5">
-            {dashboardData.lowStockItems.length > 0 ? (
-              <div className="divide-y divide-slate-100">
-                {dashboardData.lowStockItems
-                  .slice(0, 5)
-                  .map(({ item, stock }) => {
-                    const name = getInventoryName(item);
-                    const sku = getInventorySku(item);
-                    const unit = getInventoryUnit(item);
-
-                    return (
-                      <button
-                        type="button"
-                        key={String(item?.id || `${sku}-${name}`)}
-                        onClick={() => setActiveTab('inventory')}
-                        className="flex w-full items-center justify-between gap-4 py-3 text-left transition hover:bg-slate-50/80"
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate text-xs font-semibold text-slate-800">
-                            {name}
-                          </p>
-                          <p className="mt-1 text-[10px] font-medium uppercase tracking-[0.08em] text-slate-400">
-                            {sku || 'No SKU'}
-                          </p>
-                        </div>
-
-                        <div className="shrink-0 text-right">
-                          <p
-                            className={`text-sm font-semibold ${
-                              stock <= 0 ? 'text-red-600' : 'text-amber-600'
-                            }`}
-                          >
-                            {stock}
-                            {unit ? ` ${unit}` : ''}
-                          </p>
-                          <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-slate-400">
-                            {stock <= 0 ? 'Out of stock' : 'Low stock'}
-                          </p>
-                        </div>
-                      </button>
-                    );
-                  })}
-              </div>
-            ) : (
-              <div className="flex items-center gap-3 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-4">
-                <CheckCircle2 size={18} className="shrink-0 text-emerald-600" />
-                <div>
-                  <p className="text-sm font-semibold text-emerald-800">
-                    Stock levels are within threshold
-                  </p>
-                  <p className="mt-1 text-xs text-emerald-700">
-                    No product is currently below the dashboard threshold.
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 xl:col-span-7">
-          <SectionHeader
-            eyebrow="Quick Access"
-            title="Frequently used workflows"
-            subtitle="Direct access to the ERP functions used most often during daily operations."
-          />
-
-          <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
-            <div className="flex flex-wrap gap-3">
-              <ShortcutBtn
-                icon={FileText}
-                label="Invoicing"
-                onClick={() => setActiveTab('invoices')}
-                perm="create_invoices"
-                sys={sys}
-              />
-
-              <ShortcutBtn
-                icon={WalletCards}
-                label="Cash"
-                onClick={() => setActiveTab('cash')}
-                perm="create_invoices"
-                sys={sys}
-              />
-
-              <ShortcutBtn
-                icon={Receipt}
-                label="Billing"
-                onClick={() => setActiveTab('billing')}
-                perm="manage_billing"
-                sys={sys}
-              />
-
-              <ShortcutBtn
-                icon={MapPinned}
-                label="Delivery Map"
-                onClick={() => setActiveTab('logistics')}
-                sys={sys}
-              />
-
-              <ShortcutBtn
-                icon={ClipboardList}
-                label="Pick List"
-                onClick={() => setActiveTab('picking')}
-                sys={sys}
-              />
-
-              <ShortcutBtn
-                icon={Package}
-                label="Inventory"
-                onClick={() => setActiveTab('inventory')}
-                sys={sys}
-              />
-
-              <ShortcutBtn
-                icon={UserPlus}
-                label="Customers"
-                onClick={() => setActiveTab('customers')}
-                sys={sys}
-              />
-
-              <ShortcutBtn
-                icon={Truck}
-                label="Stock In"
-                onClick={() => setActiveTab('suppliers')}
-                perm="manage_suppliers"
-                sys={sys}
-              />
-            </div>
-          </div>
-
-          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div className="rounded-lg border border-slate-200 px-3 py-3">
-              <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-                Customers
-              </p>
-              <p className="mt-1.5 text-lg font-semibold text-slate-800">
-                {customers.length}
-              </p>
-            </div>
-
-            <div className="rounded-lg border border-slate-200 px-3 py-3">
-              <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-                Team
-              </p>
-              <p className="mt-1.5 text-lg font-semibold text-slate-800">
-                {users.length}
-              </p>
-            </div>
-
-            <div className="rounded-lg border border-slate-200 px-3 py-3">
-              <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-                Normal today
-              </p>
-              <p className="mt-1.5 text-lg font-semibold text-slate-800">
-                {dashboardData.todayNormal.length}
-              </p>
-            </div>
-
-            <div className="rounded-lg border border-slate-200 px-3 py-3">
-              <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-                Cash today
-              </p>
-              <p className="mt-1.5 text-lg font-semibold text-slate-800">
-                {dashboardData.todayCash.length}
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* RECENT ACTIVITY */}
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-200 px-5 py-4 sm:px-6">
-          <SectionHeader
-            eyebrow="Recent Activity"
-            title="Latest transactions"
-            subtitle={`The ${RECENT_TRANSACTION_LIMIT} most recent Normal and Cash transactions in ${formatMonthLabel(
-              monthKey
-            )}.`}
-          />
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[840px] border-collapse text-left">
-            <thead className="bg-slate-50/80">
-              <tr className="border-b border-slate-200 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-400">
-                <th className="px-5 py-3 sm:px-6">Type</th>
-                <th className="px-4 py-3">Number</th>
-                <th className="px-4 py-3">Date</th>
-                <th className="px-4 py-3">Customer</th>
-                <th className="px-4 py-3 text-right">Amount</th>
-                <th className="px-4 py-3 text-right">Profit</th>
-                <th className="px-5 py-3 text-center sm:px-6">Status</th>
-              </tr>
-            </thead>
-
-            <tbody className="divide-y divide-slate-100 text-xs">
-              {dashboardData.recentTransactions.map(({ type, invoice }) => {
-                const profitStatus = getProfitStatus(invoice);
-                const paid = isPaid(invoice);
-
-                return (
-                  <tr
-                    key={`${type}-${getInvoiceNumber(invoice)}-${getInvoiceDate(
-                      invoice
-                    )}`}
-                    className="cursor-pointer bg-white transition hover:bg-slate-50/80"
-                    onClick={() =>
-                      setActiveTab(type === 'Cash' ? 'cash' : 'invoices')
-                    }
-                  >
-                    <td className="px-5 py-3.5 sm:px-6">
-                      <TransactionTypeBadge type={type} />
-                    </td>
-
-                    <td className="px-4 py-3.5 font-mono font-semibold text-slate-800">
-                      {getInvoiceNumber(invoice)}
-                    </td>
-
-                    <td className="px-4 py-3.5 text-slate-500">
-                      {formatDisplayDate(getInvoiceDate(invoice))}
-                    </td>
-
-                    <td className="max-w-[300px] truncate px-4 py-3.5 font-medium text-slate-700">
-                      {getInvoiceCustomerName(invoice)}
-                    </td>
-
-                    <td className="px-4 py-3.5 text-right font-mono font-semibold text-slate-900">
-                      ${formatMoney(getInvoiceTotal(invoice))}
-                    </td>
-
-                    <td className="px-4 py-3.5 text-right font-mono">
-                      {profitStatus.profit === null ? (
-                        <span className="font-semibold text-amber-600">
-                          Needs review
-                        </span>
-                      ) : (
-                        <span
-                          className={`font-semibold ${
-                            profitStatus.profit < 0
-                              ? 'text-red-600'
-                              : 'text-emerald-600'
-                          }`}
-                        >
-                          ${formatMoney(profitStatus.profit)}
-                        </span>
-                      )}
-                    </td>
-
-                    <td className="px-5 py-3.5 text-center sm:px-6">
-                      <span
-                        className={`inline-flex rounded-md border px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.08em] ${
-                          paid
-                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                            : 'border-orange-200 bg-orange-50 text-orange-700'
-                        }`}
-                      >
-                        {paid ? 'Paid' : 'Unpaid'}
-                      </span>
-                    </td>
-                  </tr>
-                );
+          <div className="mt-5 h-64 w-full">
+            <svg viewBox="0 0 900 260" className="h-full w-full" preserveAspectRatio="none" role="img" aria-label="Sales trend chart">
+              <line x1="0" y1="225" x2="900" y2="225" stroke="currentColor" className="text-slate-200" />
+              {[0,1,2,3].map((i) => <line key={i} x1="0" y1={55 + i*55} x2="900" y2={55 + i*55} stroke="currentColor" className="text-slate-100" />)}
+              {intelligence.dailySeries.length > 1 && (() => {
+                const pts = intelligence.dailySeries.map((d, i) => {
+                  const x = (i / (intelligence.dailySeries.length - 1)) * 900;
+                  const y = 225 - ((d[metric === 'profit' ? 'profit' : 'sales'] || 0) / maxDaily) * 180;
+                  return `${x},${y}`;
+                }).join(' ');
+                const trendPts = intelligence.dailySeries.map((_, i) => {
+                  const x = (i / (intelligence.dailySeries.length - 1)) * 900;
+                  const yVal = Math.max(0, intelligence.mean + ((i - intelligence.dailySeries.length / 2) * (intelligence.dailySeries.length > 1 ? (intelligence.dailySeries[intelligence.dailySeries.length - 1].sales - intelligence.dailySeries[0].sales) / intelligence.dailySeries.length : 0)));
+                  const y = 225 - (yVal / maxDaily) * 180;
+                  return `${x},${y}`;
+                }).join(' ');
+                return <><polyline points={pts} fill="none" stroke="currentColor" strokeWidth="3" className="text-blue-600" /><polyline points={trendPts} fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="7 7" className="text-slate-400" /></>;
+              })()}
+              {intelligence.dailySeries.map((d, i) => {
+                const value = d[metric === 'profit' ? 'profit' : 'sales'] || 0;
+                const x = intelligence.dailySeries.length === 1 ? 450 : (i / (intelligence.dailySeries.length - 1)) * 900;
+                const y = 225 - (value / maxDaily) * 180;
+                const anomaly = intelligence.anomalies.some((a) => a.date === d.date);
+                return <circle key={d.date} cx={x} cy={y} r={anomaly ? 5 : 2.5} fill="currentColor" className={anomaly ? 'text-rose-500' : 'text-blue-600'} />;
               })}
+            </svg>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-4 text-[10px] text-slate-500"><span><i className="mr-1 inline-block h-2 w-2 rounded-full bg-blue-600" /> Actual</span><span><i className="mr-1 inline-block h-2 w-2 rounded-full bg-rose-500" /> Anomaly</span><span><i className="mr-1 inline-block h-0.5 w-4 border-t-2 border-dashed border-slate-400" /> Trend</span></div>
+        </div>
 
-              {dashboardData.recentTransactions.length === 0 && (
-                <tr>
-                  <td colSpan="7" className="px-6 py-12 text-center">
-                    <FileText size={22} className="mx-auto text-slate-300" />
-                    <p className="mt-3 text-sm font-semibold text-slate-600">
-                      No transactions this month
-                    </p>
-                    <p className="mt-1 text-xs text-slate-400">
-                      New Normal and Cash transactions will appear here.
-                    </p>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-4">
+          <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-violet-600"><BrainCircuit size={14} /> Intelligence layer</div>
+          <h2 className="mt-1 text-lg font-semibold text-slate-900">What the data is saying</h2>
+          <div className="mt-4 space-y-3">
+            <div className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Demand</p><p className="mt-1 text-sm font-semibold text-slate-800">{intelligence.weeklyMomentum === null ? 'Not enough comparable history' : intelligence.weeklyMomentum >= 0 ? 'Demand is accelerating' : 'Demand is slowing'}</p><p className="mt-1 text-xs leading-5 text-slate-500">{intelligence.anomalies.length} statistical anomaly{intelligence.anomalies.length === 1 ? '' : 'ies'} detected in the selected window.</p></div>
+            <div className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Inventory</p><p className="mt-1 text-sm font-semibold text-slate-800">{intelligence.inventoryRisk.filter((x) => x.risk >= 70).length} high-risk stock positions</p><p className="mt-1 text-xs leading-5 text-slate-500">Risk uses current stock versus observed daily demand; it becomes more accurate once the movement ledger has sufficient history.</p></div>
+            <div className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Customer behaviour</p><p className="mt-1 text-sm font-semibold text-slate-800">{intelligence.customerSignals.filter((x) => x.risk >= 70).length} customers need attention</p><p className="mt-1 text-xs leading-5 text-slate-500">Signals are based on purchase recency versus the customer's observed ordering cadence.</p></div>
+          </div>
+          <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-3"><p className="text-[10px] font-semibold uppercase tracking-wider text-blue-600">Forecast readiness</p><p className="mt-1 text-sm font-semibold text-slate-800">{intelligence.summary.count < 30 ? 'Building history' : 'Ready for stronger forecasting'}</p><p className="mt-1 text-xs leading-5 text-slate-600">The current dashboard uses transparent statistical methods. A server-side forecasting model should be added once enough historical daily data is available.</p></div>
         </div>
       </section>
 
-      {/* SYSTEM STATUS */}
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="grid grid-cols-1 divide-y divide-slate-200 md:grid-cols-3 md:divide-x md:divide-y-0">
-          <div className="flex items-center gap-3 px-5 py-4">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600 ring-1 ring-blue-100">
-              <Users size={16} />
-            </div>
-            <div>
-              <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-                Customer Records
-              </p>
-              <p className="mt-1 text-sm font-semibold text-slate-800">
-                {customers.length} customers
-              </p>
-            </div>
+      <section className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between"><div><div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-emerald-600"><Users size={14} /> Customer signals</div><h2 className="mt-1 text-lg font-semibold text-slate-900">Customers changing behaviour</h2></div><button type="button" onClick={() => setActiveTab('customers')} className="text-xs font-semibold text-slate-500 hover:text-slate-900">Open Customers →</button></div>
+          <div className="mt-4 space-y-2">
+            {intelligence.customerSignals.slice(0, 6).map((c) => <button type="button" key={c.id} onClick={() => setActiveTab('customers')} className="flex w-full items-center justify-between rounded-lg border border-slate-100 px-3 py-3 text-left hover:bg-slate-50"><div className="min-w-0"><p className="truncate text-xs font-semibold text-slate-800">{c.name}</p><p className="mt-1 text-[10px] text-slate-500">{c.orders} orders · ${formatMoney(c.sales)} · last order {c.daysSince}d ago</p></div><div className={`ml-3 rounded-md px-2 py-1 text-[9px] font-bold uppercase ${c.risk >= 70 ? 'bg-rose-50 text-rose-700' : c.risk >= 40 ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>{c.risk >= 70 ? 'Watch' : c.risk >= 40 ? 'Monitor' : 'Stable'}</div></button>)}
+            {intelligence.customerSignals.length === 0 && <p className="py-8 text-center text-xs text-slate-400">Not enough customer transaction data in this scope.</p>}
           </div>
+        </div>
 
-          <div className="flex items-center gap-3 px-5 py-4">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-50 text-violet-600 ring-1 ring-violet-100">
-              <Users size={16} />
-            </div>
-            <div>
-              <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-                Team Access
-              </p>
-              <p className="mt-1 text-sm font-semibold text-slate-800">
-                {users.length} team members
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 px-5 py-4">
-            <div
-              className={`flex h-9 w-9 items-center justify-center rounded-lg ring-1 ${
-                cashError
-                  ? 'bg-red-50 text-red-600 ring-red-100'
-                  : cashLoading
-                    ? 'bg-blue-50 text-blue-600 ring-blue-100'
-                    : 'bg-emerald-50 text-emerald-600 ring-emerald-100'
-              }`}
-            >
-              {cashError ? (
-                <AlertCircle size={16} />
-              ) : cashLoading ? (
-                <RefreshCw size={16} className="animate-spin" />
-              ) : (
-                <CheckCircle2 size={16} />
-              )}
-            </div>
-
-            <div>
-              <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-                Cash Ledger
-              </p>
-              <p className="mt-1 text-sm font-semibold text-slate-800">
-                {cashError
-                  ? 'Load issue'
-                  : cashLoading
-                    ? 'Refreshing'
-                    : `${cashInvoices.length} records this month`}
-              </p>
-            </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between"><div><div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-amber-600"><Boxes size={14} /> Inventory intelligence</div><h2 className="mt-1 text-lg font-semibold text-slate-900">Stock coverage & risk</h2></div><button type="button" onClick={() => setActiveTab('inventory')} className="text-xs font-semibold text-slate-500 hover:text-slate-900">Open Inventory →</button></div>
+          <div className="mt-4 space-y-3">
+            {intelligence.inventoryRisk.slice(0, 6).map((x) => <div key={String(x.item?.id ?? x.name)}><div className="flex items-center justify-between gap-3"><div className="min-w-0"><p className="truncate text-xs font-semibold text-slate-800">{x.name}</p><p className="text-[10px] text-slate-500">Stock {x.stock} · {Number.isFinite(x.daysCover) ? `${Math.round(x.daysCover)}d cover` : 'no observed demand'}</p></div><span className={`rounded-md px-2 py-1 text-[9px] font-bold ${x.risk >= 70 ? 'bg-rose-50 text-rose-700' : x.risk >= 40 ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>{x.risk}% risk</span></div><div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className={`h-full rounded-full ${x.risk >= 70 ? 'bg-rose-500' : x.risk >= 40 ? 'bg-amber-400' : 'bg-emerald-500'}`} style={{ width: `${Math.min(100, x.risk)}%` }} /></div></div>)}
           </div>
         </div>
       </section>
+
+      <section className="grid grid-cols-1 gap-5 xl:grid-cols-12">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-7">
+          <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-blue-600"><Map size={14} /> Geographic intelligence</div>
+          <h2 className="mt-1 text-lg font-semibold text-slate-900">Revenue concentration by region</h2>
+          <div className="mt-5 space-y-3">
+            {intelligence.regionPerformance.length === 0 ? <p className="py-10 text-center text-xs text-slate-400">No regional data available in the selected period.</p> : intelligence.regionPerformance.slice(0, 8).map((r) => <div key={r.region}><div className="flex items-center justify-between text-xs"><span className="font-semibold text-slate-700">{r.region}</span><span className="font-mono text-slate-500">${formatMoney(r.sales)} · {r.orders} orders</span></div><div className="mt-1.5 h-3 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600" style={{ width: `${(r.sales / maxRegion) * 100}%` }} /></div></div>)}
+          </div>
+          <p className="mt-5 text-[10px] leading-5 text-slate-400">This is the management view of geography. Detailed stop planning remains in Logistics.</p>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-5">
+          <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-violet-600"><Target size={14} /> Product economics</div>
+          <h2 className="mt-1 text-lg font-semibold text-slate-900">Top products + ABC signal</h2>
+          <div className="mt-4 space-y-3">
+            {intelligence.abcProducts.slice(0, 8).map((p) => <div key={p.id}><div className="flex items-center gap-2"><span className={`flex h-6 w-6 items-center justify-center rounded-md text-[10px] font-bold ${p.abc === 'A' ? 'bg-blue-50 text-blue-700' : p.abc === 'B' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>{p.abc}</span><p className="min-w-0 flex-1 truncate text-xs font-semibold text-slate-800">{p.name}</p><span className="text-xs font-mono text-slate-700">${formatMoney(p.sales)}</span></div><div className="ml-8 mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-slate-700" style={{ width: `${(p.sales / maxProduct) * 100}%` }} /></div></div>)}
+            {intelligence.abcProducts.length === 0 && <p className="py-8 text-center text-xs text-slate-400">Product-line data is not available in the selected invoice records.</p>}
+          </div>
+        </div>
+      </section>
+
+      <section className="grid grid-cols-1 gap-5 xl:grid-cols-12">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-8">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div><div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-rose-600"><TriangleAlert size={14} /> Early warning centre</div><h2 className="mt-1 text-lg font-semibold text-slate-900">Issues that may affect operations</h2></div><span className="rounded-lg bg-slate-100 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">{filteredRisks.length} signals</span></div>
+          <div className="mt-4 space-y-1">
+            {filteredRisks.slice(0, 8).map((item) => <div key={item.key} className="flex flex-col gap-3 border-b border-slate-100 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"><div className="flex min-w-0 items-start gap-3"><div className={`mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full ${item.severity === 'critical' ? 'bg-rose-500' : 'bg-amber-400'}`} /><div className="min-w-0"><p className="text-xs font-semibold text-slate-800">{item.title}</p><p className="mt-1 text-[11px] leading-5 text-slate-500">{item.detail}</p></div></div><button type="button" onClick={() => setActiveTab(item.tab)} className="shrink-0 rounded-lg border border-slate-200 px-3 py-2 text-[10px] font-semibold text-slate-600 hover:bg-slate-50">{item.action} →</button></div>)}
+            {filteredRisks.length === 0 && <div className="rounded-xl bg-emerald-50 p-5 text-center"><CheckCircle2 size={20} className="mx-auto text-emerald-600" /><p className="mt-2 text-sm font-semibold text-emerald-800">No elevated signals in this view</p><p className="mt-1 text-xs text-emerald-700">The dashboard will surface statistical, inventory and customer signals as the dataset grows.</p></div>}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-4">
+          <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500"><CalendarDays size={14} /> Management snapshot</div>
+          <h2 className="mt-1 text-lg font-semibold text-slate-900">What to look at next</h2>
+          <div className="mt-4 space-y-2 text-xs">
+            <button type="button" onClick={() => setActiveTab('inventory')} className="flex w-full items-center justify-between rounded-lg bg-slate-50 px-3 py-3 text-left hover:bg-slate-100"><span><b>Inventory</b><br /><span className="text-[10px] text-slate-500">{intelligence.lowStockItems.length} below threshold</span></span><ArrowRight size={14} /></button>
+            <button type="button" onClick={() => setActiveTab('customers')} className="flex w-full items-center justify-between rounded-lg bg-slate-50 px-3 py-3 text-left hover:bg-slate-100"><span><b>Customers</b><br /><span className="text-[10px] text-slate-500">{intelligence.customerSignals.filter((x) => x.risk >= 70).length} cadence changes</span></span><ArrowRight size={14} /></button>
+            <button type="button" onClick={() => setActiveTab('invoices')} className="flex w-full items-center justify-between rounded-lg bg-slate-50 px-3 py-3 text-left hover:bg-slate-100"><span><b>Sales</b><br /><span className="text-[10px] text-slate-500">{intelligence.anomalies.length} anomalies detected</span></span><ArrowRight size={14} /></button>
+            <button type="button" onClick={() => setActiveTab('logistics')} className="flex w-full items-center justify-between rounded-lg bg-slate-50 px-3 py-3 text-left hover:bg-slate-100"><span><b>Operations</b><br /><span className="text-[10px] text-slate-500">{intelligence.regionPerformance.length} active regions</span></span><ArrowRight size={14} /></button>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500"><Activity size={14} /> Data foundation</div><h2 className="mt-1 text-lg font-semibold text-slate-900">Intelligence coverage</h2></div><div className="text-[10px] text-slate-400">This section intentionally shows data readiness instead of pretending missing history is accurate ML.</div></div>
+        <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6">
+          {[
+            ['Customers', customers.length, 'Customer behaviour'],
+            ['Products', inventory.length, 'Inventory signals'],
+            ['Transactions', intelligence.summary.count, 'Demand history'],
+            ['Movements', intelligence.movementUnits.toFixed(0), 'Ledger volume'],
+            ['Credit notes', creditNotes.length, 'Returns signal'],
+            ['Team', users.length, 'Operational users'],
+          ].map(([label, value, detail]) => <div key={label} className="rounded-xl border border-slate-100 bg-slate-50 p-3"><p className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">{label}</p><p className="mt-1 text-lg font-semibold text-slate-800">{value}</p><p className="mt-1 text-[10px] text-slate-500">{detail}</p></div>)}
+        </div>
+      </section>
+
+      {cashError && <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800"><b>Cash data warning:</b> {cashError}. Other dashboard intelligence remains available.</div>}
     </div>
   );
 }
