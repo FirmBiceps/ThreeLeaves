@@ -18,8 +18,8 @@ export function CashWorkspace({ sys }) {
   const [workspace, setWorkspace] = useState('invoices');
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-slate-50/50">
-      <div className="shrink-0 border-b border-slate-200 bg-white px-5 pt-4 print:hidden sm:px-8">
+    <div className="tl-module-page flex h-full min-h-0 flex-col bg-transparent">
+      <div className="tl-screen-section shrink-0 border-b border-slate-200 bg-white px-5 pt-4 print:hidden sm:px-8">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
@@ -30,13 +30,13 @@ export function CashWorkspace({ sys }) {
             </p>
           </div>
 
-          <div className="flex w-full rounded-xl border border-slate-200 bg-slate-100 p-1 lg:w-auto">
+          <div className="tl-segmented w-full lg:w-auto">
             <button
               type="button"
               onClick={() => setWorkspace('invoices')}
-              className={`flex flex-1 items-center justify-center rounded-lg px-4 py-2.5 text-xs font-black transition-all lg:min-w-[156px] ${
+              className={`tl-segmented__item flex-1 lg:min-w-[156px] ${
                 workspace === 'invoices'
-                  ? 'bg-white text-emerald-700 shadow-sm ring-1 ring-slate-200'
+                  ? 'is-active'
                   : 'text-slate-500 hover:bg-white/60 hover:text-slate-800'
               }`}
               aria-pressed={workspace === 'invoices'}
@@ -48,9 +48,9 @@ export function CashWorkspace({ sys }) {
             <button
               type="button"
               onClick={() => setWorkspace('billing')}
-              className={`flex flex-1 items-center justify-center rounded-lg px-4 py-2.5 text-xs font-black transition-all lg:min-w-[156px] ${
+              className={`tl-segmented__item flex-1 lg:min-w-[156px] ${
                 workspace === 'billing'
-                  ? 'bg-white text-blue-700 shadow-sm ring-1 ring-slate-200'
+                  ? 'is-active'
                   : 'text-slate-500 hover:bg-white/60 hover:text-slate-800'
               }`}
               aria-pressed={workspace === 'billing'}
@@ -65,8 +65,8 @@ export function CashWorkspace({ sys }) {
           <div
             className={`h-full w-1/2 transition-transform duration-200 ${
               workspace === 'billing'
-                ? 'translate-x-full bg-blue-600'
-                : 'translate-x-0 bg-emerald-600'
+                ? 'translate-x-full bg-slate-700'
+                : 'translate-x-0 bg-slate-700'
             }`}
           />
         </div>
