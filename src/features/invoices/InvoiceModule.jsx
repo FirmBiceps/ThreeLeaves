@@ -1388,17 +1388,17 @@ export function InvoiceModule({ sys }) {
   };
 
   return (
-    <div className="p-8 h-full overflow-y-auto relative print:p-0 print:overflow-visible">
-      <div className={(previewInvoice || isGeneratorOpen) ? "print:hidden" : "block"}>
-        <div className="mb-8 flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+    <div className="tl-module-page p-8 h-full overflow-y-auto relative print:p-0 print:overflow-visible">
+      <div className={(previewInvoice || isGeneratorOpen) ? "print:hidden" : "block tl-screen-section"}>
+        <div className="tl-page-header">
           <div>
             <div className="flex items-center">
-              <div className="mr-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 ring-1 ring-blue-100">
-                <FileText className="text-blue-600" size={24} />
+              <div className="mr-3 flex h-11 w-11 items-center justify-center border border-slate-200 bg-white text-slate-700">
+                <FileText className="text-slate-700" size={24} />
               </div>
               <div>
-                <h1 className="text-2xl font-semibold text-slate-900">Invoice History</h1>
-                <p className="mt-1 text-sm text-slate-500">
+                <h1 className="tl-page-header__title">Invoice History</h1>
+                <p className="tl-page-header__subtitle">
                   Review, search and manage customer invoices from one place.
                 </p>
               </div>
@@ -1414,7 +1414,7 @@ export function InvoiceModule({ sys }) {
                 });
               }}
               disabled={isRefreshingInvoices}
-              className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-600 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+              className="tl-secondary-action disabled:cursor-not-allowed disabled:opacity-60"
               title="Reload every accessible invoice from Supabase"
             >
               <RotateCcw
@@ -1425,7 +1425,7 @@ export function InvoiceModule({ sys }) {
             </button>
 
             <button
-              className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-6 py-3 font-medium text-white shadow-lg shadow-blue-600/20 transition-all hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-xl active:translate-y-0"
+              className="tl-primary-action"
               onClick={() => setIsGeneratorOpen(true)}
             >
               <Plus className="mr-2" size={18} />
@@ -1464,44 +1464,44 @@ export function InvoiceModule({ sys }) {
           </div>
         )}
 
-        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="tl-metric-grid mb-6 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="tl-metric-card">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Invoices</p>
-                <p className="mt-2 text-2xl font-black text-slate-900">{filteredInvoices.length}</p>
+                <p className="tl-metric-card__label">Invoices</p>
+                <p className="tl-metric-card__value">{filteredInvoices.length}</p>
               </div>
-              <div className="rounded-xl bg-blue-50 p-3 text-blue-600">
+              <div className="tl-metric-card__icon">
                 <FileText size={20} />
               </div>
             </div>
-            <p className="mt-3 text-xs text-slate-500">Matching the current view</p>
+            <p className="tl-metric-card__helper">Matching the current view</p>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="tl-metric-card">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Invoice Value</p>
-                <p className="mt-2 text-2xl font-black text-slate-900">${formatMoney(invoiceSummary.totalAmount)}</p>
+                <p className="tl-metric-card__label">Invoice Value</p>
+                <p className="tl-metric-card__value">${formatMoney(invoiceSummary.totalAmount)}</p>
               </div>
-              <div className="rounded-xl bg-indigo-50 p-3 text-indigo-600">
+              <div className="tl-metric-card__icon">
                 <DollarSign size={20} />
               </div>
             </div>
-            <p className="mt-3 text-xs text-slate-500">Total value in this result set</p>
+            <p className="tl-metric-card__helper">Total value in this result set</p>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="tl-metric-card">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Gross Profit</p>
-                <p className="mt-2 text-2xl font-black text-emerald-600">${formatMoney(invoiceSummary.totalProfit)}</p>
+                <p className="tl-metric-card__label">Gross Profit</p>
+                <p className="tl-metric-card__value">${formatMoney(invoiceSummary.totalProfit)}</p>
               </div>
-              <div className="rounded-xl bg-emerald-50 p-3 text-emerald-600">
+              <div className="tl-metric-card__icon">
                 <TrendingUp size={20} />
               </div>
             </div>
-            <p className="mt-3 text-xs leading-5 text-slate-500">
+            <p className="tl-metric-card__helper">
               {invoiceSummary.profitReviewCount > 0
                 ? `${invoiceSummary.profitReviewCount} invoice${invoiceSummary.profitReviewCount === 1 ? '' : 's'} need cost review.`
                 : invoiceSummary.estimatedProfitCount > 0
@@ -1510,21 +1510,21 @@ export function InvoiceModule({ sys }) {
             </p>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="tl-metric-card">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Unpaid</p>
-                <p className="mt-2 text-2xl font-black text-orange-600">{invoiceSummary.unpaidCount}</p>
+                <p className="tl-metric-card__label">Unpaid</p>
+                <p className="tl-metric-card__value">{invoiceSummary.unpaidCount}</p>
               </div>
-              <div className="rounded-xl bg-orange-50 p-3 text-orange-600">
+              <div className="tl-metric-card__icon">
                 <Clock3 size={20} />
               </div>
             </div>
-            <p className="mt-3 text-xs text-slate-500">Invoices still awaiting payment</p>
+            <p className="tl-metric-card__helper">Invoices still awaiting payment</p>
           </div>
         </div>
 
-        <div className="flex flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <div className="tl-data-panel flex flex-col">
           <div className="shrink-0 border-b border-slate-200 bg-slate-50/80 p-4 sm:p-5">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div>
