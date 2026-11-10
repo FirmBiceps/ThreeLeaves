@@ -37,14 +37,16 @@ export default function App() {
       : []),
   ];
 
+  const activeLabel = tabOptions.find((tab) => tab.value === activeTab)?.label || activeTab.replace('-', ' ');
+
   if (sys.isHydrating) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-950 p-6 text-white">
-        <div className="rounded-3xl border border-slate-800 bg-slate-900 px-8 py-6 text-center shadow-2xl">
-          <p className="text-sm font-black uppercase tracking-[0.3em] text-slate-500">
+      <div className="flex h-screen items-center justify-center bg-[#f5f6f8] p-6 text-[#17202a]">
+        <div className="w-full max-w-md border border-[#e4e7ec] bg-white px-8 py-7 text-center shadow-sm">
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
             Loading
           </p>
-          <h1 className="mt-3 text-2xl font-black tracking-tighter">
+          <h1 className="mt-3 text-xl font-bold tracking-tight">
             Syncing ERP Data
           </h1>
           <p className="mt-2 text-sm text-slate-400">
@@ -75,14 +77,18 @@ export default function App() {
       />
 
       <main className="tl-app-main flex flex-1 flex-col overflow-hidden">
-        <header className="tl-topbar z-10 flex shrink-0 items-center justify-between px-6 md:px-8 print:hidden">
-          <div className="flex items-center gap-4">
-            <h2 className="tl-page-heading hidden md:block">
-              {activeTab.replace('-', ' ')}
-            </h2>
+        <header className="tl-topbar z-10 flex shrink-0 items-center justify-between px-5 md:px-8 print:hidden">
+          <div className="flex min-w-0 items-center gap-4">
+            <div className="hidden h-8 w-px bg-slate-200 md:block" />
+            <div className="min-w-0">
+              <p className="hidden text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400 md:block">Workspace</p>
+              <h2 className="tl-page-heading truncate">
+                {activeLabel}
+              </h2>
+            </div>
 
             <select
-              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 md:hidden"
+              className="tl-control min-w-0 max-w-[190px] px-3 py-2 text-sm font-semibold md:hidden"
               onChange={(event) => setActiveTab(event.target.value)}
               value={activeTab}
             >
@@ -94,42 +100,44 @@ export default function App() {
             </select>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex shrink-0 items-center gap-3">
             {sys.lastSyncError && (
-              <div className="hidden rounded-full border border-red-100 bg-red-50 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-red-600 lg:block">
+              <div className="hidden border border-red-200 bg-red-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-red-700 lg:block">
                 Sync issue
               </div>
             )}
 
             <div className="tl-topbar-meta hidden md:inline-flex">
               {sys.storageMode === 'supabase'
-                ? <> <span className="tl-status-dot" /> Connected </>
-                : <> <span className="tl-status-dot is-error" /> Demo mode </>}
+                ? <><span className="tl-status-dot" /> Connected</>
+                : <><span className="tl-status-dot is-error" /> Demo mode</>}
             </div>
 
-            <div className="text-xs font-bold tracking-[0.12em] text-slate-500">THREE LEAVES ERP</div>
+            <div className="hidden border-l border-slate-200 pl-3 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 lg:block">Three Leaves ERP</div>
           </div>
         </header>
 
         <div className="tl-content flex-1 overflow-y-auto print:overflow-visible print:p-0">
-          {activeTab === 'dashboard' && (
-            <DashboardModule setActiveTab={setActiveTab} sys={sys} />
-          )}
+          <div className="tl-module-ui min-h-full">
+            {activeTab === 'dashboard' && (
+              <DashboardModule setActiveTab={setActiveTab} sys={sys} />
+            )}
 
-          {activeTab === 'customers' && <CustomerModule sys={sys} />}
-          {activeTab === 'suppliers' && <SupplierModule sys={sys} />}
-          {activeTab === 'invoices' && <InvoiceModule sys={sys} />}
+            {activeTab === 'customers' && <CustomerModule sys={sys} />}
+            {activeTab === 'suppliers' && <SupplierModule sys={sys} />}
+            {activeTab === 'invoices' && <InvoiceModule sys={sys} />}
 
-          {/* Separate Cash ledger stored in Supabase cash_invoices */}
-          {activeTab === 'cash' && <CashModule sys={sys} />}
+            {/* Separate Cash ledger stored in Supabase cash_invoices */}
+            {activeTab === 'cash' && <CashModule sys={sys} />}
 
-          {activeTab === 'billing' && <BillingModule sys={sys} />}
-          {activeTab === 'inventory' && <InventoryModule sys={sys} />}
-          {activeTab === 'employees' && <EmployeeModule sys={sys} />}
-          {activeTab === 'picking' && <PickingModule sys={sys} />}
-          {activeTab === 'logistics' && <LogisticsModule sys={sys} />}
-          {activeTab === 'gst' && <GSTModule sys={sys} />}
-          {activeTab === 'team' && <TeamModule sys={sys} />}
+            {activeTab === 'billing' && <BillingModule sys={sys} />}
+            {activeTab === 'inventory' && <InventoryModule sys={sys} />}
+            {activeTab === 'employees' && <EmployeeModule sys={sys} />}
+            {activeTab === 'picking' && <PickingModule sys={sys} />}
+            {activeTab === 'logistics' && <LogisticsModule sys={sys} />}
+            {activeTab === 'gst' && <GSTModule sys={sys} />}
+            {activeTab === 'team' && <TeamModule sys={sys} />}
+          </div>
         </div>
       </main>
     </div>
