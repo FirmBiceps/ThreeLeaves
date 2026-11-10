@@ -1388,7 +1388,7 @@ export function InvoiceModule({ sys }) {
   };
 
   return (
-    <div className="tl-module-page p-8 h-full overflow-y-auto relative print:p-0 print:overflow-visible">
+    <div className="tl-module-ui tl-module-page p-8 h-full overflow-y-auto relative print:p-0 print:overflow-visible">
       <div className={(previewInvoice || isGeneratorOpen) ? "print:hidden" : "block tl-screen-section"}>
         <div className="tl-page-header">
           <div>
@@ -1545,16 +1545,12 @@ export function InvoiceModule({ sys }) {
             </div>
 
             <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-              <div className="flex w-full overflow-x-auto rounded-xl border border-slate-200 bg-white p-1 shadow-sm xl:w-auto">
+              <div className="tl-segmented w-full overflow-x-auto xl:w-auto">
                 {['All', 'Today', 'This Week', 'This Month'].map((opt) => (
                   <button
                     key={opt}
                     onClick={() => setFilter(opt)}
-                    className={`whitespace-nowrap rounded-lg px-4 py-2 text-[11px] font-black uppercase tracking-wide transition-all ${
-                      filter === opt
-                        ? 'bg-slate-900 text-white shadow-sm'
-                        : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'
-                    }`}
+                    className={`tl-segmented__item whitespace-nowrap ${filter === opt ? 'is-active' : ''}`}
                   >
                     {opt}
                   </button>
@@ -1562,14 +1558,14 @@ export function InvoiceModule({ sys }) {
               </div>
 
               <div className="flex w-full flex-wrap items-center gap-3 xl:w-auto">
-              <div className="relative flex items-center bg-white border rounded-xl shadow-sm px-3 py-2 w-full sm:w-36 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
+              <div className="tl-control-group relative flex items-center w-full sm:w-36">
                 <Filter className="text-slate-400 mr-2 shrink-0" size={16} />
                 <select className="w-full bg-transparent outline-none text-xs font-bold text-slate-700 cursor-pointer appearance-none" value={termFilter} onChange={(e) => setTermFilter(e.target.value)}>
                   <option value="All">All Terms</option><option value="cod">C.O.D</option><option value="30_days">30 Days</option><option value="paynow">PayNow</option>
                 </select>
               </div>
 
-              <div className="relative flex items-center bg-white border rounded-xl shadow-sm px-3 py-2 w-full sm:w-48 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
+              <div className="tl-control-group relative flex items-center w-full sm:w-48">
                 <ArrowUpDown className="text-slate-400 mr-2 shrink-0" size={16} />
                 <select className="w-full bg-transparent outline-none text-xs font-bold text-slate-700 cursor-pointer appearance-none" value={sortOption} onChange={(e) => setSortOption(e.target.value)}>
                   <option value="number_desc">Invoice No. (Highest)</option>
@@ -1585,12 +1581,12 @@ export function InvoiceModule({ sys }) {
                 </select>
               </div>
 
-              <div className="flex w-full items-center rounded-xl border border-slate-200 bg-white px-4 py-2 shadow-sm transition-all focus-within:border-blue-300 focus-within:ring-4 focus-within:ring-blue-100 sm:w-72">
+              <div className="tl-search-control flex w-full items-center sm:w-72">
                 <Search className="mr-2 shrink-0 text-slate-400" size={16} />
                 <input
                   type="text"
                   placeholder="Customer, invoice no., SKU or product..."
-                  className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400"
+                  className="w-full bg-transparent text-[13px] outline-none placeholder:text-slate-400"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
@@ -1616,7 +1612,7 @@ export function InvoiceModule({ sys }) {
                   <th className="p-5 pl-8">Invoice No.</th>
                   <th className="p-5">Date</th>
                   <th className="p-5">Customer</th>
-                  <th className="p-5 text-center">Terms</th>
+                  <th className="p-4 text-center">Terms</th>
                   <th className="p-5 text-right">Total</th>
                   <th className="p-5 text-right">Profit</th>
                   <th className="p-5 text-center">Status</th>
@@ -1629,19 +1625,19 @@ export function InvoiceModule({ sys }) {
                   const invoiceProfit = profitInfo.profit;
 
                   return (
-                    <tr key={inv?.id} className="group cursor-pointer transition-all hover:bg-blue-50/70" onClick={() => setPreviewInvoice(inv)}>
-                      <td className="p-5 pl-8 font-mono font-bold text-blue-600 whitespace-nowrap">
+                    <tr key={inv?.id} className="group cursor-pointer transition-colors hover:bg-[#f8fafb]" onClick={() => setPreviewInvoice(inv)}>
+                      <td className="p-4 pl-5 font-mono font-semibold text-[#2457a6] whitespace-nowrap">
                         #{String(inv?.number || inv?.id || '')}
                         {inv?.isSpecialFormat && <span className="ml-2 bg-purple-100 text-purple-700 border border-purple-200 px-1.5 py-0.5 rounded text-[8px] uppercase tracking-widest font-black inline-flex items-center"><ScanBarcode size={8} className="mr-0.5" /> Spec</span>}
                       </td>
-                      <td className="p-5 text-slate-500 whitespace-nowrap">{String(inv?.date || '')}</td>
-                      <td className="p-5 text-slate-800 font-medium whitespace-nowrap">{String(inv?.customer || '')}</td>
+                      <td className="p-4 text-slate-500 whitespace-nowrap">{String(inv?.date || '')}</td>
+                      <td className="p-4 text-slate-800 font-medium whitespace-nowrap">{String(inv?.customer || '')}</td>
                       <td className="p-5 text-center">
                         <span className="text-xs font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-1 rounded-md whitespace-nowrap">
                           {inv?.paymentTerms === 'cod' ? 'C.O.D' : inv?.paymentTerms === 'paynow' ? 'PayNow' : '30 Days'}
                         </span>
                       </td>
-                      <td className="p-5 text-right font-black text-slate-900 whitespace-nowrap">${formatMoney(inv?.total)}</td>
+                      <td className="p-4 text-right font-semibold text-slate-900 whitespace-nowrap">${formatMoney(inv?.total)}</td>
                       <td
                         className="p-3 text-right whitespace-nowrap"
                         onClick={(event) => event.stopPropagation()}
