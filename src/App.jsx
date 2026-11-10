@@ -67,17 +67,17 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen bg-gray-50 font-sans text-gray-800">
+    <div className="tl-app-shell flex h-screen font-sans text-gray-800">
       <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         sys={sys}
       />
 
-      <main className="flex flex-1 flex-col overflow-hidden">
-        <header className="z-10 flex h-16 shrink-0 items-center justify-between border-b border-gray-200 bg-white px-8 shadow-sm print:hidden">
+      <main className="tl-app-main flex flex-1 flex-col overflow-hidden">
+        <header className="tl-topbar z-10 flex shrink-0 items-center justify-between px-6 md:px-8 print:hidden">
           <div className="flex items-center gap-4">
-            <h2 className="hidden text-2xl font-semibold capitalize md:block">
+            <h2 className="tl-page-heading hidden md:block">
               {activeTab.replace('-', ' ')}
             </h2>
 
@@ -101,19 +101,17 @@ export default function App() {
               </div>
             )}
 
-            <div className="hidden rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-emerald-600 md:block">
+            <div className="tl-topbar-meta hidden md:inline-flex">
               {sys.storageMode === 'supabase'
-                ? 'Supabase Connected'
-                : 'Demo Mode'}
+                ? <> <span className="tl-status-dot" /> Connected </>
+                : <> <span className="tl-status-dot is-error" /> Demo mode </>}
             </div>
 
-            <div className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-bold uppercase tracking-tighter text-blue-600 md:text-sm">
-              Three Leaves ERP
-            </div>
+            <div className="text-xs font-bold tracking-[0.12em] text-slate-500">THREE LEAVES ERP</div>
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-8 print:overflow-visible print:p-0">
+        <div className="tl-content flex-1 overflow-y-auto print:overflow-visible print:p-0">
           {activeTab === 'dashboard' && (
             <DashboardModule setActiveTab={setActiveTab} sys={sys} />
           )}
