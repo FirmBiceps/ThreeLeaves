@@ -2,21 +2,659 @@
 @tailwind components;
 @tailwind utilities;
 
-html,
-body,
-#root {
-  height: 100%;
+html, body, #root { height: 100%; }
+
+:root {
+  --tl-ink: #17202a;
+  --tl-muted: #667085;
+  --tl-subtle: #98a2b3;
+  --tl-border: #e4e7ec;
+  --tl-border-strong: #d0d5dd;
+  --tl-surface: #ffffff;
+  --tl-canvas: #f5f6f8;
+  --tl-sidebar: #1f252d;
+  --tl-sidebar-muted: #aeb6c2;
+  --tl-sidebar-line: rgba(255,255,255,.10);
+  --tl-accent: #2f5d50;
+  --tl-accent-soft: #edf4f1;
+  --tl-danger: #b42318;
+  --tl-warning: #b54708;
+  --tl-success: #027a48;
+  --tl-radius: 8px;
+}
+
+html {
+  background: var(--tl-canvas);
+  color-scheme: light;
 }
 
 body {
   margin: 0;
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #1f2937;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--tl-ink);
+  background: var(--tl-canvas);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-button,
-input,
-select,
-textarea {
-  font: inherit;
+button, input, select, textarea { font: inherit; }
+button { -webkit-tap-highlight-color: transparent; }
+
+/* Web application shell only. PDF/report markup is intentionally not targeted. */
+.tl-app-shell {
+  min-height: 100vh;
+  background: var(--tl-canvas);
+}
+
+.tl-app-main {
+  min-width: 0;
+  background: var(--tl-canvas);
+}
+
+.tl-topbar {
+  height: 64px;
+  border-bottom: 1px solid var(--tl-border);
+  background: rgba(255,255,255,.96);
+}
+
+.tl-content {
+  padding: 28px 32px 40px;
+}
+
+.tl-page-heading {
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 650;
+  letter-spacing: -.02em;
+  color: var(--tl-ink);
+}
+
+.tl-topbar-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--tl-border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--tl-muted);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: .02em;
+}
+
+.tl-status-dot { width: 7px; height: 7px; border-radius: 50%; background: #12b76a; }
+.tl-status-dot.is-error { background: #d92d20; }
+
+/* Shared enterprise primitives for the redesigned web UI. */
+.tl-surface {
+  background: var(--tl-surface);
+  border: 1px solid var(--tl-border);
+  border-radius: var(--tl-radius);
+  box-shadow: 0 1px 2px rgba(16,24,40,.03);
+}
+
+.tl-section-title {
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 700;
+  color: var(--tl-ink);
+}
+
+.tl-section-caption {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--tl-muted);
+}
+
+.tl-control {
+  min-height: 36px;
+  border: 1px solid var(--tl-border-strong);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--tl-ink);
+  font-size: 13px;
+  font-weight: 550;
+}
+
+.tl-control:focus {
+  outline: 2px solid rgba(47,93,80,.16);
+  outline-offset: 1px;
+  border-color: #8aa79d;
+}
+
+.tl-button {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--tl-border-strong);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--tl-ink);
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.tl-button:hover { background: #f9fafb; }
+.tl-button-primary { background: var(--tl-accent); border-color: var(--tl-accent); color: #fff; }
+.tl-button-primary:hover { background: #274d42; }
+
+/* Reduce visual noise in common web tables without touching PDF output. */
+.tl-app-shell table thead th {
+  background: #f8f9fb;
+  color: #475467;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .035em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--tl-border);
+}
+
+.tl-app-shell table tbody td {
+  border-bottom: 1px solid #eef0f3;
+  color: #344054;
+}
+
+.tl-app-shell table tbody tr:hover { background: #fafbfc; }
+
+@media (max-width: 900px) {
+  .tl-content { padding: 20px; }
+}
+
+@media (max-width: 640px) {
+  .tl-content { padding: 16px; }
+  .tl-topbar { height: 58px; }
+}
+
+@media print {
+  .tl-app-shell { background: #fff !important; }
+}
+
+
+/* -------------------------------------------------------------------------
+   Three Leaves application surfaces
+   Purpose: remove generic AI-dashboard treatment from operational pages while
+   keeping the existing business logic and report/PDF markup independent.
+   ------------------------------------------------------------------------- */
+.tl-module-ui {
+  color: var(--tl-ink);
+  font-size: 13px;
+}
+
+.tl-module-page {
+  min-height: 100%;
+  background: transparent;
+}
+
+.tl-screen-section {
+  background: transparent;
+}
+
+.tl-page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.tl-page-header__title {
+  margin: 0;
+  color: var(--tl-ink);
+  font-size: 22px;
+  line-height: 30px;
+  font-weight: 700;
+  letter-spacing: -.025em;
+}
+
+.tl-page-header__subtitle {
+  margin-top: 4px;
+  color: var(--tl-muted);
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 500;
+}
+
+.tl-page-header__eyebrow {
+  margin-bottom: 5px;
+  color: #667085;
+  font-size: 10px;
+  line-height: 14px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.tl-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--tl-border);
+  background: #fff;
+}
+
+.tl-panel {
+  border: 1px solid var(--tl-border);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(16,24,40,.025);
+}
+
+.tl-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--tl-border);
+}
+
+.tl-panel__title {
+  color: var(--tl-ink);
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 700;
+}
+
+.tl-panel__caption {
+  margin-top: 2px;
+  color: var(--tl-muted);
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+}
+
+.tl-metric-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.tl-metric-card {
+  min-height: 108px;
+  padding: 16px;
+  border: 1px solid var(--tl-border);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(16,24,40,.025);
+}
+
+.tl-metric-card__label {
+  color: #667085;
+  font-size: 10px;
+  line-height: 14px;
+  font-weight: 700;
+  letter-spacing: .10em;
+  text-transform: uppercase;
+}
+
+.tl-metric-card__value {
+  margin-top: 7px;
+  color: var(--tl-ink);
+  font-size: 24px;
+  line-height: 30px;
+  font-weight: 700;
+  letter-spacing: -.025em;
+  font-variant-numeric: tabular-nums;
+}
+
+.tl-metric-card__helper {
+  margin-top: 7px;
+  color: var(--tl-muted);
+  font-size: 11px;
+  line-height: 17px;
+  font-weight: 500;
+}
+
+.tl-metric-card__icon {
+  color: #475467;
+}
+
+.tl-data-panel {
+  overflow: hidden;
+  border: 1px solid var(--tl-border);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(16,24,40,.025);
+}
+
+.tl-data-panel table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.tl-data-panel thead th {
+  padding: 11px 14px !important;
+  background: #f8f9fb !important;
+  color: #475467 !important;
+  border-bottom: 1px solid var(--tl-border) !important;
+  font-size: 10px !important;
+  line-height: 14px !important;
+  font-weight: 700 !important;
+  letter-spacing: .07em !important;
+  text-transform: uppercase !important;
+}
+
+.tl-data-panel tbody td {
+  padding: 12px 14px !important;
+  border-bottom: 1px solid #eef0f3 !important;
+}
+
+.tl-data-panel tbody tr:last-child td { border-bottom: 0 !important; }
+.tl-data-panel tbody tr:hover { background: #fafbfc !important; }
+
+.tl-segmented {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--tl-border);
+  background: #f7f8fa;
+}
+
+.tl-segmented__item {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 0;
+  background: transparent;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.tl-segmented__item.is-active {
+  background: #fff;
+  color: #17202a;
+  box-shadow: 0 1px 2px rgba(16,24,40,.08);
+}
+
+.tl-primary-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  gap: 8px;
+  border: 1px solid #17202a;
+  border-radius: 6px;
+  background: #17202a;
+  color: #fff;
+  padding: 0 15px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .01em;
+}
+
+.tl-primary-action:hover { background: #27313c; }
+
+.tl-secondary-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  gap: 8px;
+  border: 1px solid var(--tl-border-strong);
+  border-radius: 6px;
+  background: #fff;
+  color: #344054;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.tl-secondary-action:hover { background: #f8f9fb; }
+
+.tl-status-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--tl-border);
+  background: #fff;
+  color: #475467;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+/* Avoid the visual language the Open Design rules call out as AI-defaults:
+   no indigo/purple primary actions, no gradient hero treatment, and no
+   oversized rounded tiles. These selectors are limited to explicitly marked
+   application UI classes; PDF/report markup is not selected. */
+.tl-module-ui .tl-screen-section .bg-indigo-600,
+.tl-module-ui .tl-screen-section .bg-purple-600,
+.tl-module-ui .tl-screen-section .bg-violet-600 {
+  background: #17202a !important;
+}
+
+.tl-module-ui .tl-screen-section .text-indigo-600,
+.tl-module-ui .tl-screen-section .text-indigo-700,
+.tl-module-ui .tl-screen-section .text-purple-600,
+.tl-module-ui .tl-screen-section .text-violet-600 {
+  color: #344054 !important;
+}
+
+.tl-module-ui .tl-screen-section .bg-indigo-50,
+.tl-module-ui .tl-screen-section .bg-purple-50,
+.tl-module-ui .tl-screen-section .bg-violet-50 {
+  background: #f7f8fa !important;
+}
+
+.tl-module-ui .tl-screen-section .border-indigo-200,
+.tl-module-ui .tl-screen-section .border-purple-200,
+.tl-module-ui .tl-screen-section .border-violet-200 {
+  border-color: #d0d5dd !important;
+}
+
+.tl-module-ui .tl-screen-section > .rounded-2xl,
+.tl-module-ui .tl-screen-section > .rounded-3xl {
+  border-radius: 8px !important;
+  box-shadow: 0 1px 2px rgba(16,24,40,.025) !important;
+}
+
+.tl-module-ui .tl-screen-section > .shadow-2xl,
+.tl-module-ui .tl-screen-section > .shadow-xl,
+.tl-module-ui .tl-screen-section > .shadow-lg {
+  box-shadow: 0 1px 2px rgba(16,24,40,.035) !important;
+}
+
+@media (max-width: 900px) {
+  .tl-page-header { align-items: flex-start; flex-direction: column; }
+}
+
+/* Invoice workspace controls: explicit styles keep the page consistent even
+   when Tailwind utility ordering changes. Web UI only; no report/PDF selectors. */
+.tl-module-ui .tl-control-group,
+.tl-module-ui .tl-search-control {
+  min-height: 38px;
+  border: 1px solid var(--tl-border-strong);
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: none;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+.tl-module-ui .tl-control-group:focus-within,
+.tl-module-ui .tl-search-control:focus-within {
+  border-color: #98a2b3;
+  box-shadow: 0 0 0 2px rgba(23,32,42,.06);
+}
+
+.tl-module-ui .tl-control-group select {
+  min-height: 36px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--tl-ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.tl-module-ui .tl-search-control input {
+  min-height: 36px;
+}
+
+.tl-module-ui .tl-data-panel {
+  border-radius: 8px;
+}
+
+.tl-module-ui .tl-data-panel > div:first-child {
+  background: #fff !important;
+}
+
+.tl-module-ui .tl-data-panel table {
+  table-layout: auto;
+}
+
+.tl-module-ui .tl-data-panel thead th {
+  white-space: nowrap;
+}
+
+.tl-module-ui .tl-data-panel tbody td {
+  vertical-align: middle;
+}
+
+
+/* ========================================================================
+   THREE LEAVES PROFESSIONAL UI â€” GLOBAL SCREEN POLISH
+   Screen-only overrides. Intentionally excluded from print so report/PDF
+   presentation remains unchanged.
+   ======================================================================== */
+@media screen {
+  .tl-app-shell,
+  .tl-app-shell * {
+    --tw-ring-offset-shadow: 0 0 #0000;
+  }
+
+  .tl-app-shell .tl-module-ui {
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: var(--tl-ink);
+  }
+
+  /* Consistent operational typography without forcing decorative styling. */
+  .tl-app-shell .tl-module-ui h1,
+  .tl-app-shell .tl-module-ui h2,
+  .tl-app-shell .tl-module-ui h3,
+  .tl-app-shell .tl-module-ui h4 {
+    color: var(--tl-ink);
+    letter-spacing: -.018em;
+  }
+
+  .tl-app-shell .tl-module-ui label {
+    color: #475467;
+  }
+
+  .tl-app-shell .tl-module-ui input,
+  .tl-app-shell .tl-module-ui select,
+  .tl-app-shell .tl-module-ui textarea {
+    border-color: var(--tl-border-strong);
+    border-radius: 6px;
+    box-shadow: none;
+  }
+
+  .tl-app-shell .tl-module-ui input:focus,
+  .tl-app-shell .tl-module-ui select:focus,
+  .tl-app-shell .tl-module-ui textarea:focus {
+    border-color: #8aa79d;
+    box-shadow: 0 0 0 2px rgba(47,93,80,.10);
+    outline: none;
+  }
+
+  /* Neutralise common AI-default accent colours on application screens. */
+  .tl-app-shell .tl-module-ui .bg-indigo-500,
+  .tl-app-shell .tl-module-ui .bg-indigo-600,
+  .tl-app-shell .tl-module-ui .bg-indigo-700,
+  .tl-app-shell .tl-module-ui .bg-purple-500,
+  .tl-app-shell .tl-module-ui .bg-purple-600,
+  .tl-app-shell .tl-module-ui .bg-purple-700,
+  .tl-app-shell .tl-module-ui .bg-violet-500,
+  .tl-app-shell .tl-module-ui .bg-violet-600,
+  .tl-app-shell .tl-module-ui .bg-violet-700 {
+    background-color: #17202a !important;
+  }
+
+  .tl-app-shell .tl-module-ui .text-indigo-500,
+  .tl-app-shell .tl-module-ui .text-indigo-600,
+  .tl-app-shell .tl-module-ui .text-indigo-700,
+  .tl-app-shell .tl-module-ui .text-purple-500,
+  .tl-app-shell .tl-module-ui .text-purple-600,
+  .tl-app-shell .tl-module-ui .text-purple-700,
+  .tl-app-shell .tl-module-ui .text-violet-500,
+  .tl-app-shell .tl-module-ui .text-violet-600,
+  .tl-app-shell .tl-module-ui .text-violet-700 {
+    color: #344054 !important;
+  }
+
+  .tl-app-shell .tl-module-ui .bg-indigo-50,
+  .tl-app-shell .tl-module-ui .bg-purple-50,
+  .tl-app-shell .tl-module-ui .bg-violet-50,
+  .tl-app-shell .tl-module-ui .bg-indigo-100,
+  .tl-app-shell .tl-module-ui .bg-purple-100,
+  .tl-app-shell .tl-module-ui .bg-violet-100 {
+    background-color: #f7f8fa !important;
+  }
+
+  .tl-app-shell .tl-module-ui .border-indigo-200,
+  .tl-app-shell .tl-module-ui .border-purple-200,
+  .tl-app-shell .tl-module-ui .border-violet-200,
+  .tl-app-shell .tl-module-ui .border-indigo-300,
+  .tl-app-shell .tl-module-ui .border-purple-300,
+  .tl-app-shell .tl-module-ui .border-violet-300 {
+    border-color: var(--tl-border-strong) !important;
+  }
+
+  /* Reduce oversized card treatment while retaining existing component layout. */
+  .tl-app-shell .tl-module-ui .rounded-3xl {
+    border-radius: 8px !important;
+  }
+
+  .tl-app-shell .tl-module-ui .rounded-2xl {
+    border-radius: 8px !important;
+  }
+
+  .tl-app-shell .tl-module-ui .shadow-2xl {
+    box-shadow: 0 8px 24px rgba(16,24,40,.10) !important;
+  }
+
+  .tl-app-shell .tl-module-ui .font-black {
+    font-weight: 700 !important;
+  }
+
+  /* Remove decorative gradient treatment from operational screens. */
+  .tl-app-shell .tl-module-ui [class*="bg-gradient-to-"] {
+    background-image: none !important;
+    background-color: #fff !important;
+  }
+
+  /* Keep status colours meaningful, but restrained. */
+  .tl-app-shell .tl-module-ui .bg-emerald-100 { background-color: #ecfdf3 !important; }
+  .tl-app-shell .tl-module-ui .bg-amber-100 { background-color: #fffaeb !important; }
+  .tl-app-shell .tl-module-ui .bg-orange-100 { background-color: #fff7ed !important; }
+  .tl-app-shell .tl-module-ui .bg-red-100 { background-color: #fef3f2 !important; }
+
+  /* Shared modal/workbench surfaces. */
+  .tl-app-shell .tl-module-ui [class*="rounded-3xl"][class*="bg-white"],
+  .tl-app-shell .tl-module-ui [class*="rounded-2xl"][class*="bg-white"] {
+    border-color: var(--tl-border);
+  }
+
+  /* Buttons become quieter and more enterprise-like unless explicitly marked. */
+  .tl-app-shell .tl-module-ui button:not(.tl-primary-action):not(.tl-secondary-action) {
+    transition: background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease;
+  }
+}
+
+/* Never apply the screen-polish overrides to printed reports. */
+@media print {
+  .tl-app-shell .tl-module-ui .rounded-3xl,
+  .tl-app-shell .tl-module-ui .rounded-2xl,
+  .tl-app-shell .tl-module-ui .shadow-2xl,
+  .tl-app-shell .tl-module-ui .font-black {
+    /* Deliberately empty: Tailwind's print rules and existing report markup
+       remain authoritative. */
+  }
 }
