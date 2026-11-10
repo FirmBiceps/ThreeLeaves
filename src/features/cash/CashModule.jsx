@@ -731,32 +731,16 @@ function SummaryCard({
   tone = 'blue',
   subtext = 'Matching the current view',
 }) {
-  const tones = {
-    blue: 'bg-blue-50 text-blue-600',
-    indigo: 'bg-indigo-50 text-indigo-600',
-    emerald: 'bg-emerald-50 text-emerald-600',
-    amber: 'bg-amber-50 text-amber-600',
-    rose: 'bg-rose-50 text-rose-600',
-  };
-
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="tl-metric-card">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
-            {label}
-          </p>
-          <p className="mt-2 break-words text-2xl font-black text-slate-900">
-            {value}
-          </p>
+          <p className="tl-metric-card__label">{label}</p>
+          <p className="tl-metric-card__value">{value}</p>
         </div>
-
-        <div className={`shrink-0 rounded-xl p-3 ${tones[tone] || tones.blue}`}>
-          {icon}
-        </div>
+        <div className="tl-metric-card__icon" aria-hidden="true">{icon}</div>
       </div>
-
-      <p className="mt-3 text-xs leading-5 text-slate-500">{subtext}</p>
+      <p className="tl-metric-card__helper">{subtext}</p>
     </div>
   );
 }
@@ -2054,26 +2038,24 @@ export function CashModule({ sys }) {
   };
 
   return (
-    <div className="relative h-full overflow-y-auto p-4 sm:p-6 lg:p-8 print:overflow-visible print:p-0">
+    <div className="tl-module-page relative h-full overflow-y-auto p-4 sm:p-6 lg:p-8 print:overflow-visible print:p-0">
       <Toast toast={toast} onClose={() => setToast(null)} />
 
       <div
         className={
-          previewInvoice || isGeneratorOpen ? 'print:hidden' : 'block'
+          previewInvoice || isGeneratorOpen ? 'print:hidden' : 'block tl-screen-section'
         }
       >
         <div className="mx-auto w-full max-w-[1700px]">
-          <div className="mb-7 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div className="tl-page-header mb-7">
             <div className="flex items-center">
               <div className="mr-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 ring-1 ring-emerald-100">
                 <WalletCards className="text-emerald-600" size={24} />
               </div>
 
               <div>
-                <h1 className="text-2xl font-semibold text-slate-900">
-                  Cash History
-                </h1>
-                <p className="mt-1 max-w-3xl text-sm leading-5 text-slate-500">
+                <h1 className="tl-page-header__title">Cash History</h1>
+                <p className="tl-page-header__subtitle max-w-3xl">
                   Create, review and manage Cash invoices independently from
                   the normal invoice ledger. Profit uses locked historical cost
                   where available.
@@ -2086,7 +2068,7 @@ export function CashModule({ sys }) {
                 type="button"
                 onClick={() => void fetchCashInvoices()}
                 disabled={isLoading}
-                className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs font-black uppercase tracking-wider text-slate-600 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="tl-secondary-action disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <RefreshCw
                   size={15}
@@ -2096,7 +2078,7 @@ export function CashModule({ sys }) {
               </button>
 
               <button
-                className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-6 py-3 font-medium text-white shadow-lg shadow-emerald-600/20 transition-all hover:-translate-y-0.5 hover:bg-emerald-700 hover:shadow-xl active:translate-y-0"
+                className="tl-primary-action"
                 onClick={() => {
                   setEditingInvoice(null);
                   setIsGeneratorOpen(true);
@@ -2133,7 +2115,7 @@ export function CashModule({ sys }) {
             </div>
           )}
 
-          <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="tl-metric-grid mb-5 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
             <SummaryCard
               label="Cash Invoices"
               value={filteredInvoices.length}
