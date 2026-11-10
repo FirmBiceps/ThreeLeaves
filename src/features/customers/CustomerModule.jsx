@@ -1523,7 +1523,7 @@ export function CustomerModule({ sys }) {
     const navigationUrl = getNavigateUrl(address);
 
     return (
-      <div className="space-y-6 pb-8">
+      <div className="tl-module-page space-y-6 pb-8">
         <Toast toast={toast} onClose={() => setToast(null)}/>
 
         <button className="flex items-center text-sm font-bold text-gray-500 hover:text-gray-800" onClick={() => { setSelectedCustomerId(null); setDetailTab('overview'); }} type="button"><ArrowRight className="mr-2 rotate-180" size={16}/>Back to Customer Intelligence</button>
