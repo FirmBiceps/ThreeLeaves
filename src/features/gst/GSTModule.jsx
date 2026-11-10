@@ -307,23 +307,23 @@ function saveStoredSalesExclusions(exclusions) {
 
 function DashboardCard({ icon: Icon, label, value, helper, tone = 'slate' }) {
   const toneMap = {
-    blue: 'border-blue-100 bg-blue-50 text-blue-700',
-    emerald: 'border-emerald-100 bg-emerald-50 text-emerald-700',
-    amber: 'border-amber-100 bg-amber-50 text-amber-700',
-    red: 'border-red-100 bg-red-50 text-red-700',
-    slate: 'border-slate-200 bg-white text-slate-700',
-    indigo: 'border-indigo-100 bg-indigo-50 text-indigo-700',
+    blue: 'tl-metric-card',
+    emerald: 'tl-metric-card',
+    amber: 'tl-metric-card',
+    red: 'tl-metric-card',
+    slate: 'tl-metric-card',
+    indigo: 'tl-metric-card',
   };
 
   return (
-    <div className={`rounded-2xl border p-5 shadow-sm ${toneMap[tone] || toneMap.slate}`}>
+    <div className={toneMap[tone] || toneMap.slate}>
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] opacity-70">{label}</p>
-          <p className="mt-2 font-mono text-2xl font-black tracking-tight">{value}</p>
-          <p className="mt-2 text-xs font-semibold opacity-80">{helper}</p>
+          <p className="tl-metric-card__label">{label}</p>
+          <p className="tl-metric-card__value font-mono">{value}</p>
+          <p className="tl-metric-card__helper">{helper}</p>
         </div>
-        <div className="rounded-xl bg-white/70 p-2.5 shadow-sm">
+        <div className="tl-metric-card__icon">
           <Icon size={20} />
         </div>
       </div>
@@ -1936,16 +1936,17 @@ export function GSTModule({ sys }) {
           }
         }
       `}</style>
-    <div className="min-h-full space-y-6 bg-slate-50/60 p-8">
-      <div className="flex flex-col justify-between gap-5 xl:flex-row xl:items-center">
+    <div className="tl-module-page min-h-full space-y-6 bg-transparent p-8">
+      <div className="tl-screen-section">
+        <div className="tl-page-header">
         <div>
           <div className="flex items-center gap-3">
-            <div className="rounded-2xl bg-indigo-600 p-3 text-white shadow-lg shadow-indigo-500/20">
+            <div className="flex h-11 w-11 items-center justify-center border border-slate-200 bg-white text-slate-700">
               <ReceiptText size={24} />
             </div>
             <div>
-              <h1 className="text-2xl font-semibold text-slate-900">Quarterly GST Centre</h1>
-              <p className="mt-1 text-sm font-medium text-slate-500">
+              <h1 className="tl-page-header__title">Quarterly GST Centre</h1>
+              <p className="tl-page-header__subtitle">
                 Automated sales GST, manual supplier purchases, and quarterly tax overview.
               </p>
             </div>
@@ -1954,7 +1955,7 @@ export function GSTModule({ sys }) {
 
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm">
-            <CalendarRange size={17} className="ml-2 text-indigo-600" />
+            <CalendarRange size={17} className="ml-2 text-slate-500" />
             <select
               value={selectedYear}
               onChange={(event) => setSelectedYear(Number(event.target.value))}
@@ -2055,11 +2056,11 @@ export function GSTModule({ sys }) {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="tl-metric-grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="tl-metric-card">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Taxable Sales</p>
+              <p className="tl-metric-card__label">Taxable Sales</p>
               <p className="mt-2 font-mono text-2xl font-black text-slate-900">${formatMoney(report.taxableSales)}</p>
             </div>
             <div className="rounded-xl bg-indigo-50 p-3 text-indigo-600"><BarChart3 size={22} /></div>
@@ -2069,10 +2070,10 @@ export function GSTModule({ sys }) {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="tl-metric-card">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Taxable Purchases</p>
+              <p className="tl-metric-card__label">Taxable Purchases</p>
               <p className="mt-2 font-mono text-2xl font-black text-slate-900">${formatMoney(report.taxablePurchases)}</p>
             </div>
             <div className="rounded-xl bg-emerald-50 p-3 text-emerald-600"><ShoppingCart size={22} /></div>
@@ -2084,6 +2085,8 @@ export function GSTModule({ sys }) {
             />
           </div>
         </div>
+      </div>
+
       </div>
 
       <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
