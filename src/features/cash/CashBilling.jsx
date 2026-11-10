@@ -156,35 +156,16 @@ function BillingSummaryCard({
   icon,
   tone = 'blue',
 }) {
-  const toneClasses = {
-    blue: 'bg-blue-50 text-blue-600',
-    emerald: 'bg-emerald-50 text-emerald-600',
-    amber: 'bg-amber-50 text-amber-600',
-    indigo: 'bg-indigo-50 text-indigo-600',
-  };
-
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="tl-metric-card">
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
-            {label}
-          </p>
-          <p className="mt-2 truncate text-2xl font-black text-slate-900">
-            {value}
-          </p>
+          <p className="tl-metric-card__label">{label}</p>
+          <p className="tl-metric-card__value truncate">{value}</p>
         </div>
-
-        <div
-          className={`shrink-0 rounded-xl p-3 ${
-            toneClasses[tone] || toneClasses.blue
-          }`}
-        >
-          {icon}
-        </div>
+        <div className="tl-metric-card__icon" aria-hidden="true">{icon}</div>
       </div>
-
-      <p className="mt-3 text-xs leading-5 text-slate-500">{subtext}</p>
+      <p className="tl-metric-card__helper">{subtext}</p>
     </div>
   );
 }
@@ -979,25 +960,21 @@ export function CashBilling({ sys }) {
   ) : null;
 
   return (
-    <div className="relative h-full overflow-y-auto p-5 sm:p-8">
+    <div className="tl-module-page relative h-full overflow-y-auto p-5 sm:p-8">
       <div className="pointer-events-none absolute h-0 w-0 overflow-hidden opacity-0">
         <img src={logo} alt="Preload logo" />
         <img src={paynowQr} alt="Preload PayNow" />
       </div>
 
-      <div className="mb-7 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+      <div className="tl-page-header mb-7">
         <div className="flex items-center">
-          <div className="mr-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 ring-1 ring-blue-100">
-            <ReceiptText className="text-blue-600" size={23} />
+          <div className="mr-3 flex h-11 w-11 items-center justify-center border border-slate-200 bg-white text-slate-700">
+            <ReceiptText className="text-slate-700" size={23} />
           </div>
 
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900">
-              Cash Billing
-            </h1>
-            <p className="mt-1 text-sm text-slate-500">
-              Monthly Cash billing summaries, customer statements, print and ZIP exports.
-            </p>
+            <h1 className="tl-page-header__title">Cash Billing</h1>
+            <p className="tl-page-header__subtitle">Monthly Cash billing summaries, customer statements, print and ZIP exports.</p>
           </div>
         </div>
 
@@ -1006,7 +983,7 @@ export function CashBilling({ sys }) {
             type="button"
             onClick={() => void refreshCashBilling()}
             disabled={isLoading || isZipping}
-            className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-black text-slate-600 shadow-sm transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="tl-secondary-action disabled:cursor-not-allowed disabled:opacity-50"
           >
             <RefreshCw
               size={15}
@@ -1023,7 +1000,7 @@ export function CashBilling({ sys }) {
               isLoading ||
               isZipping
             }
-            className="inline-flex items-center justify-center rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-black text-white shadow-lg shadow-indigo-600/20 transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="tl-primary-action disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isZipping ? (
               <Loader2 size={16} className="mr-2 animate-spin" />
@@ -1041,7 +1018,7 @@ export function CashBilling({ sys }) {
               isLoading ||
               isZipping
             }
-            className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-black text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="tl-primary-action disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Printer size={16} className="mr-2" />
             Print All
