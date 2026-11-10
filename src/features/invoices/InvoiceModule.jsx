@@ -513,11 +513,15 @@ function ProfitBreakdownModal({
   onClose,
   onViewInvoice,
   onLockResolvedCosts,
+  onResolveMissingCost,
 }) {
   const [itemFilter, setItemFilter] = useState('all');
   const [itemSearch, setItemSearch] = useState('');
   const [isLocking, setIsLocking] = useState(false);
   const [actionMessage, setActionMessage] = useState('');
+  const [editingCostIndex, setEditingCostIndex] = useState(null);
+  const [costDraft, setCostDraft] = useState('');
+  const [isSavingCost, setIsSavingCost] = useState(false);
 
   const breakdown = useMemo(
     () => buildInvoiceProfitBreakdown(invoice, inventory),
@@ -559,6 +563,47 @@ function ProfitBreakdownModal({
         .some((value) => value.includes(search));
     });
   }, [breakdown.rows, itemFilter, itemSearch]);
+
+  const startCostEdit = (row) => {
+    if (!row?.needsReview || row.source !== 'missing_cost' || !row.product) return;
+    setEditingCostIndex(row.itemIndex);
+    setCostDraft('');
+    setActionMessage('');
+  };
+
+  const cancelCostEdit = () => {
+    if (isSavingCost) return;
+    setEditingCostIndex(null);
+    setCostDraft('');
+  };
+
+  const handleSaveMissingCost = async (row) => {
+    if (!onResolveMissingCost || !row?.product || row.source !== 'missing_cost') return;
+
+    const parsed = Number(costDraft);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setActionMessage('Enter a valid cost price greater than 0.00.');
+      return;
+    }
+
+    setIsSavingCost(true);
+    setActionMessage('');
+
+    try {
+      const result = await onResolveMissingCost(invoice, row, parsed);
+      setEditingCostIndex(null);
+      setCostDraft('');
+      setActionMessage(
+        result?.remainingCount > 0
+          ? `Cost saved for ${row.name}. ${result.remainingCount} item${result.remainingCount === 1 ? '' : 's'} still need attention.`
+          : `Cost saved for ${row.name}. Profit is now fully calculated and locked for this invoice.`
+      );
+    } catch (error) {
+      setActionMessage(`Unable to save cost: ${error.message}`);
+    } finally {
+      setIsSavingCost(false);
+    }
+  };
 
   const handleLock = async () => {
     if (!onLockResolvedCosts || breakdown.currentCostRows.length === 0) {
@@ -893,7 +938,56 @@ function ProfitBreakdownModal({
 
                     <td className="px-4 py-4 text-right font-mono font-bold">
                       {row.costPrice === null ? (
-                        <span className="text-amber-600">—</span>
+                        row.source === 'missing_cost' && row.product ? (
+                          editingCostIndex === row.itemIndex ? (
+                            <div className="flex items-center justify-end gap-2">
+                              <div className="flex items-center rounded-lg border border-amber-300 bg-white px-2 py-1.5 shadow-sm focus-within:border-slate-900">
+                                <span className="mr-1 text-xs text-slate-400">$</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={costDraft}
+                                  onChange={(event) => setCostDraft(event.target.value)}
+                                  onKeyDown={(event) => {
+                                    if (event.key === 'Enter') handleSaveMissingCost(row);
+                                    if (event.key === 'Escape') cancelCostEdit();
+                                  }}
+                                  placeholder="0.00"
+                                  autoFocus
+                                  disabled={isSavingCost}
+                                  className="w-24 bg-transparent text-right text-xs font-bold text-slate-800 outline-none placeholder:text-slate-300"
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleSaveMissingCost(row)}
+                                disabled={isSavingCost}
+                                className="rounded-lg bg-slate-900 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-white transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                {isSavingCost ? 'Saving…' : 'Save'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={cancelCostEdit}
+                                disabled={isSavingCost}
+                                className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[10px] font-black uppercase tracking-wider text-slate-500 hover:bg-slate-50"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => startCostEdit(row)}
+                              className="inline-flex items-center rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-amber-700 transition-colors hover:bg-amber-100"
+                            >
+                              + Add cost
+                            </button>
+                          )
+                        ) : (
+                          <span className="text-amber-600">—</span>
+                        )
                       ) : (
                         <span className="text-slate-700">
                           ${formatMoney(row.costPrice)}
@@ -1130,6 +1224,127 @@ export function InvoiceModule({ sys }) {
       const updatedInvoices = safeInvoices.map(inv => { if (inv?.id === invoiceId) { return { ...inv, status: newStatus }; } return inv; });
       sys.setInvoices(updatedInvoices);
     } catch (err) { alert(`Failed to update status: ${err.message}`); }
+  };
+
+  const handleResolveMissingCost = async (invoice, row, costPrice) => {
+    if (!invoice?.id) throw new Error('Invoice ID is missing.');
+    if (!row?.product?.id) throw new Error('This invoice item is not linked to a product record.');
+
+    const productId = row.product.id;
+    const numericCost = Number(costPrice);
+    if (!Number.isFinite(numericCost) || numericCost <= 0) {
+      throw new Error('Enter a valid cost price greater than 0.00.');
+    }
+
+    const previousCost = getInventoryCost(row.product);
+
+    const { data: savedProduct, error: productError } = await supabase
+      .from('product_list')
+      .update({ 'cost_price (SGD)': numericCost })
+      .eq('id', productId)
+      .select()
+      .single();
+
+    if (productError) throw productError;
+
+    const updatedInventory = safeInventory.map((product) =>
+      String(product?.id || '') === String(productId)
+        ? savedProduct
+        : product
+    );
+
+    const items = Array.isArray(invoice?.items) ? invoice.items : [];
+    const capturedAt = new Date().toISOString();
+
+    const nextItems = items.map((item, itemIndex) => {
+      if (itemIndex !== row.itemIndex) return item;
+
+      return {
+        ...item,
+        sellingPriceSnapshot: row.sellPrice,
+        lineRevenueSnapshot: row.revenue,
+        costPriceSnapshot: numericCost,
+        costSnapshotItemId: productId,
+        inventoryUnitSnapshot: row.inventoryUnit || null,
+        lineCostSnapshot: row.qty * numericCost,
+        lineProfitSnapshot: row.revenue - row.qty * numericCost,
+        costNeedsReview: false,
+        costReviewReason: null,
+        costSnapshotBasis: 'manual_cost_resolution',
+        costCapturedAt: capturedAt,
+      };
+    });
+
+    const recalculationInvoice = {
+      ...invoice,
+      items: nextItems,
+      gross_profit: null,
+      cost_total: null,
+      gross_margin_pct: null,
+      profit_missing_cost_count: 0,
+    };
+
+    const nextBreakdown = buildInvoiceProfitBreakdown(
+      recalculationInvoice,
+      updatedInventory
+    );
+
+    const remainingCount = nextBreakdown.unresolvedRows.length;
+    const costTotal = remainingCount === 0 ? nextBreakdown.knownCostTotal : null;
+    const grossProfit = remainingCount === 0 ? nextBreakdown.calculatedProfit : null;
+    const grossMarginPct = remainingCount === 0 ? nextBreakdown.calculatedMarginPct : null;
+
+    const existingTotal = Number(invoice?.total) || 0;
+    const gstAmount =
+      invoice?.gst_amount !== null &&
+      invoice?.gst_amount !== undefined &&
+      Number.isFinite(Number(invoice.gst_amount))
+        ? Number(invoice.gst_amount)
+        : Math.max(existingTotal - nextBreakdown.subtotal, 0);
+
+    const payload = {
+      items: nextItems,
+      subtotal_ex_gst: nextBreakdown.subtotal,
+      gst_amount: gstAmount,
+      cost_total: costTotal,
+      gross_profit: grossProfit,
+      gross_margin_pct: grossMarginPct,
+      profit_basis: 'post_invoice_cost_resolution',
+      profit_is_estimated: true,
+      profit_missing_cost_count: remainingCount,
+      profit_locked_at: remainingCount === 0 ? capturedAt : null,
+    };
+
+    const { error: invoiceError } = await supabase
+      .from('invoices')
+      .update(payload)
+      .eq('id', invoice.id);
+
+    if (invoiceError) {
+      // Roll the product cost back if the invoice update fails so the two
+      // records do not silently drift apart.
+      await supabase
+        .from('product_list')
+        .update({ 'cost_price (SGD)': previousCost ?? 0 })
+        .eq('id', productId);
+      throw invoiceError;
+    }
+
+    const updatedInvoice = { ...invoice, ...payload };
+
+    sys.setInventory(updatedInventory);
+    sys.setInvoices(
+      safeInvoices.map((entry) =>
+        entry?.id === invoice.id ? updatedInvoice : entry
+      )
+    );
+    setProfitBreakdownInvoice(updatedInvoice);
+
+    return {
+      updatedInvoice,
+      updatedProduct: savedProduct,
+      remainingCount,
+    };
   };
 
   const handleLockResolvedCosts = async (invoice) => {
@@ -1771,6 +1986,7 @@ export function InvoiceModule({ sys }) {
           inventory={safeInventory}
           onClose={() => setProfitBreakdownInvoice(null)}
           onLockResolvedCosts={handleLockResolvedCosts}
+          onResolveMissingCost={handleResolveMissingCost}
           onViewInvoice={(invoice) => {
             setProfitBreakdownInvoice(null);
             setPreviewInvoice(invoice);
