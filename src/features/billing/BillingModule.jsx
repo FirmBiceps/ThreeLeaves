@@ -1596,17 +1596,17 @@ export function BillingModule({ sys: _sys }) {
 
   if (billingView === 'credit-notes') {
     return (
-      <div className="relative h-full overflow-y-auto bg-slate-50/50 p-8">
+      <div className="tl-module-page relative h-full overflow-y-auto bg-transparent p-8">
         <div className="mx-auto max-w-[1600px]">
-          <div className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div className="tl-page-header mb-5">
             <div>
               <div className="mb-2 flex items-center gap-3">
                 <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm">
                   <Receipt size={18} />
                 </div>
                 <div>
-                  <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-slate-900">Credit Notes</h1>
-                  <p className="mt-0.5 text-xs font-medium text-slate-500">Customer returns, credits and refunds issued during the selected billing period</p>
+                  <h1 className="tl-page-header__title">Credit Notes</h1>
+                  <p className="tl-page-header__subtitle">Customer returns, credits and refunds issued during the selected billing period</p>
                 </div>
               </div>
             </div>
@@ -1779,7 +1779,7 @@ export function BillingModule({ sys: _sys }) {
   }
 
   return (
-    <div className="relative h-full overflow-y-auto bg-slate-50/50 p-8">
+    <div className="tl-module-page relative h-full overflow-y-auto bg-transparent p-8">
       {/* Invisible preloads */}
       <div className="pointer-events-none absolute h-0 w-0 overflow-hidden opacity-0">
         <img src={logo} alt="preload logo" />
@@ -1787,7 +1787,7 @@ export function BillingModule({ sys: _sys }) {
       </div>
 
       {/* DASHBOARD SCREEN UI */}
-      <div id="screen-ui">
+      <div id="screen-ui" className="tl-screen-section">
         <div className="mb-6 flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <div className="mb-2 flex items-center gap-3">
