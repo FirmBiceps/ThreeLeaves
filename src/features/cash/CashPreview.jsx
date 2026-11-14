@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ChevronLeft,
   Edit,
@@ -347,20 +348,33 @@ function CashHeader({
             CASH INVOICE
           </h3>
 
-          <div className="mb-2 mt-auto grid w-full grid-cols-[52px_minmax(0,1fr)] items-baseline gap-x-2 gap-y-3">
-            <span className="whitespace-nowrap text-[15px] font-bold leading-none text-black">
-              No.
-            </span>
-            <span className="max-w-full whitespace-nowrap text-[15px] font-bold leading-none tracking-tight text-red-600">
-              {String(invoiceNumber)}
-            </span>
-
-            <span className="whitespace-nowrap text-[15px] font-bold leading-none text-black">
-              Terms:
-            </span>
-            <span className="max-w-full whitespace-nowrap text-[14px] font-bold leading-none text-slate-700">
-              {getCustomerPaymentTerms(customer, existingInvoice)}
-            </span>
+          <div className="mb-2 mt-auto flex w-full flex-col gap-3">
+            <div className="flex items-baseline">
+              <span className="w-[50px] shrink-0 text-[15px] font-bold text-black">
+                No.
+              </span>
+              <span className="text-[17px] font-bold leading-none tracking-wider text-red-600">
+                {String(invoiceNumber)}
+              </span>
+            </div>
+            <div className="flex items-baseline">
+              <span className="w-[50px] shrink-0 text-[15px] font-bold text-black">
+                Terms:
+              </span>
+              <span className="text-[16px] font-bold leading-none text-red-600">
+                {getCustomerPaymentTerms(customer, existingInvoice)}
+              </span>
+            </div>
+            {poNumber ? (
+              <div className="flex items-baseline">
+                <span className="w-[50px] shrink-0 text-[15px] font-bold text-black">
+                  PO No:
+                </span>
+                <span className="text-[14px] font-bold leading-none text-black">
+                  {poNumber}
+                </span>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
@@ -443,12 +457,14 @@ export function CashPreview({
     [safeItems]
   );
 
-  return (
-    <div className="fixed inset-0 z-[5000] overflow-y-auto bg-slate-950/90 print:static print:block print:bg-white print:p-0 print:backdrop-filter-none">
+  const previewContent = (
+    <div className="invoice-preview-root fixed inset-0 z-[5000] overflow-y-scroll overscroll-contain bg-slate-950/90 print:static print:block print:overflow-visible print:bg-white print:p-0 print:backdrop-filter-none">
       <style type="text/css">
         {`
           #printable-invoice-wrapper {
             width: 100%;
+            height: auto;
+            overflow: visible;
           }
 
           .invoice-print-page {
@@ -456,6 +472,9 @@ export function CashPreview({
             display: flex;
             width: 210mm;
             height: 297mm;
+            min-height: 297mm;
+            max-height: 297mm;
+            flex: 0 0 297mm;
             flex-direction: column;
             box-sizing: border-box;
             background: white;
@@ -463,11 +482,6 @@ export function CashPreview({
           }
 
           .invoice-footer-safe {
-            /*
-             * Do not clip the PayNow / Received By footer. The old
-             * max-height: 39mm + overflow: hidden combination could cut off
-             * the signature text when the product table became taller.
-             */
             flex: 0 0 auto;
             min-height: 0;
             overflow: visible;
@@ -485,28 +499,65 @@ export function CashPreview({
             @page { size: A4; margin: 0 !important; }
 
             html, body {
+              width: 210mm !important;
+              height: auto !important;
+              min-height: 0 !important;
+              max-height: none !important;
               margin: 0 !important;
               padding: 0 !important;
+              overflow: visible !important;
+              display: block !important;
               background: white !important;
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
             }
 
-            body * {
-              visibility: hidden !important;
+            .invoice-preview-root {
+              position: static !important;
+              inset: auto !important;
+              display: block !important;
+              width: 210mm !important;
+              height: auto !important;
+              min-height: 0 !important;
+              max-height: none !important;
+              overflow: visible !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              background: white !important;
             }
 
-            #printable-invoice-wrapper,
-            #printable-invoice-wrapper * {
+            .invoice-preview-toolbar {
+              display: none !important;
+            }
+
+            .invoice-preview-layout {
+              display: block !important;
+              width: 210mm !important;
+              height: auto !important;
+              min-height: 0 !important;
+              max-height: none !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              overflow: visible !important;
+            }
+
+            body > *:not(.invoice-preview-root) {
+              display: none !important;
+            }
+
+            .invoice-preview-root,
+            .invoice-preview-root * {
               visibility: visible !important;
             }
 
             #printable-invoice-wrapper {
-              position: absolute !important;
-              left: 0 !important;
-              top: 0 !important;
+              position: static !important;
+              display: block !important;
               width: 210mm !important;
               height: auto !important;
+              min-height: 0 !important;
+              max-height: none !important;
+              overflow: visible !important;
               padding: 0 !important;
               margin: 0 !important;
               background: white !important;
@@ -514,16 +565,36 @@ export function CashPreview({
             }
 
             .invoice-print-page {
+              position: relative !important;
+              display: flex !important;
               width: 210mm !important;
-              height: 297mm !important;
-              min-height: 297mm !important;
+              height: 296.5mm !important;
+              min-height: 296.5mm !important;
+              max-height: 296.5mm !important;
+              flex: none !important;
               padding: 15mm 10mm !important;
               margin: 0 !important;
+              box-sizing: border-box !important;
               box-shadow: none !important;
               border-radius: 0 !important;
-              page-break-after: always !important;
-              break-after: page !important;
+              page-break-before: auto !important;
+              page-break-after: auto !important;
+              break-before: auto !important;
+              break-after: auto !important;
+              page-break-inside: auto !important;
+              break-inside: auto !important;
               overflow: hidden !important;
+            }
+
+            .invoice-print-page + .invoice-print-page {
+              page-break-before: always !important;
+              break-before: page !important;
+            }
+
+            .invoice-print-page:first-child {
+              page-break-before: auto !important;
+              break-before: auto !important;
+              margin-top: 0 !important;
             }
 
             .invoice-print-page:last-child {
@@ -543,8 +614,8 @@ export function CashPreview({
         `}
       </style>
 
-      <div className="flex min-h-full flex-col items-center py-12 print:m-0 print:block print:py-0">
-        <div className="flex w-full max-w-[210mm] shrink-0 items-center justify-between rounded-t-2xl border-b-4 border-blue-600 bg-slate-900 px-8 py-4 text-white shadow-2xl print:hidden">
+      <div className="invoice-preview-layout flex min-h-full flex-col items-center py-12 print:m-0 print:block print:min-h-0 print:h-auto print:p-0">
+        <div className="invoice-preview-toolbar flex w-full max-w-[210mm] shrink-0 items-center justify-between rounded-t-2xl border-b-4 border-blue-600 bg-slate-900 px-8 py-4 text-white shadow-2xl print:hidden">
           <div className="flex items-center">
             {mode === 'generator' ? (
               <Eye size={24} className="mr-3 text-blue-400" />
@@ -622,7 +693,7 @@ export function CashPreview({
         <div
           id="printable-invoice-wrapper"
           lang="zh"
-          className="flex w-full flex-col items-center gap-8 print:block print:gap-0"
+          className="flex w-full flex-none flex-col items-center gap-8 overflow-visible print:block print:gap-0 print:overflow-visible"
           style={{ fontFamily: CJK_FONT }}
         >
           {itemPages.map((pageItems, pageIndex) => {
@@ -644,7 +715,7 @@ export function CashPreview({
             return (
               <div
                 key={`invoice-page-${pageIndex}`}
-                className="invoice-print-page rounded-b-2xl shadow-2xl print:rounded-none print:shadow-none"
+                className="invoice-print-page shrink-0 rounded-b-2xl shadow-2xl print:rounded-none print:shadow-none"
                 style={{ fontFamily: CJK_FONT }}
               >
                 <CashHeader
@@ -864,6 +935,10 @@ export function CashPreview({
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined'
+    ? createPortal(previewContent, document.body)
+    : previewContent;
 }
 
 export function CashPreviewModal({ invoice, onClose, onEdit, sys }) {
