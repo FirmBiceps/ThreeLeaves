@@ -1,3 +1,13 @@
+/*
+ * Three Leaves ERP — EmployeeModule (revised UI)
+ *
+ * Presentation refactor only: business logic, Supabase calls, employee tabs,
+ * attendance calculations, advances, salary-payment ledger and payslip flow
+ * are retained. The main changes are compact ERP spacing, quieter controls,
+ * flatter containers and a clear separation between earned pay and actual
+ * salary payments.
+ */
+
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { 
@@ -160,7 +170,7 @@ function EmployeeContractForm({ employees }) {
   const BaseContractContent = () => (
     <div className="text-black font-serif text-[11pt] leading-relaxed pb-12">
       <div className="text-center mb-6">
-        <h1 className="text-[16pt] font-black m-0">THREE LEAVES PTE. LTD.</h1>
+        <h1 className="text-[16pt] font-semibold m-0">THREE LEAVES PTE. LTD.</h1>
         <h2 className="text-[14pt] font-bold underline m-0 mt-1">EMPLOYMENT CONTRACT AGREEMENT</h2>
       </div>
 
@@ -288,11 +298,11 @@ function EmployeeContractForm({ employees }) {
       {/* ========================================== */}
       {isEditorOpen && createPortal(
         <div className="fixed inset-0 z-[7000] flex items-center justify-center bg-slate-900/90 backdrop-blur-sm p-6 animate-in fade-in">
-          <div className="bg-slate-100 rounded-3xl shadow-2xl w-full max-w-5xl h-[90vh] flex flex-col overflow-hidden">
+          <div className="bg-slate-100 rounded-lg w-full max-w-5xl h-[90vh] flex flex-col overflow-hidden">
             
             <div className="bg-white px-6 py-4 border-b border-slate-200 flex justify-between items-center shrink-0">
               <div>
-                <h2 className="text-lg font-black text-slate-800 flex items-center">
+                <h2 className="text-lg font-semibold text-slate-800 flex items-center">
                   <Edit3 size={20} className="mr-2 text-blue-600" />
                   Live Document Editor
                 </h2>
@@ -309,7 +319,7 @@ function EmployeeContractForm({ employees }) {
                 ref={editorRef}
                 contentEditable={true}
                 suppressContentEditableWarning={true}
-                className="bg-white p-[15mm] shadow-lg w-full max-w-[210mm] min-h-[297mm] outline-none border border-slate-300 focus:ring-4 focus:ring-blue-500/20 transition-shadow"
+                className="bg-white p-[15mm] w-full max-w-[210mm] min-h-[297mm] outline-none border border-slate-300 focus:ring-4 focus:ring-blue-500/20 transition-shadow"
                 dangerouslySetInnerHTML={{ 
                   __html: customContractHTML || document.getElementById('hidden-base-template').innerHTML 
                 }}
@@ -317,14 +327,14 @@ function EmployeeContractForm({ employees }) {
             </div>
 
             <div className="bg-white px-6 py-4 border-t border-slate-200 flex justify-between items-center shrink-0">
-              <button onClick={resetToDefault} className="flex items-center text-sm font-bold text-red-500 hover:text-red-700 px-4 py-2 hover:bg-red-50 rounded-xl transition-colors">
+              <button onClick={resetToDefault} className="flex items-center text-sm font-bold text-red-500 hover:text-red-700 px-4 py-2 hover:bg-red-50 rounded-md transition-colors">
                 <RotateCcw size={16} className="mr-2" /> Reset to Default
               </button>
               <div className="flex gap-3">
-                <button onClick={() => setIsEditorOpen(false)} className="px-6 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">
+                <button onClick={() => setIsEditorOpen(false)} className="px-6 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-md transition-colors">
                   Cancel
                 </button>
-                <button onClick={saveCustomEdits} className="flex items-center px-6 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md transition-all">
+                <button onClick={saveCustomEdits} className="flex items-center px-6 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-md transition-all">
                   <Save size={16} className="mr-2" /> Save Modifications
                 </button>
               </div>
@@ -343,11 +353,11 @@ function EmployeeContractForm({ employees }) {
         {/* LEFT COLUMN: EMPLOYER CONTROL PANEL */}
         <div className="w-full lg:w-[45%] space-y-6">
           
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-            <h2 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-4 flex items-center"><User size={16} className="mr-2" /> Target Employee</h2>
+          <div className="bg-white p-6 rounded-lg border border-slate-200">
+            <h2 className="text-sm font-semibold uppercase tracking-widest text-slate-400 mb-4 flex items-center"><User size={16} className="mr-2" /> Target Employee</h2>
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2">
-                <select value={selectedEmpId} onChange={handleEmployeeSelect} className="w-full border border-slate-200 rounded-xl p-3 text-sm font-bold bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer appearance-none">
+                <select value={selectedEmpId} onChange={handleEmployeeSelect} className="w-full border border-slate-200 rounded-md p-3 text-sm font-bold bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer appearance-none">
                   <option value="DRAFT">📝 Template / Interview Draft Mode</option>
                   <option disabled>──────────────────────────</option>
                   {employees.map(emp => <option key={emp.id} value={emp.id}>Assign to: {emp.name} ({emp.role})</option>)}
@@ -355,44 +365,44 @@ function EmployeeContractForm({ employees }) {
               </div>
               <div className="col-span-2">
                 <label className="block text-xs font-bold text-slate-600 mb-1">Full Name</label>
-                <input type="text" value={employeeName} onChange={e => setEmployeeName(e.target.value)} placeholder="Leave blank for signature line..." className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" />
+                <input type="text" value={employeeName} onChange={e => setEmployeeName(e.target.value)} placeholder="Leave blank for signature line..." className="w-full border border-slate-200 rounded-md p-2.5 text-sm bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1">NRIC / FIN</label>
-                <input type="text" value={nric} onChange={e => setNric(e.target.value)} placeholder="S1234567A" className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none uppercase" />
+                <input type="text" value={nric} onChange={e => setNric(e.target.value)} placeholder="S1234567A" className="w-full border border-slate-200 rounded-md p-2.5 text-sm bg-slate-50 outline-none uppercase" />
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1">Phone No.</label>
-                <input type="text" value={phone} onChange={e => setPhone(e.target.value)} placeholder="8123 4567" className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none" />
+                <input type="text" value={phone} onChange={e => setPhone(e.target.value)} placeholder="8123 4567" className="w-full border border-slate-200 rounded-md p-2.5 text-sm bg-slate-50 outline-none" />
               </div>
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-            <h2 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-4 flex items-center"><Briefcase size={16} className="mr-2" /> Role, Dates & Base Pay</h2>
+          <div className="bg-white p-6 rounded-lg border border-slate-200">
+            <h2 className="text-sm font-semibold uppercase tracking-widest text-slate-400 mb-4 flex items-center"><Briefcase size={16} className="mr-2" /> Role, Dates & Base Pay</h2>
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2">
                 <label className="block text-xs font-bold text-slate-600 mb-1">Job Role</label>
-                <input type="text" value={role} onChange={e => setRole(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm font-bold text-slate-800 bg-slate-50 outline-none" />
+                <input type="text" value={role} onChange={e => setRole(e.target.value)} className="w-full border border-slate-200 rounded-md p-2.5 text-sm font-bold text-slate-800 bg-slate-50 outline-none" />
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1">Commencement Date</label>
-                <input type="date" value={commencementDate} onChange={e => setCommencementDate(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none" />
+                <input type="date" value={commencementDate} onChange={e => setCommencementDate(e.target.value)} className="w-full border border-slate-200 rounded-md p-2.5 text-sm bg-slate-50 outline-none" />
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1">Probation (Months)</label>
-                <input type="number" value={probationMonths} onChange={e => setProbationMonths(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none" />
+                <input type="number" value={probationMonths} onChange={e => setProbationMonths(e.target.value)} className="w-full border border-slate-200 rounded-md p-2.5 text-sm bg-slate-50 outline-none" />
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1">Pay Basis</label>
-                <select value={payBasis} onChange={e => setPayBasis(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none">
+                <select value={payBasis} onChange={e => setPayBasis(e.target.value)} className="w-full border border-slate-200 rounded-md p-2.5 text-sm bg-slate-50 outline-none">
                   <option value="monthly_salary">Monthly Salary</option>
                   <option value="hourly">Hourly</option>
                 </select>
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1">Payment Interval</label>
-                <select value={paymentInterval} onChange={e => setPaymentInterval(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none">
+                <select value={paymentInterval} onChange={e => setPaymentInterval(e.target.value)} className="w-full border border-slate-200 rounded-md p-2.5 text-sm bg-slate-50 outline-none">
                   <option value="monthly">Monthly</option>
                   <option value="weekly">Weekly</option>
                 </select>
@@ -400,22 +410,22 @@ function EmployeeContractForm({ employees }) {
               {payBasis === 'hourly' ? (
                 <div className="col-span-2">
                   <label className="block text-xs font-bold text-slate-600 mb-1">Hourly Rate ($)</label>
-                  <input type="number" min="0" step="0.01" value={hourlyRate} onChange={e => setHourlyRate(e.target.value)} className="w-full border border-slate-200 rounded-xl p-3 text-lg font-black text-blue-700 bg-blue-50/50 outline-none" />
+                  <input type="number" min="0" step="0.01" value={hourlyRate} onChange={e => setHourlyRate(e.target.value)} className="w-full border border-slate-200 rounded-md p-3 text-lg font-semibold text-blue-700 bg-blue-50/50 outline-none" />
                 </div>
               ) : (
                 <div className="col-span-2">
                   <label className="block text-xs font-bold text-slate-600 mb-1">Base Salary ($)</label>
-                  <input type="number" min="0" step="0.01" value={baseSalary} onChange={e => setBaseSalary(e.target.value)} className="w-full border border-slate-200 rounded-xl p-3 text-lg font-black text-blue-700 bg-blue-50/50 outline-none" />
+                  <input type="number" min="0" step="0.01" value={baseSalary} onChange={e => setBaseSalary(e.target.value)} className="w-full border border-slate-200 rounded-md p-3 text-lg font-semibold text-blue-700 bg-blue-50/50 outline-none" />
                 </div>
               )}
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-            <h2 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-4 flex items-center"><DollarSign size={16} className="mr-2" /> Allowances</h2>
+          <div className="bg-white p-6 rounded-lg border border-slate-200">
+            <h2 className="text-sm font-semibold uppercase tracking-widest text-slate-400 mb-4 flex items-center"><DollarSign size={16} className="mr-2" /> Allowances</h2>
             <div className="space-y-3 mb-4">
               {allowances.map((al) => (
-                <div key={al.id} className="flex items-center gap-3 bg-slate-50 p-2 rounded-xl border border-slate-100">
+                <div key={al.id} className="flex items-center gap-3 bg-slate-50 p-2 rounded-md border border-slate-100">
                   <div className="flex-1"><input type="text" value={al.type} onChange={e => updateAllowance(al.id, 'type', e.target.value)} placeholder="Type" className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm outline-none" /></div>
                   <div className="w-28 relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span><input type="number" value={al.amount} onChange={e => updateAllowance(al.id, 'amount', e.target.value)} placeholder="0" className="w-full bg-white border border-slate-200 rounded-lg py-2 pl-7 pr-2 text-sm font-bold text-emerald-700 outline-none" /></div>
                   <button onClick={() => removeAllowance(al.id)} className="p-2 text-slate-400 hover:text-red-500 transition-colors"><Trash2 size={16}/></button>
@@ -425,32 +435,32 @@ function EmployeeContractForm({ employees }) {
             <button onClick={addAllowance} className="text-xs font-bold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 px-4 py-2 rounded-lg transition-colors w-full">+ Add Allowance</button>
           </div>
 
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-            <h2 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-4 flex items-center"><CalendarDays size={16} className="mr-2" /> Schedule & Leaves</h2>
+          <div className="bg-white p-6 rounded-lg border border-slate-200">
+            <h2 className="text-sm font-semibold uppercase tracking-widest text-slate-400 mb-4 flex items-center"><CalendarDays size={16} className="mr-2" /> Schedule & Leaves</h2>
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2 flex gap-4">
                  <div className="flex-1 flex gap-2">
                    <div className="w-1/2">
                      <label className="block text-[10px] font-bold text-slate-600 mb-1 uppercase">Start Time</label>
-                     <select value={startTime} onChange={e => setStartTime(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none cursor-pointer">{TIME_OPTIONS.map(t => <option key={`start-${t}`} value={t}>{t}</option>)}</select>
+                     <select value={startTime} onChange={e => setStartTime(e.target.value)} className="w-full border border-slate-200 rounded-md p-2.5 text-sm bg-slate-50 outline-none cursor-pointer">{TIME_OPTIONS.map(t => <option key={`start-${t}`} value={t}>{t}</option>)}</select>
                    </div>
                    <div className="w-1/2">
                      <label className="block text-[10px] font-bold text-slate-600 mb-1 uppercase">End Time</label>
-                     <select value={endTime} onChange={e => setEndTime(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none cursor-pointer">{TIME_OPTIONS.map(t => <option key={`end-${t}`} value={t}>{t}</option>)}</select>
+                     <select value={endTime} onChange={e => setEndTime(e.target.value)} className="w-full border border-slate-200 rounded-md p-2.5 text-sm bg-slate-50 outline-none cursor-pointer">{TIME_OPTIONS.map(t => <option key={`end-${t}`} value={t}>{t}</option>)}</select>
                    </div>
                  </div>
                  <div className="w-24">
                    <label className="block text-[10px] font-bold text-slate-600 mb-1 uppercase">Days/Wk</label>
-                   <input type="number" value={workDays} onChange={e => setWorkDays(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none" />
+                   <input type="number" value={workDays} onChange={e => setWorkDays(e.target.value)} className="w-full border border-slate-200 rounded-md p-2.5 text-sm bg-slate-50 outline-none" />
                  </div>
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1">Annual Leave</label>
-                <input type="number" value={annualLeave} onChange={e => setAnnualLeave(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none" />
+                <input type="number" value={annualLeave} onChange={e => setAnnualLeave(e.target.value)} className="w-full border border-slate-200 rounded-md p-2.5 text-sm bg-slate-50 outline-none" />
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1">MC (Sick Leave)</label>
-                <input type="number" value={mcAllowance} onChange={e => setMcAllowance(e.target.value)} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm bg-slate-50 outline-none" />
+                <input type="number" value={mcAllowance} onChange={e => setMcAllowance(e.target.value)} className="w-full border border-slate-200 rounded-md p-2.5 text-sm bg-slate-50 outline-none" />
               </div>
             </div>
           </div>
@@ -461,10 +471,10 @@ function EmployeeContractForm({ employees }) {
         <div className="w-full lg:w-[55%] flex flex-col h-[85vh]">
           
           {/* Preview Controls */}
-          <div className="bg-slate-900 rounded-t-3xl p-5 flex justify-between items-center shrink-0 shadow-lg z-10">
+          <div className="bg-slate-900 rounded-t-3xl p-5 flex justify-between items-center shrink-0 z-10">
             <div>
-              <h2 className="text-base font-black text-white uppercase tracking-widest flex items-center">
-                <FileText size={18} className="mr-2 text-blue-400" /> Print Preview
+              <h2 className="text-base font-semibold text-white uppercase tracking-widest flex items-center">
+                <FileText size={18} className="mr-2 text-slate-400" /> Print Preview
               </h2>
               {customContractHTML && (
                 <span className="inline-block mt-1 bg-amber-500/20 text-amber-300 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-widest border border-amber-500/50">
@@ -473,7 +483,7 @@ function EmployeeContractForm({ employees }) {
               )}
             </div>
             
-            <button onClick={openEditor} className="flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold rounded-xl transition-colors shadow-md">
+            <button onClick={openEditor} className="flex items-center px-4 py-2 bg-blue-600 hover:bg-slate-500 text-white text-sm font-bold rounded-md transition-colors shadow-md">
               <Edit3 size={16} className="mr-2" /> Edit Layout & Content
             </button>
           </div>
@@ -490,8 +500,8 @@ function EmployeeContractForm({ employees }) {
           </div>
 
           {/* Action Footer */}
-          <div className="bg-white p-5 rounded-b-3xl border border-slate-300 shrink-0 shadow-lg z-10 flex gap-3">
-            <button onClick={handlePrint} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-4 rounded-xl shadow-lg transition-all flex items-center justify-center text-lg">
+          <div className="bg-white p-5 rounded-b-3xl border border-slate-300 shrink-0 z-10 flex gap-3">
+            <button onClick={handlePrint} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-4 rounded-md transition-all flex items-center justify-center text-lg">
               <Printer className="mr-3" size={24} /> Print Final Contract
             </button>
           </div>
@@ -800,14 +810,14 @@ function SummaryCard({ label, value, detail, icon: Icon, tone = 'blue', onClick 
   }[tone] || 'bg-blue-50 text-blue-600';
   const Tag = onClick ? 'button' : 'div';
   return (
-    <Tag type={onClick ? 'button' : undefined} onClick={onClick} className="rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-slate-300">
+    <Tag type={onClick ? 'button' : undefined} onClick={onClick} className="rounded-lg border border-slate-200 bg-white p-5 text-left transition hover:border-slate-300">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">{label}</p>
-          <p className="mt-2 text-2xl font-black text-slate-900">{value}</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">{label}</p>
+          <p className="mt-2 text-xl font-semibold text-slate-900">{value}</p>
           <p className="mt-2 text-xs leading-5 text-slate-500">{detail}</p>
         </div>
-        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${toneClass}`}><Icon size={18} /></div>
+        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-md ${toneClass}`}><Icon size={18} /></div>
       </div>
     </Tag>
   );
@@ -823,17 +833,17 @@ function StatusBadge({ status }) {
       : lower === 'pending' || lower === 'draft' || lower === 'due' || lower === 'carry forward'
         ? 'border-amber-200 bg-amber-50 text-amber-700'
         : 'border-slate-200 bg-slate-50 text-slate-600';
-  return <span className={`inline-flex rounded-md border px-2 py-1 text-[9px] font-black uppercase tracking-wider ${classes}`}>{value}</span>;
+  return <span className={`inline-flex rounded-md border px-2 py-1 text-[9px] font-semibold uppercase tracking-wider ${classes}`}>{value}</span>;
 }
 
 function ModalShell({ title, eyebrow, children, onClose, maxWidth = 'max-w-4xl' }) {
   return createPortal(
     <div className="fixed inset-0 z-[8000] flex items-center justify-center bg-slate-950/75 p-3 backdrop-blur-sm sm:p-4">
-      <div className={`flex max-h-[94vh] w-full ${maxWidth} flex-col overflow-hidden rounded-3xl bg-white shadow-2xl`}>
+      <div className={`flex max-h-[94vh] w-full ${maxWidth} flex-col overflow-hidden rounded-lg bg-white`}>
         <div className="flex shrink-0 items-center justify-between bg-slate-900 px-6 py-4 text-white">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-blue-300">{eyebrow}</p>
-            <h2 className="mt-1 text-lg font-black">{title}</h2>
+            <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-blue-300">{eyebrow}</p>
+            <h2 className="mt-1 text-lg font-semibold">{title}</h2>
           </div>
           <button type="button" onClick={onClose} className="rounded-full p-2 text-slate-300 hover:bg-slate-800"><X size={20} /></button>
         </div>
@@ -860,11 +870,11 @@ function EmployeeFormField({ label, children, className = '', hint, required = f
 
 function EmployeeFormSection({ eyebrow, title, description, badge, children }) {
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+    <section className="rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">{eyebrow}</p>
-          {title && <h3 className="mt-1 text-sm font-black text-slate-900">{title}</h3>}
+          <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-400">{eyebrow}</p>
+          {title && <h3 className="mt-1 text-sm font-semibold text-slate-900">{title}</h3>}
           {description && <p className="mt-1 max-w-3xl text-xs leading-5 text-slate-500">{description}</p>}
         </div>
         {badge}
@@ -888,7 +898,7 @@ function EmployeeEditor({ employee, employees, onClose, onSave }) {
   const [error, setError] = useState('');
 
   const isPartTime = form.employmentType === 'Part-Time';
-  const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 outline-none transition placeholder:text-slate-300 focus:border-blue-400 focus:ring-4 focus:ring-blue-50 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400';
+  const inputClass = 'w-full rounded-md border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 outline-none transition placeholder:text-slate-300 focus:border-blue-400 focus:ring-4 focus:ring-blue-50 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400';
 
   const update = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -978,7 +988,7 @@ function EmployeeEditor({ employee, employees, onClose, onSave }) {
             }
             badge={
               isPartTime ? (
-                <span className="inline-flex w-fit rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-blue-700">
+                <span className="inline-flex w-fit rounded-full border border-slate-200 bg-blue-50 px-3 py-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-blue-700">
                   Hourly employee
                 </span>
               ) : null
@@ -1061,7 +1071,7 @@ function EmployeeEditor({ employee, employees, onClose, onSave }) {
                 <EmployeeFormField label="Default Hourly Rate" required hint="Starting rate for new work-day entries. Each day can still be adjusted independently.">
                   <div className="relative">
                     <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400">$</span>
-                    <input type="number" min="0" step="0.01" value={form.hourlyRate} onChange={(e) => update('hourlyRate', e.target.value)} className={`${inputClass} pl-8 pr-14 font-mono font-black text-blue-700`} />
+                    <input type="number" min="0" step="0.01" value={form.hourlyRate} onChange={(e) => update('hourlyRate', e.target.value)} className={`${inputClass} pl-8 pr-14 font-mono font-semibold text-blue-700`} />
                     <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">/ hr</span>
                   </div>
                 </EmployeeFormField>
@@ -1087,13 +1097,13 @@ function EmployeeEditor({ employee, employees, onClose, onSave }) {
                 </EmployeeFormField>
               </div>
 
-              <div className="mt-4 flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="mt-4 flex flex-col gap-3 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Transport Allowance</p>
-                  <p className="mt-1 text-sm font-black text-slate-900">$5.00 per worked day</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Transport Allowance</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">$5.00 per worked day</p>
                   <p className="mt-0.5 text-[10px] leading-4 text-slate-500">Applied automatically. Override only on an individual work-day when necessary.</p>
                 </div>
-                <span className="inline-flex w-fit rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wider text-slate-500">Daily override available</span>
+                <span className="inline-flex w-fit rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[9px] font-semibold uppercase tracking-wider text-slate-500">Daily override available</span>
               </div>
             </EmployeeFormSection>
           ) : (
@@ -1114,11 +1124,11 @@ function EmployeeEditor({ employee, employees, onClose, onSave }) {
                   </EmployeeFormField>
                   {form.payBasis === 'hourly' ? (
                     <EmployeeFormField label="Hourly Rate">
-                      <input type="number" min="0" step="0.01" value={form.hourlyRate} onChange={(e) => update('hourlyRate', e.target.value)} className={`${inputClass} text-right font-mono font-black text-blue-700`} />
+                      <input type="number" min="0" step="0.01" value={form.hourlyRate} onChange={(e) => update('hourlyRate', e.target.value)} className={`${inputClass} text-right font-mono font-semibold text-blue-700`} />
                     </EmployeeFormField>
                   ) : (
                     <EmployeeFormField label="Basic Salary">
-                      <input type="number" min="0" step="0.01" value={form.basicSalary} onChange={(e) => update('basicSalary', e.target.value)} className={`${inputClass} text-right font-mono font-black text-blue-700`} />
+                      <input type="number" min="0" step="0.01" value={form.basicSalary} onChange={(e) => update('basicSalary', e.target.value)} className={`${inputClass} text-right font-mono font-semibold text-blue-700`} />
                     </EmployeeFormField>
                   )}
                   <EmployeeFormField label="Payment Method">
@@ -1137,7 +1147,7 @@ function EmployeeEditor({ employee, employees, onClose, onSave }) {
 
               <EmployeeFormSection eyebrow="Employment Admin" title="CPF, levy & leave">
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-                  <label className="flex min-h-[68px] items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3">
+                  <label className="flex min-h-[68px] items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3.5 py-3">
                     <div><p className="text-[11px] font-bold text-slate-600">CPF Eligible</p><p className="mt-1 text-[10px] text-slate-400">Include in CPF workflow</p></div>
                     <input type="checkbox" checked={Boolean(form.cpfEligible)} onChange={(e) => update('cpfEligible', e.target.checked)} className="h-4 w-4 rounded border-slate-300" />
                   </label>
@@ -1154,14 +1164,14 @@ function EmployeeEditor({ employee, employees, onClose, onSave }) {
             <textarea rows="3" value={form.notes} onChange={(e) => update('notes', e.target.value)} placeholder="Optional internal notes…" className={`${inputClass} min-h-[92px] resize-y leading-5`} />
           </EmployeeFormSection>
 
-          {error && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-bold text-red-700">{error}</div>}
+          {error && <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-xs font-bold text-red-700">{error}</div>}
         </div>
 
         <div className="flex shrink-0 items-center justify-between gap-3 border-t border-slate-200 bg-white px-5 py-4 sm:px-6">
           <p className="hidden text-[10px] leading-4 text-slate-400 sm:block">Required fields are marked with <span className="text-red-500">*</span>.</p>
           <div className="ml-auto flex items-center gap-2">
-            <button type="button" onClick={onClose} disabled={saving} className="rounded-xl px-4 py-2.5 text-sm font-bold text-slate-500 transition hover:bg-slate-100 disabled:opacity-50">Cancel</button>
-            <button type="submit" disabled={saving} className="inline-flex min-w-[150px] items-center justify-center rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-black text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-50">
+            <button type="button" onClick={onClose} disabled={saving} className="rounded-md px-4 py-2.5 text-sm font-bold text-slate-500 transition hover:bg-slate-100 disabled:opacity-50">Cancel</button>
+            <button type="submit" disabled={saving} className="inline-flex min-w-[150px] items-center justify-center rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:opacity-50">
               {saving ? <RefreshCw size={15} className="mr-2 animate-spin" /> : <Save size={15} className="mr-2" />}
               {saving ? 'Saving…' : 'Save Employee'}
             </button>
@@ -1188,7 +1198,7 @@ function AttendanceEditor({ employees, record, onClose, onSave }) {
   const [saving, setSaving] = useState(false);
   const total = form.status === 'Present' ? clockedHours(form.clockIn, form.clockOut, form.breakMinutes) : 0;
   const regular = Math.max(0, total - Number(form.overtimeHours || 0));
-  const cls = 'w-full rounded-xl border border-slate-200 p-3 text-sm outline-none';
+  const cls = 'w-full rounded-md border border-slate-200 p-3 text-sm outline-none';
   const submit = async (event) => {
     event.preventDefault();
     setSaving(true);
@@ -1199,17 +1209,17 @@ function AttendanceEditor({ employees, record, onClose, onSave }) {
   return (
     <ModalShell title={record ? 'Edit Daily Entry' : 'Add Daily Entry'} eyebrow="Attendance & OT" onClose={onClose} maxWidth="max-w-2xl">
       <form onSubmit={submit} className="space-y-5 overflow-y-auto p-6">
-        {!active.length ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">There are no active full-time employees. Part-time staff use the Part-Time Hours spreadsheet.</div> : <>
+        {!active.length ? <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-slate-800">There are no active full-time employees. Part-time staff use the Part-Time Hours spreadsheet.</div> : <>
           <label><span className="mb-1.5 block text-xs font-bold">Employee</span><select value={form.employeeId} onChange={(e) => setForm((current) => ({ ...current, employeeId: e.target.value }))} className={cls}>{active.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} · {employee.role}</option>)}</select></label>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <label><span className="mb-1.5 block text-xs font-bold">Work Date</span><input type="date" value={form.workDate} onChange={(e) => setForm((current) => ({ ...current, workDate: e.target.value }))} className={cls} /></label>
             <label><span className="mb-1.5 block text-xs font-bold">Status</span><select value={form.status} onChange={(e) => setForm((current) => ({ ...current, status: e.target.value }))} className={cls}><option>Present</option><option>Absent</option><option>Off</option></select></label>
             {form.status === 'Present' && <><label><span className="mb-1.5 block text-xs font-bold">Clock In</span><input type="time" value={form.clockIn} onChange={(e) => setForm((current) => ({ ...current, clockIn: e.target.value }))} className={cls} /></label><label><span className="mb-1.5 block text-xs font-bold">Clock Out</span><input type="time" value={form.clockOut} onChange={(e) => setForm((current) => ({ ...current, clockOut: e.target.value }))} className={cls} /></label><label><span className="mb-1.5 block text-xs font-bold">Break Minutes</span><input type="number" min="0" value={form.breakMinutes} onChange={(e) => setForm((current) => ({ ...current, breakMinutes: e.target.value }))} className={cls} /></label><label><span className="mb-1.5 block text-xs font-bold">Overtime Hours</span><input type="number" min="0" step="0.25" max={total} value={form.overtimeHours} onChange={(e) => setForm((current) => ({ ...current, overtimeHours: e.target.value }))} className={cls} /></label></>}
           </div>
-          <div className="grid grid-cols-2 gap-3 rounded-xl bg-blue-50 p-4"><div><p className="text-[9px] font-black uppercase text-blue-500">Regular</p><p className="mt-1 text-xl font-black">{regular.toFixed(2)}</p></div><div><p className="text-[9px] font-black uppercase text-blue-500">Total</p><p className="mt-1 text-xl font-black">{total.toFixed(2)}</p></div></div>
+          <div className="grid grid-cols-2 gap-3 rounded-md bg-blue-50 p-4"><div><p className="text-[9px] font-semibold uppercase text-slate-500">Regular</p><p className="mt-1 text-xl font-semibold">{regular.toFixed(2)}</p></div><div><p className="text-[9px] font-semibold uppercase text-slate-500">Total</p><p className="mt-1 text-xl font-semibold">{total.toFixed(2)}</p></div></div>
           <label><span className="mb-1.5 block text-xs font-bold">Notes</span><textarea rows="2" value={form.notes} onChange={(e) => setForm((current) => ({ ...current, notes: e.target.value }))} className={cls} /></label>
         </>}
-        <div className="flex justify-end gap-3 border-t border-slate-100 pt-4"><button type="button" onClick={onClose} className="rounded-xl px-5 py-2.5 text-sm font-bold text-slate-500">Cancel</button><button type="submit" disabled={saving || !active.length || !form.employeeId} className="rounded-xl bg-blue-600 px-6 py-2.5 text-sm font-black text-white disabled:opacity-50">{saving ? 'Saving…' : 'Save Attendance'}</button></div>
+        <div className="flex justify-end gap-3 border-t border-slate-100 pt-4"><button type="button" onClick={onClose} className="rounded-md px-5 py-2.5 text-sm font-bold text-slate-500">Cancel</button><button type="submit" disabled={saving || !active.length || !form.employeeId} className="rounded-md bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{saving ? 'Saving…' : 'Save Attendance'}</button></div>
       </form>
     </ModalShell>
   );
@@ -1220,16 +1230,16 @@ function SimpleRecordModal({ kind, employees, onClose, onSave }) {
   const isAdvance = kind === 'advance';
   const [form, setForm] = useState(isAdvance ? { employeeId: active[0]?.id || '', date: localDateString(), amount: '', reason: '', notes: '' } : { employeeId: active[0]?.id || '', type: 'Annual', start: localDateString(), end: localDateString(), status: 'Approved', notes: '' });
   const [saving, setSaving] = useState(false);
-  const cls = 'w-full rounded-xl border border-slate-200 p-3 text-sm outline-none';
+  const cls = 'w-full rounded-md border border-slate-200 p-3 text-sm outline-none';
   const days = isAdvance ? 0 : inclusiveDays(form.start, form.end);
   const submit = async (event) => { event.preventDefault(); setSaving(true); try { await onSave(isAdvance ? form : { ...form, days }); } finally { setSaving(false); } };
   return (
     <ModalShell title={isAdvance ? 'Record Salary Advance' : 'Add Leave Record'} eyebrow={isAdvance ? 'Salary Advance' : 'Leave'} onClose={onClose} maxWidth="max-w-lg">
       <form onSubmit={submit} className="space-y-4 overflow-y-auto p-6">
         <label><span className="mb-1.5 block text-xs font-bold">Employee</span><select value={form.employeeId} onChange={(e) => setForm((current) => ({ ...current, employeeId: e.target.value }))} className={cls}>{active.map((employee) => <option key={employee.id} value={employee.id}>{employee.name}</option>)}</select></label>
-        {isAdvance ? <><div className="grid grid-cols-2 gap-4"><label><span className="mb-1.5 block text-xs font-bold">Date</span><input type="date" value={form.date} onChange={(e) => setForm((current) => ({ ...current, date: e.target.value }))} className={cls} /></label><label><span className="mb-1.5 block text-xs font-bold">Amount ($)</span><input type="number" min="0.01" step="0.01" value={form.amount} onChange={(e) => setForm((current) => ({ ...current, amount: e.target.value }))} className={`${cls} text-right font-black text-amber-700`} /></label></div><label><span className="mb-1.5 block text-xs font-bold">Reason</span><input value={form.reason} onChange={(e) => setForm((current) => ({ ...current, reason: e.target.value }))} className={cls} /></label></> : <><div className="grid grid-cols-2 gap-4"><label><span className="mb-1.5 block text-xs font-bold">Leave Type</span><select value={form.type} onChange={(e) => setForm((current) => ({ ...current, type: e.target.value }))} className={cls}><option>Annual</option><option>Sick</option><option>Hospitalisation</option><option>Unpaid</option><option>Other</option></select></label><label><span className="mb-1.5 block text-xs font-bold">Status</span><select value={form.status} onChange={(e) => setForm((current) => ({ ...current, status: e.target.value }))} className={cls}><option>Approved</option><option>Pending</option><option>Rejected</option></select></label><label><span className="mb-1.5 block text-xs font-bold">Start</span><input type="date" value={form.start} onChange={(e) => setForm((current) => ({ ...current, start: e.target.value }))} className={cls} /></label><label><span className="mb-1.5 block text-xs font-bold">End</span><input type="date" value={form.end} onChange={(e) => setForm((current) => ({ ...current, end: e.target.value }))} className={cls} /></label></div><div className="rounded-xl bg-violet-50 px-4 py-3 text-sm font-black text-violet-800">{days} day{days === 1 ? '' : 's'}</div></>}
+        {isAdvance ? <><div className="grid grid-cols-2 gap-4"><label><span className="mb-1.5 block text-xs font-bold">Date</span><input type="date" value={form.date} onChange={(e) => setForm((current) => ({ ...current, date: e.target.value }))} className={cls} /></label><label><span className="mb-1.5 block text-xs font-bold">Amount ($)</span><input type="number" min="0.01" step="0.01" value={form.amount} onChange={(e) => setForm((current) => ({ ...current, amount: e.target.value }))} className={`${cls} text-right font-semibold text-amber-700`} /></label></div><label><span className="mb-1.5 block text-xs font-bold">Reason</span><input value={form.reason} onChange={(e) => setForm((current) => ({ ...current, reason: e.target.value }))} className={cls} /></label></> : <><div className="grid grid-cols-2 gap-4"><label><span className="mb-1.5 block text-xs font-bold">Leave Type</span><select value={form.type} onChange={(e) => setForm((current) => ({ ...current, type: e.target.value }))} className={cls}><option>Annual</option><option>Sick</option><option>Hospitalisation</option><option>Unpaid</option><option>Other</option></select></label><label><span className="mb-1.5 block text-xs font-bold">Status</span><select value={form.status} onChange={(e) => setForm((current) => ({ ...current, status: e.target.value }))} className={cls}><option>Approved</option><option>Pending</option><option>Rejected</option></select></label><label><span className="mb-1.5 block text-xs font-bold">Start</span><input type="date" value={form.start} onChange={(e) => setForm((current) => ({ ...current, start: e.target.value }))} className={cls} /></label><label><span className="mb-1.5 block text-xs font-bold">End</span><input type="date" value={form.end} onChange={(e) => setForm((current) => ({ ...current, end: e.target.value }))} className={cls} /></label></div><div className="rounded-md bg-violet-50 px-4 py-3 text-sm font-semibold text-violet-800">{days} day{days === 1 ? '' : 's'}</div></>}
         <label><span className="mb-1.5 block text-xs font-bold">Notes</span><textarea rows="2" value={form.notes} onChange={(e) => setForm((current) => ({ ...current, notes: e.target.value }))} className={cls} /></label>
-        <div className="flex justify-end gap-3 border-t border-slate-100 pt-4"><button type="button" onClick={onClose} className="rounded-xl px-5 py-2.5 text-sm font-bold text-slate-500">Cancel</button><button type="submit" disabled={saving || !form.employeeId || (isAdvance && !(Number(form.amount) > 0)) || (!isAdvance && days <= 0)} className={`rounded-xl px-6 py-2.5 text-sm font-black text-white disabled:opacity-50 ${isAdvance ? 'bg-amber-600' : 'bg-violet-600'}`}>{saving ? 'Saving…' : 'Save'}</button></div>
+        <div className="flex justify-end gap-3 border-t border-slate-100 pt-4"><button type="button" onClick={onClose} className="rounded-md px-5 py-2.5 text-sm font-bold text-slate-500">Cancel</button><button type="submit" disabled={saving || !form.employeeId || (isAdvance && !(Number(form.amount) > 0)) || (!isAdvance && days <= 0)} className={`rounded-md px-6 py-2.5 text-sm font-semibold text-white disabled:opacity-50 ${isAdvance ? 'bg-amber-600' : 'bg-violet-600'}`}>{saving ? 'Saving…' : 'Save'}</button></div>
       </form>
     </ModalShell>
   );
@@ -1244,13 +1254,13 @@ function PartTimeSettlementModal({ settlement, onClose, onConfirm }) {
   return (
     <ModalShell title={`Settle ${settlement.employee.name}`} eyebrow="Part-Time Payment Settlement" onClose={onClose} maxWidth="max-w-lg">
       <form onSubmit={submit} className="space-y-5 overflow-y-auto p-6">
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5"><p className="text-[10px] font-black uppercase tracking-wider text-emerald-600">Rolling Balance Through {settlement.bounds.end}</p><p className="mt-2 text-3xl font-black text-emerald-900">{signedMoney(settlement.totalDue)}</p><p className="mt-2 text-xs text-emerald-700">{settlement.rows.length} unsettled interval{settlement.rows.length === 1 ? '' : 's'} will be closed together.</p></div>
-        <div className="grid grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4"><div><p className="text-[9px] font-black uppercase text-slate-400">Brought Forward</p><p className="mt-1 text-lg font-black">{signedMoney(settlement.broughtForward)}</p></div><div><p className="text-[9px] font-black uppercase text-slate-400">Current Interval</p><p className="mt-1 text-lg font-black">{signedMoney(settlement.currentDue)}</p></div></div>
-        <label><span className="mb-1.5 block text-xs font-bold">Payment Date</span><input type="date" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} className="w-full rounded-xl border border-slate-200 p-3 text-sm" /></label>
-        <label><span className="mb-1.5 block text-xs font-bold">Payment Method</span><select value={method} onChange={(e) => setMethod(e.target.value)} className="w-full rounded-xl border border-slate-200 p-3 text-sm"><option>Bank Transfer</option><option>PayNow</option><option>Cash</option><option>Cheque</option></select></label>
-        <label><span className="mb-1.5 block text-xs font-bold">Payment Reference</span><input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Optional" className="w-full rounded-xl border border-slate-200 p-3 text-sm" /></label>
-        <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800">This closes all unsettled part-time intervals up to the selected period end. Positive balances are pay due to the employee; negative balances are advances still owed back to the company. Future intervals are untouched.</div>
-        <div className="flex justify-end gap-3 border-t border-slate-100 pt-4"><button type="button" onClick={onClose} className="rounded-xl px-5 py-2.5 text-sm font-bold text-slate-500">Cancel</button><button type="submit" disabled={saving} className="inline-flex items-center rounded-xl bg-emerald-600 px-6 py-2.5 text-sm font-black text-white disabled:opacity-50"><CreditCard size={15} className="mr-2" />{saving ? 'Settling…' : 'Settle Through Interval'}</button></div>
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-5"><p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-600">Rolling Balance Through {settlement.bounds.end}</p><p className="mt-2 text-3xl font-semibold text-emerald-900">{signedMoney(settlement.totalDue)}</p><p className="mt-2 text-xs text-emerald-700">{settlement.rows.length} unsettled interval{settlement.rows.length === 1 ? '' : 's'} will be closed together.</p></div>
+        <div className="grid grid-cols-2 gap-3 rounded-md border border-slate-200 bg-slate-50 p-4"><div><p className="text-[9px] font-semibold uppercase text-slate-400">Brought Forward</p><p className="mt-1 text-lg font-semibold">{signedMoney(settlement.broughtForward)}</p></div><div><p className="text-[9px] font-semibold uppercase text-slate-400">Current Interval</p><p className="mt-1 text-lg font-semibold">{signedMoney(settlement.currentDue)}</p></div></div>
+        <label><span className="mb-1.5 block text-xs font-bold">Payment Date</span><input type="date" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} className="w-full rounded-md border border-slate-200 p-3 text-sm" /></label>
+        <label><span className="mb-1.5 block text-xs font-bold">Payment Method</span><select value={method} onChange={(e) => setMethod(e.target.value)} className="w-full rounded-md border border-slate-200 p-3 text-sm"><option>Bank Transfer</option><option>PayNow</option><option>Cash</option><option>Cheque</option></select></label>
+        <label><span className="mb-1.5 block text-xs font-bold">Payment Reference</span><input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Optional" className="w-full rounded-md border border-slate-200 p-3 text-sm" /></label>
+        <div className="rounded-md border border-slate-300 bg-amber-50 px-4 py-3 text-xs leading-5 text-slate-800">This closes all unsettled part-time intervals up to the selected period end. Positive balances are pay due to the employee; negative balances are advances still owed back to the company. Future intervals are untouched.</div>
+        <div className="flex justify-end gap-3 border-t border-slate-100 pt-4"><button type="button" onClick={onClose} className="rounded-md px-5 py-2.5 text-sm font-bold text-slate-500">Cancel</button><button type="submit" disabled={saving} className="inline-flex items-center rounded-md bg-emerald-600 px-6 py-2.5 text-sm font-semibold text-white disabled:opacity-50"><CreditCard size={15} className="mr-2" />{saving ? 'Settling…' : 'Settle Through Interval'}</button></div>
       </form>
     </ModalShell>
   );
@@ -1268,7 +1278,7 @@ function PayrollEditor({ employees, attendance, advances, onClose, onGenerate })
   const [overtimeRate, setOvertimeRate] = useState(employee?.payBasis === 'hourly' ? Number(employee.hourlyRate || 0) * 1.5 : 0);
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
-  const cls = 'w-full rounded-xl border border-slate-200 p-3 text-sm outline-none';
+  const cls = 'w-full rounded-md border border-slate-200 p-3 text-sm outline-none';
 
   useEffect(() => {
     if (!employee) return;
@@ -1293,14 +1303,14 @@ function PayrollEditor({ employees, attendance, advances, onClose, onGenerate })
   return (
     <ModalShell title="Generate Payroll Period" eyebrow="Full-Time Payroll" onClose={onClose} maxWidth="max-w-3xl">
       <form onSubmit={submit} className="space-y-5 overflow-y-auto p-6">
-        {!active.length ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">There are no active full-time employees. Part-time pay is managed from the Part-Time Hours spreadsheet.</div> : <>
+        {!active.length ? <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-slate-800">There are no active full-time employees. Part-time pay is managed from the Part-Time Hours spreadsheet.</div> : <>
           <label><span className="mb-1.5 block text-xs font-bold">Employee</span><select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className={cls}>{active.map((item) => <option key={item.id} value={item.id}>{item.name} · {employeePayLabel(item)} · {item.paymentInterval}</option>)}</select></label>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><label><span className="mb-1.5 block text-xs font-bold">Period Start</span><input type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} className={cls} /></label><label><span className="mb-1.5 block text-xs font-bold">Period End</span><input type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} className={cls} /></label><label><span className="mb-1.5 block text-xs font-bold">Allowance / Bonus ($)</span><input type="number" min="0" step="0.01" value={allowances} onChange={(e) => setAllowances(e.target.value)} className={cls} /></label><label><span className="mb-1.5 block text-xs font-bold">Other Deductions ($)</span><input type="number" min="0" step="0.01" value={otherDeductions} onChange={(e) => setOtherDeductions(e.target.value)} className={cls} /></label><label className="sm:col-span-2"><span className="mb-1.5 block text-xs font-bold">Overtime Rate ($ / hr)</span><input type="number" min="0" step="0.01" value={overtimeRate} onChange={(e) => setOvertimeRate(e.target.value)} className={cls} /><span className="mt-1 block text-[10px] text-slate-400">Confirm the applicable OT rate before finalising payroll.</span></label></div>
-          <div className="grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-4 sm:grid-cols-4"><div><p className="text-[9px] font-black uppercase text-slate-400">Regular Hours</p><p className="mt-1 text-lg font-black">{regularHours.toFixed(2)}</p></div><div><p className="text-[9px] font-black uppercase text-slate-400">OT Hours</p><p className="mt-1 text-lg font-black">{overtimeHours.toFixed(2)}</p></div><div><p className="text-[9px] font-black uppercase text-slate-400">Advances</p><p className="mt-1 text-lg font-black text-amber-700">${formatMoney(advanceDeductions)}</p></div><div><p className="text-[9px] font-black uppercase text-slate-400">Attendance Days</p><p className="mt-1 text-lg font-black">{rows.length}</p></div></div>
-          <div className="overflow-hidden rounded-2xl border border-slate-200">{[['Basic / Hourly Pay', basicPay + hourlyPay], ['Overtime Pay', overtimePay], ['Allowance / Bonus', Number(allowances || 0)], ['Gross Pay', grossPay], ['Salary Advances', -advanceDeductions], ['Other Deductions', -Number(otherDeductions || 0)], ['Net Pay', netPay]].map(([label, amount], index) => <div key={label} className={`flex items-center justify-between px-4 py-3 text-sm ${index === 6 ? 'bg-emerald-50 font-black text-emerald-800' : 'border-b border-slate-100 text-slate-700'}`}><span>{label}</span><span>${formatMoney(amount)}</span></div>)}</div>
+          <div className="grid grid-cols-2 gap-3 rounded-lg bg-slate-50 p-4 sm:grid-cols-4"><div><p className="text-[9px] font-semibold uppercase text-slate-400">Regular Hours</p><p className="mt-1 text-lg font-semibold">{regularHours.toFixed(2)}</p></div><div><p className="text-[9px] font-semibold uppercase text-slate-400">OT Hours</p><p className="mt-1 text-lg font-semibold">{overtimeHours.toFixed(2)}</p></div><div><p className="text-[9px] font-semibold uppercase text-slate-400">Advances</p><p className="mt-1 text-lg font-semibold text-amber-700">${formatMoney(advanceDeductions)}</p></div><div><p className="text-[9px] font-semibold uppercase text-slate-400">Attendance Days</p><p className="mt-1 text-lg font-semibold">{rows.length}</p></div></div>
+          <div className="overflow-hidden rounded-lg border border-slate-200">{[['Basic / Hourly Pay', basicPay + hourlyPay], ['Overtime Pay', overtimePay], ['Allowance / Bonus', Number(allowances || 0)], ['Gross Pay', grossPay], ['Salary Advances', -advanceDeductions], ['Other Deductions', -Number(otherDeductions || 0)], ['Net Pay', netPay]].map(([label, amount], index) => <div key={label} className={`flex items-center justify-between px-4 py-3 text-sm ${index === 6 ? 'bg-emerald-50 font-semibold text-emerald-800' : 'border-b border-slate-100 text-slate-700'}`}><span>{label}</span><span>${formatMoney(amount)}</span></div>)}</div>
           <label><span className="mb-1.5 block text-xs font-bold">Notes</span><textarea rows="2" value={notes} onChange={(e) => setNotes(e.target.value)} className={cls} /></label>
         </>}
-        <div className="flex justify-end gap-3 border-t border-slate-100 pt-4"><button type="button" onClick={onClose} className="rounded-xl px-5 py-2.5 text-sm font-bold text-slate-500">Cancel</button><button type="submit" disabled={saving || !employee || periodEnd < periodStart} className="rounded-xl bg-emerald-600 px-6 py-2.5 text-sm font-black text-white disabled:opacity-50">{saving ? 'Generating…' : 'Generate Payroll'}</button></div>
+        <div className="flex justify-end gap-3 border-t border-slate-100 pt-4"><button type="button" onClick={onClose} className="rounded-md px-5 py-2.5 text-sm font-bold text-slate-500">Cancel</button><button type="submit" disabled={saving || !employee || periodEnd < periodStart} className="rounded-md bg-emerald-600 px-6 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{saving ? 'Generating…' : 'Generate Payroll'}</button></div>
       </form>
     </ModalShell>
   );
@@ -1309,23 +1319,257 @@ function PayrollEditor({ employees, attendance, advances, onClose, onGenerate })
 function PayslipPreview({ payroll, employee, onClose, onMarkPaid }) {
   const content = (
     <div className="bg-white text-slate-900">
-      <div className="border-b-4 border-slate-900 pb-4"><p className="text-2xl font-black">THREE LEAVES</p><p className="mt-1 text-xs font-black uppercase tracking-[0.2em] text-slate-500">Employee Payslip</p></div>
-      <div className="mt-6 grid grid-cols-2 gap-4 text-sm"><div><span className="text-slate-500">Employee</span><p className="font-black">{employee.name}</p></div><div><span className="text-slate-500">Employee ID</span><p className="font-black">{employee.employeeNo}</p></div><div><span className="text-slate-500">Role</span><p className="font-black">{employee.role}</p></div><div><span className="text-slate-500">Pay Period</span><p className="font-black">{payroll.period_start} to {payroll.period_end}</p></div></div>
-      <div className="mt-7 overflow-hidden rounded-xl border border-slate-200">{[['Regular Hours', Number(payroll.regular_hours || 0).toFixed(2)], ['Overtime Hours', Number(payroll.overtime_hours || 0).toFixed(2)], ['Basic Pay', `$${formatMoney(payroll.basic_pay || 0)}`], ['Hourly Pay', `$${formatMoney(payroll.hourly_pay || 0)}`], ['Overtime Pay', `$${formatMoney(payroll.overtime_pay || 0)}`], ['Allowances / Bonus', `$${formatMoney(payroll.allowances || 0)}`], ['Gross Pay', `$${formatMoney(payroll.gross_pay || 0)}`], ['Salary Advances', `-$${formatMoney(payroll.advance_deductions || 0)}`], ['Other Deductions', `-$${formatMoney(payroll.other_deductions || 0)}`]].map(([label, value]) => <div key={label} className="flex justify-between border-b border-slate-100 px-4 py-3 text-sm last:border-b-0"><span className="text-slate-600">{label}</span><span className="font-bold">{value}</span></div>)}</div>
-      <div className="mt-5 flex justify-between rounded-xl bg-slate-900 px-5 py-4 text-white"><span className="font-black uppercase">Net Pay</span><span className="text-2xl font-black">${formatMoney(payroll.net_pay || 0)}</span></div>
+      <div className="border-b-4 border-slate-900 pb-4"><p className="text-2xl font-semibold">THREE LEAVES</p><p className="mt-1 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Employee Payslip</p></div>
+      <div className="mt-6 grid grid-cols-2 gap-4 text-sm"><div><span className="text-slate-500">Employee</span><p className="font-semibold">{employee.name}</p></div><div><span className="text-slate-500">Employee ID</span><p className="font-semibold">{employee.employeeNo}</p></div><div><span className="text-slate-500">Role</span><p className="font-semibold">{employee.role}</p></div><div><span className="text-slate-500">Pay Period</span><p className="font-semibold">{payroll.period_start} to {payroll.period_end}</p></div></div>
+      <div className="mt-7 overflow-hidden rounded-md border border-slate-200">{[['Regular Hours', Number(payroll.regular_hours || 0).toFixed(2)], ['Overtime Hours', Number(payroll.overtime_hours || 0).toFixed(2)], ['Basic Pay', `$${formatMoney(payroll.basic_pay || 0)}`], ['Hourly Pay', `$${formatMoney(payroll.hourly_pay || 0)}`], ['Overtime Pay', `$${formatMoney(payroll.overtime_pay || 0)}`], ['Allowances / Bonus', `$${formatMoney(payroll.allowances || 0)}`], ['Gross Pay', `$${formatMoney(payroll.gross_pay || 0)}`], ['Salary Advances', `-$${formatMoney(payroll.advance_deductions || 0)}`], ['Other Deductions', `-$${formatMoney(payroll.other_deductions || 0)}`]].map(([label, value]) => <div key={label} className="flex justify-between border-b border-slate-100 px-4 py-3 text-sm last:border-b-0"><span className="text-slate-600">{label}</span><span className="font-bold">{value}</span></div>)}</div>
+      <div className="mt-5 flex justify-between rounded-md bg-slate-900 px-5 py-4 text-white"><span className="font-semibold uppercase">Net Pay</span><span className="text-2xl font-semibold">${formatMoney(payroll.net_pay || 0)}</span></div>
       {employee.employmentType === 'Part-Time' && (
-        <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
+        <div className="mt-4 overflow-hidden rounded-md border border-slate-200">
           <div className="flex justify-between border-b border-slate-100 px-4 py-3 text-sm"><span className="text-slate-600">Brought Forward / Previous Balance</span><span className="font-bold">{signedMoney(payroll.part_time_brought_forward || 0)}</span></div>
           <div className="flex justify-between border-b border-slate-100 px-4 py-3 text-sm"><span className="text-slate-600">Salary Issued</span><span className="font-bold">-${formatMoney(payroll.salary_issued || 0)}</span></div>
-          <div className="flex justify-between px-4 py-3 text-sm"><span className="font-black text-slate-800">Remaining Rolling Balance</span><span className="font-black">{signedMoney(payroll.part_time_rolling_balance || Number(payroll.net_pay || 0) - Number(payroll.salary_issued || 0))}</span></div>
+          <div className="flex justify-between px-4 py-3 text-sm"><span className="font-semibold text-slate-800">Remaining Rolling Balance</span><span className="font-semibold">{signedMoney(payroll.part_time_rolling_balance || Number(payroll.net_pay || 0) - Number(payroll.salary_issued || 0))}</span></div>
         </div>
       )}
-      <div className="mt-6 grid grid-cols-2 gap-4 text-xs text-slate-500"><div><p className="font-bold uppercase">Status</p><p className="mt-1 text-sm font-black text-slate-800">{String(payroll.status || '').toUpperCase()}</p></div><div><p className="font-bold uppercase">Payment</p><p className="mt-1 text-sm font-black text-slate-800">{payroll.paid_at || '—'} · {payroll.payment_method || employee.paymentMethod || '—'}</p>{payroll.payment_reference && <p className="mt-1">Ref: {payroll.payment_reference}</p>}</div></div>
+      <div className="mt-6 grid grid-cols-2 gap-4 text-xs text-slate-500"><div><p className="font-bold uppercase">Status</p><p className="mt-1 text-sm font-semibold text-slate-800">{String(payroll.status || '').toUpperCase()}</p></div><div><p className="font-bold uppercase">Payment</p><p className="mt-1 text-sm font-semibold text-slate-800">{payroll.paid_at || '—'} · {payroll.payment_method || employee.paymentMethod || '—'}</p>{payroll.payment_reference && <p className="mt-1">Ref: {payroll.payment_reference}</p>}</div></div>
     </div>
   );
   return <>
-    {createPortal(<div className="fixed inset-0 z-[8200] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm print:hidden"><div className="flex max-h-[94vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl"><div className="flex items-center justify-between border-b border-slate-200 px-6 py-4"><div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-blue-600">Payslip Preview</p><h2 className="mt-1 text-lg font-black text-slate-900">{employee.name}</h2></div><div className="flex gap-2">{payroll.status !== 'paid' && onMarkPaid && <button type="button" onClick={onMarkPaid} className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-black text-white">Mark Paid</button>}<button type="button" onClick={() => window.print()} className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-black text-white">Print</button><button type="button" onClick={onClose} className="rounded-full p-2 text-slate-400 hover:bg-slate-100"><X size={20} /></button></div></div><div className="overflow-y-auto bg-slate-100 p-6"><div className="mx-auto max-w-[210mm] rounded-xl bg-white p-[15mm] shadow-lg">{content}</div></div></div></div>, document.body)}
+    {createPortal(<div className="fixed inset-0 z-[8200] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm print:hidden"><div className="flex max-h-[94vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg bg-white"><div className="flex items-center justify-between border-b border-slate-200 px-6 py-4"><div><p className="text-[10px] font-medium uppercase tracking-[0.14em] text-blue-600">Payslip Preview</p><h2 className="mt-1 text-lg font-semibold text-slate-900">{employee.name}</h2></div><div className="flex gap-2">{payroll.status !== 'paid' && onMarkPaid && <button type="button" onClick={onMarkPaid} className="rounded-md bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white">Mark Paid</button>}<button type="button" onClick={() => window.print()} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white">Print</button><button type="button" onClick={onClose} className="rounded-full p-2 text-slate-400 hover:bg-slate-100"><X size={20} /></button></div></div><div className="overflow-y-auto bg-slate-100 p-6"><div className="mx-auto max-w-[210mm] rounded-md bg-white p-[15mm]">{content}</div></div></div></div>, document.body)}
     {createPortal(<div id="employee-payslip-print" className="hidden"><style>{`@media print { @page { size:A4 portrait; margin:15mm; } body > *:not(#employee-payslip-print) { display:none !important; } #employee-payslip-print { display:block !important; } }`}</style>{content}</div>, document.body)}
+  </>;
+}
+
+
+function PartTimeIntervalPayslipPreview({
+  employee,
+  bounds,
+  intervalLabelText,
+  attendanceRows,
+  advanceRows,
+  salaryPayments,
+  hourlyPay,
+  transportTotal,
+  grossEarnings,
+  advancesTotal,
+  salaryDue,
+  salaryIssued,
+  outstanding,
+  broughtForward,
+  rollingBalance,
+  totalHours,
+  onClose,
+}) {
+  const dateText = (value) => {
+    if (!value) return '—';
+    const date = new Date(`${String(value).slice(0, 10)}T00:00:00`);
+    return Number.isNaN(date.getTime())
+      ? String(value)
+      : date.toLocaleDateString('en-SG', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
+
+  const workRows = [...attendanceRows]
+    .filter((row) => attendanceHours(row) > 0 || row.clock_in || row.clock_out)
+    .sort((a, b) => String(a.work_date).localeCompare(String(b.work_date)))
+    .map((row) => {
+      const hours = attendanceHours(row);
+      const rate = Number(row.hourly_rate_snapshot || 0) > 0
+        ? Number(row.hourly_rate_snapshot)
+        : Number(employee.hourlyRate || 0);
+      return {
+        ...row,
+        hours,
+        rate,
+        earnings: hours * rate,
+        transport: hours > 0 ? Number(row.transport_allowance || 0) : 0,
+      };
+    });
+
+  const printReport = (
+    <article className="pt-slip-page bg-white text-black">
+      <header className="border-b-2 border-black pb-4">
+        <div className="flex items-start justify-between gap-6">
+          <div>
+            <h1 className="text-[23px] font-semibold tracking-tight">THREE LEAVES</h1>
+            <p className="mt-1 text-[9px] font-medium uppercase tracking-[0.22em] text-neutral-600">
+              Employee Payroll Statement
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-[18px] font-semibold uppercase tracking-wide">Part-Time Payslip</p>
+            <p className="mt-1 text-[10px] text-neutral-600">{intervalLabelText}</p>
+          </div>
+        </div>
+      </header>
+
+      <section className="grid grid-cols-2 gap-x-8 gap-y-3 border-b border-neutral-300 py-4 text-[11px]">
+        <div><p className="text-[9px] uppercase tracking-wider text-neutral-500">Employee Name</p><p className="mt-1 font-semibold">{employee.name || '—'}</p></div>
+        <div><p className="text-[9px] uppercase tracking-wider text-neutral-500">Employee ID</p><p className="mt-1 font-semibold">{employee.employeeNo || '—'}</p></div>
+        <div><p className="text-[9px] uppercase tracking-wider text-neutral-500">Position</p><p className="mt-1 font-semibold">{employee.role || '—'}</p></div>
+        <div><p className="text-[9px] uppercase tracking-wider text-neutral-500">Pay Frequency</p><p className="mt-1 font-semibold">{employee.paymentInterval === 'monthly' ? 'Monthly' : 'Weekly'}</p></div>
+        <div><p className="text-[9px] uppercase tracking-wider text-neutral-500">Period Start</p><p className="mt-1 font-semibold">{dateText(bounds.start)}</p></div>
+        <div><p className="text-[9px] uppercase tracking-wider text-neutral-500">Period End</p><p className="mt-1 font-semibold">{dateText(bounds.end)}</p></div>
+      </section>
+
+      <section className="pt-5">
+        <div className="mb-2 flex items-end justify-between">
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em]">Working Hours Detail</h2>
+          <p className="text-[10px] text-neutral-600">Total: <strong className="text-black">{durationLabel(totalHours)}</strong></p>
+        </div>
+        <table className="w-full border-collapse text-[10px]">
+          <thead>
+            <tr className="border-y border-black text-left uppercase tracking-wide">
+              <th className="py-2 pr-2 font-semibold">Date</th>
+              <th className="px-2 py-2 font-semibold">Clock In</th>
+              <th className="px-2 py-2 font-semibold">Clock Out</th>
+              <th className="px-2 py-2 text-right font-semibold">Break</th>
+              <th className="px-2 py-2 text-right font-semibold">Hours</th>
+              <th className="px-2 py-2 text-right font-semibold">Rate / Hr</th>
+              <th className="px-2 py-2 text-right font-semibold">Wages</th>
+              <th className="px-2 py-2 text-right font-semibold">Transport</th>
+              <th className="py-2 pl-2 text-right font-semibold">Daily Gross</th>
+            </tr>
+          </thead>
+          <tbody>
+            {workRows.length ? workRows.map((row) => (
+              <tr key={row.id || row.work_date} className="border-b border-neutral-200">
+                <td className="py-2 pr-2">{dateText(row.work_date)}</td>
+                <td className="px-2 py-2">{row.clock_in ? String(row.clock_in).slice(0, 5) : '—'}</td>
+                <td className="px-2 py-2">{row.clock_out ? String(row.clock_out).slice(0, 5) : '—'}</td>
+                <td className="px-2 py-2 text-right">{Number(row.break_minutes || 0)} min</td>
+                <td className="px-2 py-2 text-right tabular-nums">{row.hours.toFixed(2)}</td>
+                <td className="px-2 py-2 text-right tabular-nums">${formatMoney(row.rate)}</td>
+                <td className="px-2 py-2 text-right tabular-nums">${formatMoney(row.earnings)}</td>
+                <td className="px-2 py-2 text-right tabular-nums">${formatMoney(row.transport)}</td>
+                <td className="py-2 pl-2 text-right tabular-nums">${formatMoney(row.earnings + row.transport)}</td>
+              </tr>
+            )) : (
+              <tr><td colSpan="9" className="py-5 text-center text-neutral-500">No working hours recorded for this interval.</td></tr>
+            )}
+          </tbody>
+          <tfoot>
+            <tr className="border-t border-black font-semibold">
+              <td colSpan="4" className="py-2">Interval Totals</td>
+              <td className="px-2 py-2 text-right tabular-nums">{totalHours.toFixed(2)}</td>
+              <td />
+              <td className="px-2 py-2 text-right tabular-nums">${formatMoney(hourlyPay)}</td>
+              <td className="px-2 py-2 text-right tabular-nums">${formatMoney(transportTotal)}</td>
+              <td className="py-2 pl-2 text-right tabular-nums">${formatMoney(grossEarnings)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </section>
+
+      <section className="mt-5 grid grid-cols-2 gap-8">
+        <div>
+          <h2 className="mb-2 border-b border-black pb-2 text-[11px] font-semibold uppercase tracking-[0.12em]">Salary Advances</h2>
+          {advanceRows.length ? (
+            <table className="w-full border-collapse text-[10px]">
+              <thead><tr className="border-b border-neutral-300 text-left text-neutral-600"><th className="py-1.5">Date</th><th className="py-1.5">Description</th><th className="py-1.5 text-right">Amount</th></tr></thead>
+              <tbody>{advanceRows.map((row) => <tr key={row.id} className="border-b border-neutral-200"><td className="py-1.5 pr-2">{dateText(row.advance_date)}</td><td className="py-1.5 pr-2">{row.reason || row.notes || 'Salary advance'}</td><td className="py-1.5 text-right tabular-nums">${formatMoney(row.amount)}</td></tr>)}</tbody>
+            </table>
+          ) : <p className="py-2 text-[10px] text-neutral-500">No advances recorded.</p>}
+        </div>
+        <div>
+          <h2 className="mb-2 border-b border-black pb-2 text-[11px] font-semibold uppercase tracking-[0.12em]">Payments Issued</h2>
+          {salaryPayments.length ? (
+            <table className="w-full border-collapse text-[10px]">
+              <thead><tr className="border-b border-neutral-300 text-left text-neutral-600"><th className="py-1.5">Date</th><th className="py-1.5">Method / Ref.</th><th className="py-1.5 text-right">Amount</th></tr></thead>
+              <tbody>{salaryPayments.map((row) => <tr key={row.id} className="border-b border-neutral-200"><td className="py-1.5 pr-2">{dateText(row.payment_date)}</td><td className="py-1.5 pr-2">{[row.payment_method, row.payment_reference].filter(Boolean).join(' · ') || '—'}</td><td className="py-1.5 text-right tabular-nums">${formatMoney(row.amount)}</td></tr>)}</tbody>
+            </table>
+          ) : <p className="py-2 text-[10px] text-neutral-500">No salary payments recorded.</p>}
+        </div>
+      </section>
+
+      <section className="mt-6 ml-auto w-full max-w-[330px] text-[11px]">
+        <h2 className="mb-2 border-b-2 border-black pb-2 text-[11px] font-semibold uppercase tracking-[0.12em]">Pay Breakdown</h2>
+        {[
+          ['Hourly Earnings', hourlyPay],
+          ['Transport Allowance', transportTotal],
+          ['Gross Earnings', grossEarnings],
+          ['Less: Salary Advances', -advancesTotal],
+          ['Salary Due Before Payments', salaryDue],
+          ['Less: Payments Issued', -salaryIssued],
+        ].map(([label, amount], index) => (
+          <div key={label} className={`flex justify-between gap-4 py-1.5 ${index === 2 || index === 4 ? 'border-t border-neutral-400 font-semibold' : ''}`}>
+            <span>{label}</span><span className="tabular-nums">{signedMoney(amount)}</span>
+          </div>
+        ))}
+        <div className="mt-2 flex justify-between border-y-2 border-black py-2.5 text-[13px] font-semibold">
+          <span>Interval Balance</span><span className="tabular-nums">{signedMoney(outstanding)}</span>
+        </div>
+        <div className="mt-3 flex justify-between py-1.5"><span>Brought Forward</span><span className="tabular-nums">{signedMoney(broughtForward)}</span></div>
+        <div className="flex justify-between border-t border-neutral-300 pt-2 font-semibold"><span>Rolling Balance</span><span className="tabular-nums">{signedMoney(rollingBalance)}</span></div>
+      </section>
+
+      <footer className="mt-8 border-t border-neutral-300 pt-3 text-[9px] text-neutral-500">
+        <div className="flex justify-between gap-4"><span>Generated from Three Leaves ERP · For payroll record purposes</span><span>Currency: SGD</span></div>
+        <div className="mt-7 grid grid-cols-2 gap-12 text-[9px] text-neutral-600">
+          <div className="border-t border-neutral-500 pt-1">Prepared by</div>
+          <div className="border-t border-neutral-500 pt-1">Employee acknowledgement</div>
+        </div>
+      </footer>
+    </article>
+  );
+
+  return <>
+    {createPortal(
+      <div className="fixed inset-0 z-[8300] flex items-center justify-center bg-black/70 p-3 print:hidden">
+        <div className="flex max-h-[96vh] w-full max-w-[900px] flex-col overflow-hidden border border-neutral-300 bg-white text-black shadow-xl">
+          <div className="flex items-center justify-between border-b border-neutral-300 px-4 py-3 print:hidden">
+            <div><p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-neutral-500">Payslip Preview</p><h2 className="mt-0.5 text-sm font-semibold">{employee.name} · {intervalLabelText}</h2></div>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => window.print()} className="inline-flex h-9 items-center gap-2 border border-black bg-black px-3 text-xs font-semibold text-white hover:bg-neutral-800"><Printer size={14} /> Print / Save PDF</button>
+              <button type="button" onClick={onClose} className="inline-flex h-9 items-center gap-2 border border-neutral-300 px-3 text-xs font-medium text-neutral-700 hover:bg-neutral-100"><X size={14} /> Close</button>
+            </div>
+          </div>
+          <div className="overflow-y-auto bg-neutral-100 p-4 sm:p-6">
+            <div className="mx-auto min-h-[297mm] w-full max-w-[210mm] border border-neutral-300 bg-white p-8 text-black shadow-sm sm:p-[15mm]">
+              {printReport}
+            </div>
+          </div>
+        </div>
+      </div>,
+      document.body
+    )}
+    {createPortal(
+      <div id="part-time-interval-payslip-print" className="pt-slip-print-root">
+        <style>{`
+          .pt-slip-print-root { display: none; }
+          @media print {
+            @page { size: A4 portrait; margin: 12mm; }
+            html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; }
+            body * { visibility: hidden !important; }
+            #part-time-interval-payslip-print,
+            #part-time-interval-payslip-print * { visibility: visible !important; }
+            #part-time-interval-payslip-print {
+              display: block !important;
+              position: absolute !important;
+              inset: 0 auto auto 0 !important;
+              width: 100% !important;
+              background: #fff !important;
+              color: #000 !important;
+            }
+            #part-time-interval-payslip-print .pt-slip-page {
+              width: 100% !important;
+              max-width: none !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              border: 0 !important;
+              box-shadow: none !important;
+              color: #000 !important;
+              background: #fff !important;
+              font-family: Arial, Helvetica, sans-serif !important;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+            #part-time-interval-payslip-print table { page-break-inside: auto; }
+            #part-time-interval-payslip-print tr { page-break-inside: avoid; break-inside: avoid; }
+          }
+        `}</style>
+        {printReport}
+      </div>,
+      document.body
+    )}
   </>;
 }
 
@@ -1339,9 +1583,6 @@ function PartTimeDayRow({
   saving,
   onSave,
   onDelete,
-  salaryPaymentsForDate = [],
-  salarySaving = false,
-  onSalaryIssued,
 }) {
   const legacyHours = attendanceHours(attendanceRow);
   const hasStoredTiming = Boolean(attendanceRow?.clock_in && attendanceRow?.clock_out);
@@ -1394,6 +1635,7 @@ function PartTimeDayRow({
   const dayAllowance = computedHours > 0 ? Number(allowance || 0) : 0;
   const gross = hourlyPay + dayAllowance;
   const totalAdvance = Number(advance || 0) + Number(otherAdvanceAmount || 0);
+  const dayBalance = gross - totalAdvance;
   const hasStoredEntry = Boolean(attendanceRow || timesheetAdvance);
 
   const buildDraft = () => ({
@@ -1563,7 +1805,7 @@ function PartTimeDayRow({
   const saveBadge = (() => {
     if (locked) {
       return (
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-slate-500">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wider text-slate-500">
           <Lock size={10} /> Locked
         </span>
       );
@@ -1601,12 +1843,12 @@ function PartTimeDayRow({
   })();
 
   const controlBase =
-    'rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400';
+    'h-9 rounded-md border border-slate-300 bg-white text-xs font-medium text-slate-700 outline-none transition focus:border-slate-500 focus:ring-1 focus:ring-slate-300 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400';
 
   return (
     <tr className="group border-b border-slate-100 align-middle transition hover:bg-slate-50/60">
       <td className="sticky left-0 z-10 bg-white px-4 py-3 shadow-[1px_0_0_0_#e2e8f0] group-hover:bg-slate-50">
-        <p className="whitespace-nowrap text-xs font-black text-slate-800">
+        <p className="whitespace-nowrap text-xs font-semibold text-slate-800">
           {dateFromIso(date).toLocaleDateString('en-SG', { weekday: 'short' })}
         </p>
         <p className="mt-0.5 whitespace-nowrap text-[10px] font-medium text-slate-400">
@@ -1615,10 +1857,10 @@ function PartTimeDayRow({
       </td>
 
       <td className="min-w-[260px] px-3 py-2.5">
-        <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-2">
+        <div className="border border-slate-200 bg-slate-50/60 p-2">
           <div className="flex items-center gap-2">
             <label className="min-w-0 flex-1">
-              <span className="mb-1 block text-[8px] font-black uppercase tracking-wider text-slate-400">Start</span>
+              <span className="mb-1 block text-[8px] font-semibold uppercase tracking-wider text-slate-400">Start</span>
               <input
                 type="time"
                 value={clockIn}
@@ -1635,7 +1877,7 @@ function PartTimeDayRow({
             <span className="mt-4 text-slate-300">→</span>
 
             <label className="min-w-0 flex-1">
-              <span className="mb-1 block text-[8px] font-black uppercase tracking-wider text-slate-400">End</span>
+              <span className="mb-1 block text-[8px] font-semibold uppercase tracking-wider text-slate-400">End</span>
               <input
                 type="time"
                 value={clockOut}
@@ -1650,7 +1892,7 @@ function PartTimeDayRow({
             </label>
 
             <label className="w-[70px]">
-              <span className="mb-1 block text-[8px] font-black uppercase tracking-wider text-slate-400">Break</span>
+              <span className="mb-1 block text-[8px] font-semibold uppercase tracking-wider text-slate-400">Break</span>
               <div className="relative">
                 <input
                   type="number"
@@ -1679,14 +1921,14 @@ function PartTimeDayRow({
       </td>
 
       <td className="min-w-[105px] px-3 py-3 text-right">
-        <p className="font-mono text-xs font-black text-slate-800">{durationLabel(computedHours)}</p>
+        <p className="font-mono text-xs font-semibold text-slate-800">{durationLabel(computedHours)}</p>
         <p className="mt-0.5 font-mono text-[9px] text-slate-400">{computedHours.toFixed(2)} hrs</p>
       </td>
 
       <td className="min-w-[155px] px-3 py-2.5">
-        <div className="ml-auto w-[130px] rounded-xl border border-blue-100 bg-blue-50/40 p-2">
+        <div className="ml-auto w-[130px] border border-slate-200 bg-white p-2">
           <div className="flex items-center gap-1.5">
-            <span className="text-[10px] font-bold text-blue-500">$</span>
+            <span className="text-[10px] font-bold text-slate-500">$</span>
             <input
               type="number"
               min="0"
@@ -1698,13 +1940,13 @@ function PartTimeDayRow({
                 markDirty();
               }}
               onBlur={commitCurrentField}
-              className="w-full bg-transparent text-right font-mono text-xs font-black text-blue-800 outline-none"
+              className="w-full bg-transparent text-right font-mono text-xs font-semibold text-slate-800 outline-none"
             />
-            <span className="text-[9px] font-bold text-blue-400">/hr</span>
+            <span className="text-[9px] font-bold text-slate-400">/hr</span>
           </div>
-          <div className="mt-1.5 border-t border-blue-100 pt-1.5 text-right">
+          <div className="mt-1.5 border-t border-slate-200 pt-1.5 text-right">
             <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Pay </span>
-            <span className="font-mono text-xs font-black text-slate-800">${formatMoney(hourlyPay)}</span>
+            <span className="font-mono text-xs font-semibold text-slate-800">${formatMoney(hourlyPay)}</span>
           </div>
         </div>
       </td>
@@ -1712,7 +1954,7 @@ function PartTimeDayRow({
       <td className="min-w-[130px] px-3 py-2.5">
         <div className="ml-auto w-[110px] text-right">
           {allowanceEditing && !locked ? (
-            <div className="rounded-xl border border-slate-200 bg-white p-2">
+            <div className="rounded-md border border-slate-200 bg-white p-2">
               <div className="flex items-center gap-1">
                 <span className="text-[10px] text-slate-400">$</span>
                 <input
@@ -1730,7 +1972,7 @@ function PartTimeDayRow({
                     setAllowanceEditing(false);
                     commitCurrentField();
                   }}
-                  className="w-full bg-transparent text-right font-mono text-xs font-black text-slate-800 outline-none"
+                  className="w-full bg-transparent text-right font-mono text-xs font-semibold text-slate-800 outline-none"
                 />
               </div>
               {Number(allowance) !== DEFAULT_PART_TIME_TRANSPORT_ALLOWANCE && (
@@ -1738,7 +1980,7 @@ function PartTimeDayRow({
                   type="button"
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={resetTransport}
-                  className="mt-1 text-[8px] font-black uppercase tracking-wider text-blue-600"
+                  className="mt-1 text-[8px] font-semibold uppercase tracking-wider text-blue-600"
                 >
                   Reset $5
                 </button>
@@ -1749,13 +1991,13 @@ function PartTimeDayRow({
               type="button"
               disabled={locked}
               onClick={() => setAllowanceEditing(true)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-2 py-2 text-right transition hover:border-blue-200 hover:bg-blue-50 disabled:cursor-not-allowed disabled:bg-slate-100"
+              className="w-full rounded-md border border-slate-200 bg-white px-2 py-2 text-right transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
               title="Click to edit this day's transport allowance"
             >
-              <span className="block font-mono text-xs font-black text-slate-800">
+              <span className="block font-mono text-xs font-semibold text-slate-800">
                 ${formatMoney(computedHours > 0 ? dayAllowance : DEFAULT_PART_TIME_TRANSPORT_ALLOWANCE)}
               </span>
-              <span className={`mt-0.5 block text-[8px] font-black uppercase tracking-wider ${Number(allowance) === DEFAULT_PART_TIME_TRANSPORT_ALLOWANCE ? 'text-slate-400' : 'text-blue-600'}`}>
+              <span className={`mt-0.5 block text-[8px] font-semibold uppercase tracking-wider ${Number(allowance) === DEFAULT_PART_TIME_TRANSPORT_ALLOWANCE ? 'text-slate-400' : 'text-blue-600'}`}>
                 {Number(allowance) === DEFAULT_PART_TIME_TRANSPORT_ALLOWANCE ? 'Standard · Edit' : 'Custom · Edit'}
               </span>
             </button>
@@ -1763,14 +2005,14 @@ function PartTimeDayRow({
         </div>
       </td>
 
-      <td className="min-w-[115px] px-3 py-2.5 text-right">
-        <p className="font-mono text-sm font-semibold text-slate-900">${formatMoney(gross)}</p>
-        <p className="mt-0.5 text-xs font-medium text-slate-500">Gross</p>
+      <td className="min-w-[115px] bg-emerald-50/30 px-3 py-3 text-right">
+        <p className="font-mono text-xs font-semibold text-emerald-800">${formatMoney(gross)}</p>
+        <p className="mt-0.5 text-[8px] font-semibold uppercase tracking-wider text-emerald-600/60">Gross</p>
       </td>
 
       <td className="min-w-[130px] px-3 py-2.5">
         <div className="relative ml-auto w-[108px]">
-          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-400">$</span>
+          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-amber-500">$</span>
           <input
             type="number"
             min="0"
@@ -1782,33 +2024,24 @@ function PartTimeDayRow({
               markDirty();
             }}
             onBlur={commitCurrentField}
-            className="w-full rounded-md border border-slate-300 bg-white py-2 pl-6 pr-2 text-right text-sm font-medium text-slate-900 outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-300 disabled:bg-slate-50 disabled:text-slate-400"
+            className="w-full rounded-md border border-slate-300 bg-white py-2.5 pl-6 pr-2 text-right font-mono text-xs font-semibold text-slate-800 outline-none transition focus:border-amber-300 focus:ring-2 focus:ring-amber-100 disabled:bg-slate-100 disabled:text-slate-400"
           />
         </div>
         {otherAdvanceAmount > 0 && (
-          <p className="mt-1 text-right text-xs font-medium text-slate-500">
+          <p className="mt-1 text-right text-[8px] font-bold text-amber-600">
             +${formatMoney(otherAdvanceAmount)} ledger
           </p>
         )}
       </td>
 
-      <td className="min-w-[165px] px-3 py-2.5">
-        <PartTimeDaySalaryIssuedCell
-          locked={locked}
-          saving={salarySaving}
-          date={date}
-          payments={salaryPaymentsForDate}
-          onSave={onSalaryIssued}
-        />
-      </td>
-
-      <td className="min-w-[155px] px-3 py-3 text-right">
-        <p className={`font-mono text-sm font-semibold ${gross - totalAdvance - salaryPaymentsForDate.reduce((sum, payment) => sum + Number(payment.amount || 0), 0) < 0 ? 'text-red-600' : 'text-slate-900'}`}>
-          {signedMoney(gross - totalAdvance - salaryPaymentsForDate.reduce((sum, payment) => sum + Number(payment.amount || 0), 0))}
+      <td className="min-w-[118px] px-3 py-3 text-right">
+        <p className={`font-mono text-xs font-semibold ${dayBalance < 0 ? 'text-red-700' : 'text-blue-700'}`}>
+          {signedMoney(dayBalance)}
         </p>
+        <p className="mt-0.5 text-[8px] font-semibold uppercase tracking-wider text-slate-400">Net day</p>
       </td>
 
-      <td className="min-w-[90px] px-3 py-3">
+      <td className="min-w-[130px] px-3 py-3">
         <div className="flex items-center justify-end gap-2">
           <div className="min-w-[66px] text-right">{saveBadge}</div>
 
@@ -1827,88 +2060,65 @@ function PartTimeDayRow({
   );
 }
 
-function PartTimeDaySalaryIssuedCell({
+function PartTimeSalaryIssuedCell({
   locked,
   saving,
-  date,
-  payments = [],
   onSave,
 }) {
   const [draftAmount, setDraftAmount] = useState('');
-  const [paymentSaveState, setPaymentSaveState] = useState('idle');
-
-  const recordedTotal = payments.reduce(
-    (sum, payment) => sum + Number(payment.amount || 0),
-    0
-  );
+  const [paymentDate, setPaymentDate] = useState(localDateString());
 
   const commit = async () => {
     if (locked || saving) return;
 
-    const rawAmount = String(draftAmount || '').trim();
-    if (!rawAmount) return;
+    const cleaned = String(draftAmount || '').trim();
+    const numeric = cleaned === '' ? 0 : Number(cleaned);
 
-    const amount = Number(rawAmount);
-    if (!Number.isFinite(amount) || amount <= 0) return;
+    // Blank means no payment has been issued. Never infer a payment from
+    // hours worked, advances, gross earnings, or the current balance.
+    if (!Number.isFinite(numeric) || numeric <= 0) return;
 
-    setPaymentSaveState('saving');
-
-    try {
-      const ok = await onSave(amount, date);
-      if (ok) {
-        setDraftAmount('');
-        setPaymentSaveState('saved');
-      } else {
-        setPaymentSaveState('error');
-      }
-    } catch (error) {
-      console.error('Salary payment save failed:', error);
-      setPaymentSaveState('error');
-    }
+    const ok = await onSave(numeric, paymentDate || localDateString());
+    if (ok) setDraftAmount('');
   };
 
   return (
-    <div className="flex min-w-[165px] flex-col items-end gap-1">
-      <div className="relative w-[118px]">
-        <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-400">$</span>
+    <div className="min-w-[170px] space-y-1.5">
+      <div className="relative">
+        <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400">$</span>
         <input
           type="number"
           min="0.01"
           step="0.01"
           value={draftAmount}
           disabled={locked || saving}
-          placeholder="—"
-          aria-label={`Salary issued on ${date}`}
-          onChange={(event) => {
-            setDraftAmount(event.target.value);
-            setPaymentSaveState('idle');
-          }}
-          onBlur={() => void commit()}
+          placeholder="Amount paid"
+          onChange={(event) => setDraftAmount(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
               event.preventDefault();
-              void commit();
+              commit();
             }
           }}
-          className="h-9 w-full rounded-md border border-slate-300 bg-white pl-6 pr-2 text-right text-sm font-semibold text-slate-900 outline-none placeholder:text-slate-300 focus:border-slate-500 focus:ring-1 focus:ring-slate-300 disabled:bg-slate-50 disabled:text-slate-400"
+          className="h-9 w-full rounded-md border border-slate-300 bg-white py-1.5 pl-6 pr-2 text-right font-mono text-xs text-slate-800 outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-300 disabled:bg-slate-100 disabled:text-slate-400"
         />
       </div>
-
-      <div className="flex h-4 items-center justify-end text-[11px] font-medium leading-none text-slate-400">
-        {saving || paymentSaveState === 'saving' ? (
-          <span className="inline-flex items-center gap-1 text-slate-500">
-            <RefreshCw size={10} className="animate-spin" /> Saving…
-          </span>
-        ) : paymentSaveState === 'error' ? (
-          <span className="text-red-600">Save failed</span>
-        ) : paymentSaveState === 'saved' ? (
-          <span className="text-slate-500">Saved</span>
-        ) : recordedTotal > 0 ? (
-          <span>Paid ${formatMoney(recordedTotal)}</span>
-        ) : (
-          <span>Enter payment when paid</span>
-        )}
-      </div>
+      <input
+        type="date"
+        value={paymentDate}
+        disabled={locked || saving}
+        onChange={(event) => setPaymentDate(event.target.value)}
+        className="h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-[10px] text-slate-600 outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-300 disabled:bg-slate-100 disabled:text-slate-400"
+      />
+      <button
+        type="button"
+        disabled={locked || saving || !(Number(draftAmount) > 0)}
+        onClick={commit}
+        className="h-8 w-full rounded-md bg-slate-900 px-2 text-[10px] font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+      >
+        {saving ? 'Recording…' : 'Record payment'}
+      </button>
+      <p className="text-right text-[9px] text-slate-400">No amount is assumed until a payment is recorded.</p>
     </div>
   );
 }
@@ -2352,7 +2562,7 @@ export function EmployeeModule() {
       return false;
     }
 
-    const savingKey = `${employee.id}|salary|${bounds.start}|${bounds.end}|${paymentDate}`;
+    const savingKey = `${employee.id}|salary|${bounds.start}|${bounds.end}`;
     setPartTimeSavingKey(savingKey);
 
     try {
@@ -2775,25 +2985,26 @@ export function EmployeeModule() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"><SummaryCard label="Active Employees" value={overview.active.length} detail={`${overview.fullTime} full-time · ${overview.partTime} part-time`} icon={Users} onClick={() => setActiveTab('Directory')} /><SummaryCard label="Hours This Week" value={`${overview.weeklyHours.toFixed(1)} hrs`} detail={`${overview.partTimeHours.toFixed(1)} part-time · ${overview.weeklyOt.toFixed(1)} OT`} icon={Clock} tone="violet" onClick={() => setActiveTab('Part-Time Hours')} /><SummaryCard label="Payroll Due" value={`$${formatMoney(overview.payrollDue)}`} detail={`${overview.unpaid.length} unpaid period(s)`} icon={DollarSign} tone="emerald" onClick={() => setActiveTab('Payroll & Payslips')} /><SummaryCard label="Outstanding Advances" value={`$${formatMoney(overview.advanceAmount)}`} detail={`${overview.outstandingAdvances.length} pending / allocated`} icon={Gift} tone="amber" onClick={() => setActiveTab('Payroll & Payslips')} /></div>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-5"><div className="flex items-center justify-between"><div><p className="text-[10px] font-black uppercase text-slate-400">Today’s Workforce</p><h2 className="mt-1 text-lg font-black">{today}</h2></div><Clock size={20} className="text-blue-500" /></div><div className="mt-5 grid grid-cols-2 gap-3">{[['Recorded / Clocked', overview.todayRows.filter((row) => row.clock_in || attendanceHours(row) > 0).length, 'bg-emerald-50 text-emerald-700', 'Attendance & OT'], ['On Leave', overview.onLeaveToday.length, 'bg-violet-50 text-violet-700', 'Leave Entitlement'], ['Not Recorded', overview.notClocked.length, 'bg-amber-50 text-amber-700', 'Part-Time Hours'], ['Missing Clock-Out', overview.missingClockOut.length, 'bg-red-50 text-red-700', 'Attendance & OT']].map(([label, value, cls, tab]) => <button key={label} type="button" onClick={() => setActiveTab(tab)} className={`rounded-xl p-4 text-left ${cls}`}><p className="text-[9px] font-black uppercase opacity-60">{label}</p><p className="mt-2 text-2xl font-black">{value}</p></button>)}</div></div>
-        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm xl:col-span-7"><div className="flex items-center justify-between border-b border-slate-200 px-5 py-4"><div><p className="text-[10px] font-black uppercase text-slate-400">Action Centre</p><h2 className="mt-1 text-lg font-black">Needs Attention</h2></div><span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-black text-amber-700">{alerts.length} open</span></div><div className="divide-y divide-slate-100 px-5">{alerts.length ? alerts.map(([title, detail, tab]) => <div key={title} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex gap-3"><AlertCircle size={17} className="mt-0.5 shrink-0 text-amber-600" /><div><p className="text-sm font-black">{title}</p><p className="mt-1 text-xs text-slate-500">{detail}</p></div></div><button type="button" onClick={() => setActiveTab(tab)} className="inline-flex items-center text-xs font-black text-blue-600">Review <ChevronRight size={14} /></button></div>) : <div className="flex items-center gap-3 py-7"><CheckCircle2 size={20} className="text-emerald-600" /><p className="text-sm font-black">No urgent employee exceptions</p></div>}</div></div>
+        <div className="rounded-lg border border-slate-200 bg-white p-5 xl:col-span-5"><div className="flex items-center justify-between"><div><p className="text-[10px] font-semibold uppercase text-slate-400">Today’s Workforce</p><h2 className="mt-1 text-lg font-semibold">{today}</h2></div><Clock size={20} className="text-slate-500" /></div><div className="mt-5 grid grid-cols-2 gap-3">{[['Recorded / Clocked', overview.todayRows.filter((row) => row.clock_in || attendanceHours(row) > 0).length, 'bg-emerald-50 text-emerald-700', 'Attendance & OT'], ['On Leave', overview.onLeaveToday.length, 'bg-violet-50 text-violet-700', 'Leave Entitlement'], ['Not Recorded', overview.notClocked.length, 'bg-amber-50 text-amber-700', 'Part-Time Hours'], ['Missing Clock-Out', overview.missingClockOut.length, 'bg-red-50 text-red-700', 'Attendance & OT']].map(([label, value, cls, tab]) => <button key={label} type="button" onClick={() => setActiveTab(tab)} className={`rounded-md p-4 text-left ${cls}`}><p className="text-[9px] font-semibold uppercase opacity-60">{label}</p><p className="mt-2 text-2xl font-semibold">{value}</p></button>)}</div></div>
+        <div className="rounded-lg border border-slate-200 bg-white xl:col-span-7"><div className="flex items-center justify-between border-b border-slate-200 px-5 py-4"><div><p className="text-[10px] font-semibold uppercase text-slate-400">Action Centre</p><h2 className="mt-1 text-lg font-semibold">Needs Attention</h2></div><span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-700">{alerts.length} open</span></div><div className="divide-y divide-slate-100 px-5">{alerts.length ? alerts.map(([title, detail, tab]) => <div key={title} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex gap-3"><AlertCircle size={17} className="mt-0.5 shrink-0 text-amber-600" /><div><p className="text-sm font-semibold">{title}</p><p className="mt-1 text-xs text-slate-500">{detail}</p></div></div><button type="button" onClick={() => setActiveTab(tab)} className="inline-flex items-center text-xs font-semibold text-blue-600">Review <ChevronRight size={14} /></button></div>) : <div className="flex items-center gap-3 py-7"><CheckCircle2 size={20} className="text-emerald-600" /><p className="text-sm font-semibold">No urgent employee exceptions</p></div>}</div></div>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="flex items-center justify-between border-b border-slate-200 px-5 py-4"><div><p className="text-[10px] font-black uppercase text-slate-400">Staff Snapshot</p><h2 className="mt-1 text-lg font-black">Current Employee Position</h2></div><button type="button" onClick={() => setActiveTab('Directory')} className="text-xs font-black text-blue-600">Full Directory</button></div><div className="overflow-x-auto"><table className="w-full min-w-[900px] text-left"><thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400"><tr><th className="px-5 py-3">Employee</th><th className="px-4 py-3">Role</th><th className="px-4 py-3">Type</th><th className="px-4 py-3">Pay</th><th className="px-4 py-3 text-right">Current Hours</th><th className="px-5 py-3 text-center">Payroll</th></tr></thead><tbody className="divide-y divide-slate-100 text-sm">{overview.active.slice(0, 8).map((employee) => <tr key={employee.id}><td className="px-5 py-3"><p className="font-black">{employee.name}</p><p className="text-[10px] text-slate-400">{employee.employeeNo}</p></td><td className="px-4 py-3">{employee.role}</td><td className="px-4 py-3">{employee.employmentType}</td><td className="px-4 py-3 font-black">{employeePayLabel(employee)}</td><td className="px-4 py-3 text-right font-mono font-black">{currentHours(employee).toFixed(1)}h</td><td className="px-5 py-3 text-center"><StatusBadge status={currentPayrollStatus(employee)} /></td></tr>)}</tbody></table></div></div>
+      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white"><div className="flex items-center justify-between border-b border-slate-200 px-5 py-4"><div><p className="text-[10px] font-semibold uppercase text-slate-400">Staff Snapshot</p><h2 className="mt-1 text-lg font-semibold">Current Employee Position</h2></div><button type="button" onClick={() => setActiveTab('Directory')} className="text-xs font-semibold text-blue-600">Full Directory</button></div><div className="overflow-x-auto"><table className="w-full min-w-[900px] text-left"><thead className="bg-slate-50 text-[10px] font-semibold uppercase text-slate-400"><tr><th className="px-5 py-3">Employee</th><th className="px-4 py-3">Role</th><th className="px-4 py-3">Type</th><th className="px-4 py-3">Pay</th><th className="px-4 py-3 text-right">Current Hours</th><th className="px-5 py-3 text-center">Payroll</th></tr></thead><tbody className="divide-y divide-slate-100 text-sm">{overview.active.slice(0, 8).map((employee) => <tr key={employee.id}><td className="px-5 py-3"><p className="font-semibold">{employee.name}</p><p className="text-[10px] text-slate-400">{employee.employeeNo}</p></td><td className="px-4 py-3">{employee.role}</td><td className="px-4 py-3">{employee.employmentType}</td><td className="px-4 py-3 font-semibold">{employeePayLabel(employee)}</td><td className="px-4 py-3 text-right font-mono font-semibold">{currentHours(employee).toFixed(1)}h</td><td className="px-5 py-3 text-center"><StatusBadge status={currentPayrollStatus(employee)} /></td></tr>)}</tbody></table></div></div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><p className="text-[10px] font-black uppercase text-slate-400">Quick Actions</p><div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">{[['Add Employee', Users, () => setEmployeeEditor({})], ['Part-Time Hours', Table2, () => setActiveTab('Part-Time Hours')], ['Attendance', Clock, () => setAttendanceEditor({})], ['Salary Advance', Gift, () => setRecordModal('advance')], ['Leave Record', CalendarDays, () => setRecordModal('leave')], ['New Contract', FileText, () => setActiveTab('Contracts')]].map(([label, Icon, action]) => <button key={label} type="button" onClick={action} className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-left hover:border-blue-200 hover:bg-blue-50"><Icon size={17} className="text-blue-600" /><p className="mt-3 text-xs font-black">{label}</p></button>)}</div></div>
+      <div className="border border-slate-200 bg-white p-4"><p className="text-[10px] font-semibold uppercase text-slate-400">Quick Actions</p><div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">{[['Add Employee', Users, () => setEmployeeEditor({})], ['Part-Time Hours', Table2, () => setActiveTab('Part-Time Hours')], ['Attendance', Clock, () => setAttendanceEditor({})], ['Salary Advance', Gift, () => setRecordModal('advance')], ['Leave Record', CalendarDays, () => setRecordModal('leave')], ['New Contract', FileText, () => setActiveTab('Contracts')]].map(([label, Icon, action]) => <button key={label} type="button" onClick={action} className="rounded-md border border-slate-200 bg-slate-50 p-4 text-left hover:border-slate-300 hover:bg-slate-50"><Icon size={17} className="text-blue-600" /><p className="mt-3 text-xs font-semibold">{label}</p></button>)}</div></div>
     </div>;
   };
 
-  const Directory = () => <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex w-full max-w-xl items-center rounded-xl border border-slate-200 bg-white px-4 py-2.5"><Search size={17} className="mr-2 text-slate-400" /><input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search employee, role, ID..." className="w-full bg-transparent text-sm outline-none" /></div><button type="button" onClick={() => setEmployeeEditor({})} className="inline-flex items-center rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-black text-white"><Plus size={16} className="mr-2" />Add Employee</button></div><div className="overflow-x-auto"><table className="w-full min-w-[1080px] text-left"><thead className="border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-400"><tr><th className="p-4 pl-6">Employee</th><th className="p-4">Role</th><th className="p-4">Employment</th><th className="p-4">Pay Setup</th><th className="p-4">Admin Setup</th><th className="p-4">Data Health</th><th className="p-4 text-center">Status</th><th className="p-4 pr-6 text-right">Edit</th></tr></thead><tbody className="divide-y divide-slate-100 text-sm">{filteredEmployees.map((employee) => { const issues = employeeIssues(employee); return <tr key={employee.id} className="hover:bg-blue-50/40"><td className="p-4 pl-6"><p className="font-black text-slate-800">{employee.name}</p><p className="text-[10px] text-slate-400">{employee.employeeNo}</p></td><td className="p-4 text-slate-700">{employee.role}</td><td className="p-4"><p className="font-bold">{employee.employmentType}</p><p className="text-xs text-slate-400">{employee.employmentType === 'Part-Time' ? 'Hourly worker' : employee.citizenshipType}</p></td><td className="p-4"><p className="font-black">{employeePayLabel(employee)}</p><p className="text-xs capitalize text-slate-400">{employee.paymentInterval}</p></td><td className="p-4">{employee.employmentType === 'Part-Time' ? <><span className="text-xs font-black text-blue-600">Hourly Only</span><p className="text-[10px] text-slate-400">Simplified setup</p></> : employee.cpfEligible ? <span className="text-xs font-black text-emerald-600">CPF Eligible</span> : <><span className="text-xs font-black text-amber-600">MOM Levy</span><p>${formatMoney(employee.levy)}</p></>}</td><td className="p-4">{issues.length ? <><span className="rounded-md bg-amber-50 px-2 py-1 text-[10px] font-black text-amber-700">{issues.length} missing</span><p className="mt-1 max-w-[220px] text-[10px] text-slate-400">{issues.slice(0, 3).join(', ')}{issues.length > 3 ? ` +${issues.length - 3}` : ''}</p></> : <span className="text-xs font-black text-emerald-600">Complete</span>}</td><td className="p-4 text-center"><StatusBadge status={employee.status} /></td><td className="p-4 pr-6 text-right"><button type="button" onClick={() => setEmployeeEditor(employee)} className="rounded-lg p-2 text-slate-400 hover:bg-blue-100 hover:text-blue-600"><Edit3 size={17} /></button></td></tr>; })}{!filteredEmployees.length && <tr><td colSpan="8" className="p-12 text-center text-sm text-slate-400">No employees match your search.</td></tr>}</tbody></table></div></div>;
+  const Directory = () => <div className="overflow-hidden rounded-lg border border-slate-200 bg-white"><div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex w-full max-w-xl items-center rounded-md border border-slate-200 bg-white px-4 py-2.5"><Search size={17} className="mr-2 text-slate-400" /><input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search employee, role, ID..." className="w-full bg-transparent text-sm outline-none" /></div><button type="button" onClick={() => setEmployeeEditor({})} className="inline-flex items-center rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white"><Plus size={16} className="mr-2" />Add Employee</button></div><div className="overflow-x-auto"><table className="w-full min-w-[1080px] text-left"><thead className="border-b border-slate-200 text-[10px] font-semibold uppercase tracking-wider text-slate-400"><tr><th className="p-4 pl-6">Employee</th><th className="p-4">Role</th><th className="p-4">Employment</th><th className="p-4">Pay Setup</th><th className="p-4">Admin Setup</th><th className="p-4">Data Health</th><th className="p-4 text-center">Status</th><th className="p-4 pr-6 text-right">Edit</th></tr></thead><tbody className="divide-y divide-slate-100 text-sm">{filteredEmployees.map((employee) => { const issues = employeeIssues(employee); return <tr key={employee.id} className="hover:bg-slate-50/40"><td className="p-4 pl-6"><p className="font-semibold text-slate-800">{employee.name}</p><p className="text-[10px] text-slate-400">{employee.employeeNo}</p></td><td className="p-4 text-slate-700">{employee.role}</td><td className="p-4"><p className="font-bold">{employee.employmentType}</p><p className="text-xs text-slate-400">{employee.employmentType === 'Part-Time' ? 'Hourly worker' : employee.citizenshipType}</p></td><td className="p-4"><p className="font-semibold">{employeePayLabel(employee)}</p><p className="text-xs capitalize text-slate-400">{employee.paymentInterval}</p></td><td className="p-4">{employee.employmentType === 'Part-Time' ? <><span className="text-xs font-semibold text-blue-600">Hourly Only</span><p className="text-[10px] text-slate-400">Simplified setup</p></> : employee.cpfEligible ? <span className="text-xs font-semibold text-emerald-600">CPF Eligible</span> : <><span className="text-xs font-semibold text-amber-600">MOM Levy</span><p>${formatMoney(employee.levy)}</p></>}</td><td className="p-4">{issues.length ? <><span className="rounded-md bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-700">{issues.length} missing</span><p className="mt-1 max-w-[220px] text-[10px] text-slate-400">{issues.slice(0, 3).join(', ')}{issues.length > 3 ? ` +${issues.length - 3}` : ''}</p></> : <span className="text-xs font-semibold text-emerald-600">Complete</span>}</td><td className="p-4 text-center"><StatusBadge status={employee.status} /></td><td className="p-4 pr-6 text-right"><button type="button" onClick={() => setEmployeeEditor(employee)} className="rounded-lg p-2 text-slate-400 hover:bg-blue-100 hover:text-blue-600"><Edit3 size={17} /></button></td></tr>; })}{!filteredEmployees.length && <tr><td colSpan="8" className="p-12 text-center text-sm text-slate-400">No employees match your search.</td></tr>}</tbody></table></div></div>;
 
   const Attendance = () => {
     const rows = attendance.filter((row) => employeeById.get(String(row.employee_id))?.employmentType !== 'Part-Time');
     const weekRows = rows.filter((row) => inRange(row.work_date, week.start, week.end));
-    return <div className="space-y-5"><div className="grid grid-cols-1 gap-4 sm:grid-cols-3"><SummaryCard label="Regular Hours" value={`${weekRows.reduce((sum, row) => sum + Number(row.regular_hours || 0), 0).toFixed(1)} hrs`} detail={`${week.start} to ${week.end}`} icon={Clock} /><SummaryCard label="Overtime" value={`${weekRows.reduce((sum, row) => sum + Number(row.overtime_hours || 0), 0).toFixed(1)} hrs`} detail="Full-time OT this week" icon={TrendingUp} tone="violet" /><SummaryCard label="Entries" value={weekRows.length} detail="Full-time attendance records" icon={CalendarDays} tone="emerald" /></div><div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="flex items-center justify-between border-b border-slate-200 p-4"><div><p className="text-[10px] font-black uppercase text-slate-400">Attendance & OT</p><h2 className="mt-1 text-lg font-black">Full-Time Daily Clock Records</h2></div><button type="button" onClick={() => setAttendanceEditor({})} className="inline-flex items-center rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-black text-white"><Plus size={16} className="mr-2" />Attendance Entry</button></div><div className="overflow-x-auto"><table className="w-full min-w-[900px] text-left"><thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400"><tr><th className="px-5 py-3">Date</th><th className="px-4 py-3">Employee</th><th className="px-4 py-3">Clock In</th><th className="px-4 py-3">Clock Out</th><th className="px-4 py-3 text-right">Regular</th><th className="px-4 py-3 text-right">OT</th><th className="px-5 py-3 text-center">Edit</th></tr></thead><tbody className="divide-y divide-slate-100 text-sm">{rows.slice(0, 100).map((row) => <tr key={row.id}><td className="px-5 py-3 font-mono">{row.work_date}</td><td className="px-4 py-3 font-black">{employeeById.get(String(row.employee_id))?.name || 'Unknown'}</td><td className="px-4 py-3">{row.clock_in ? String(row.clock_in).slice(0, 5) : '—'}</td><td className="px-4 py-3">{row.clock_in && !row.clock_out ? <span className="font-black text-red-600">Missing</span> : row.clock_out ? String(row.clock_out).slice(0, 5) : '—'}</td><td className="px-4 py-3 text-right font-mono">{Number(row.regular_hours || 0).toFixed(2)}</td><td className="px-4 py-3 text-right font-mono text-violet-700">{Number(row.overtime_hours || 0).toFixed(2)}</td><td className="px-5 py-3 text-center"><button type="button" onClick={() => setAttendanceEditor(row)} className="rounded-lg p-2 text-slate-400 hover:bg-blue-50 hover:text-blue-600"><Edit3 size={15} /></button></td></tr>)}{!rows.length && <tr><td colSpan="7" className="p-12 text-center text-sm text-slate-400">No full-time attendance records yet.</td></tr>}</tbody></table></div></div></div>;
+    return <div className="space-y-4"><div className="grid grid-cols-1 gap-4 sm:grid-cols-3"><SummaryCard label="Regular Hours" value={`${weekRows.reduce((sum, row) => sum + Number(row.regular_hours || 0), 0).toFixed(1)} hrs`} detail={`${week.start} to ${week.end}`} icon={Clock} /><SummaryCard label="Overtime" value={`${weekRows.reduce((sum, row) => sum + Number(row.overtime_hours || 0), 0).toFixed(1)} hrs`} detail="Full-time OT this week" icon={TrendingUp} tone="violet" /><SummaryCard label="Entries" value={weekRows.length} detail="Full-time attendance records" icon={CalendarDays} tone="emerald" /></div><div className="overflow-hidden rounded-lg border border-slate-200 bg-white"><div className="flex items-center justify-between border-b border-slate-200 p-4"><div><p className="text-[10px] font-semibold uppercase text-slate-400">Attendance & OT</p><h2 className="mt-1 text-lg font-semibold">Full-Time Daily Clock Records</h2></div><button type="button" onClick={() => setAttendanceEditor({})} className="inline-flex items-center rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white"><Plus size={16} className="mr-2" />Attendance Entry</button></div><div className="overflow-x-auto"><table className="w-full min-w-[900px] text-left"><thead className="bg-slate-50 text-[10px] font-semibold uppercase text-slate-400"><tr><th className="px-5 py-3">Date</th><th className="px-4 py-3">Employee</th><th className="px-4 py-3">Clock In</th><th className="px-4 py-3">Clock Out</th><th className="px-4 py-3 text-right">Regular</th><th className="px-4 py-3 text-right">OT</th><th className="px-5 py-3 text-center">Edit</th></tr></thead><tbody className="divide-y divide-slate-100 text-sm">{rows.slice(0, 100).map((row) => <tr key={row.id}><td className="px-5 py-3 font-mono">{row.work_date}</td><td className="px-4 py-3 font-semibold">{employeeById.get(String(row.employee_id))?.name || 'Unknown'}</td><td className="px-4 py-3">{row.clock_in ? String(row.clock_in).slice(0, 5) : '—'}</td><td className="px-4 py-3">{row.clock_in && !row.clock_out ? <span className="font-semibold text-red-600">Missing</span> : row.clock_out ? String(row.clock_out).slice(0, 5) : '—'}</td><td className="px-4 py-3 text-right font-mono">{Number(row.regular_hours || 0).toFixed(2)}</td><td className="px-4 py-3 text-right font-mono text-violet-700">{Number(row.overtime_hours || 0).toFixed(2)}</td><td className="px-5 py-3 text-center"><button type="button" onClick={() => setAttendanceEditor(row)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-50 hover:text-blue-600"><Edit3 size={15} /></button></td></tr>)}{!rows.length && <tr><td colSpan="7" className="p-12 text-center text-sm text-slate-400">No full-time attendance records yet.</td></tr>}</tbody></table></div></div></div>;
   };
 
   const PartTimeHours = () => {
+    const [showPartTimePayslip, setShowPartTimePayslip] = useState(false);
     const partTimers = employees
       .filter(
         (employee) =>
@@ -2897,6 +3108,9 @@ export function EmployeeModule() {
       ? getPartTimeSalaryPayments(selectedEmployee.id, bounds.start, bounds.end)
       : [];
 
+    // Salary Issued is an actual-payment ledger only. It must never be
+    // inferred from attendance, hours, advances, or gross earnings.
+    // With no saved payment record, this remains exactly $0.00.
     const salaryIssuedThisInterval = currentSalaryPayments.reduce(
       (sum, payment) => sum + Number(payment.amount || 0),
       0
@@ -2966,30 +3180,30 @@ export function EmployeeModule() {
     };
 
     return (
-      <div className="space-y-4">
-        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-          <div className="flex flex-col gap-4 border-b border-slate-200 px-4 py-4 lg:flex-row lg:items-end lg:justify-between">
+      <div className="space-y-5">
+        <div className="rounded-lg border border-slate-200 bg-white p-5">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
             <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Part-Time Hours
+              <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-slate-400">
+                Part-Time Timesheet & Salary Payment
               </p>
-              <h2 className="mt-1 text-lg font-bold tracking-tight text-slate-900">
-                Timesheet & Salary Payment
+              <h2 className="mt-1 text-lg font-semibold text-slate-900">
+                Part-Time Pay Workspace
               </h2>
-              <p className="mt-1 max-w-4xl text-sm leading-5 text-slate-500">
-                Enter working hours, the applicable hourly rate, transport allowance and any Advance Salary directly in the ledger. Salary Issued is only for recording an actual payment made to the employee.
+              <p className="mt-1 max-w-4xl text-xs leading-5 text-slate-500">
+                Enter the shift timing, rate and any advance directly in the ledger. Enter the actual amount paid in the Salary Issued column for this payment interval. The system calculates the interval balance: a positive amount means salary is still owed to the employee; a negative amount means the employee has received more than the interval amount and owes the company.
               </p>
             </div>
 
             <div className="flex flex-wrap items-end gap-3">
-              <label className="min-w-[240px]">
-                <span className="mb-1 block text-xs font-medium text-slate-500">
+              <label className="min-w-[220px]">
+                <span className="mb-1.5 block text-[9px] font-semibold uppercase tracking-wider text-slate-400">
                   Part-Time Employee
                 </span>
                 <select
                   value={selectedEmployee?.id || ''}
                   onChange={(event) => chooseEmployee(event.target.value)}
-                  className="h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-900 outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-300"
+                  className="h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-300"
                 >
                   {partTimers.map((employee) => (
                     <option key={employee.id} value={employee.id}>
@@ -3000,10 +3214,10 @@ export function EmployeeModule() {
               </label>
 
               <div>
-                <span className="mb-1 block text-xs font-medium text-slate-500">
+                <span className="mb-1.5 block text-[9px] font-semibold uppercase tracking-wider text-slate-400">
                   Payment Interval
                 </span>
-                <div className="inline-flex h-9 rounded-md border border-slate-300 bg-white p-0.5">
+                <div className="inline-flex border border-slate-300 bg-white p-0.5">
                   {[
                     ['weekly', 'Weekly'],
                     ['monthly', 'Monthly'],
@@ -3012,10 +3226,10 @@ export function EmployeeModule() {
                       key={value}
                       type="button"
                       onClick={() => switchCycle(value)}
-                      className={`rounded px-3 text-xs font-semibold ${
+                      className={`rounded-lg px-3 py-2 text-xs font-semibold ${
                         partTimeCycle === value
                           ? 'bg-slate-900 text-white'
-                          : 'text-slate-600 hover:bg-slate-50'
+                          : 'text-slate-500'
                       }`}
                     >
                       {label}
@@ -3027,103 +3241,131 @@ export function EmployeeModule() {
               <button
                 type="button"
                 onClick={() => setPartTimeAnchor(localDateString())}
-                className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700"
               >
                 Current
               </button>
+              <button
+                type="button"
+                disabled={!selectedEmployee}
+                onClick={() => setShowPartTimePayslip(true)}
+                className="inline-flex h-9 items-center gap-2 border border-black bg-black px-3 text-xs font-semibold text-white hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Printer size={14} /> Print Interval Payslip
+              </button>
             </div>
           </div>
+        </div>
 
-          {!selectedEmployee ? (
-            <div className="border-dashed px-6 py-14 text-center">
-              <Table2 size={28} className="mx-auto text-slate-300" />
-              <p className="mt-3 text-sm font-semibold text-slate-700">
-                No {partTimeCycle} part-time employee configured
-              </p>
-              <p className="mt-1 text-sm text-slate-500">
-                Add or edit a Part-Time employee and set the matching payment interval.
-              </p>
+        {!selectedEmployee ? (
+          <div className="rounded-lg border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
+            <Table2 size={28} className="mx-auto text-slate-300" />
+            <p className="mt-3 text-sm font-semibold text-slate-700">
+              No {partTimeCycle} part-time employee configured
+            </p>
+            <p className="mt-1 text-xs text-slate-400">
+              Add or edit a Part-Time employee and set the matching payment interval.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+              <SummaryCard
+                label="Hours"
+                value={`${totalHours.toFixed(2)} hrs`}
+                detail={intervalLabel(bounds.start, bounds.end, partTimeCycle)}
+                icon={Clock}
+                tone="violet"
+              />
+              <SummaryCard
+                label="Gross Earnings"
+                value={`$${formatMoney(grossEarnings)}`}
+                detail={`Daily-rate pay $${formatMoney(hourlyPay)} + transport $${formatMoney(transportTotal)}`}
+                icon={DollarSign}
+                tone="emerald"
+              />
+              <SummaryCard
+                label="Advances This Interval"
+                value={`$${formatMoney(advancesThisInterval)}`}
+                detail="Advances entered against this payment interval"
+                icon={Gift}
+                tone="amber"
+              />
+              <SummaryCard
+                label="Brought Forward"
+                value={signedMoney(broughtForward)}
+                detail={`${broughtForwardRows.length} unsettled earlier interval${broughtForwardRows.length === 1 ? '' : 's'}`}
+                icon={TrendingUp}
+                tone={broughtForward < 0 ? 'amber' : 'blue'}
+              />
             </div>
-          ) : (
-            <>
-              <div className="grid grid-cols-2 divide-x border-b border-slate-200 sm:grid-cols-4">
-                <div className="px-4 py-3">
-                  <p className="text-xs font-medium text-slate-500">Hours</p>
-                  <p className="mt-1 font-mono text-base font-bold text-slate-900">{totalHours.toFixed(2)} hrs</p>
-                </div>
-                <div className="px-4 py-3">
-                  <p className="text-xs font-medium text-slate-500">Gross Earnings</p>
-                  <p className="mt-1 font-mono text-base font-bold text-slate-900">${formatMoney(grossEarnings)}</p>
-                </div>
-                <div className="px-4 py-3">
-                  <p className="text-xs font-medium text-slate-500">Advance Salary</p>
-                  <p className="mt-1 font-mono text-base font-bold text-slate-900">${formatMoney(advancesThisInterval)}</p>
-                </div>
-                <div className="px-4 py-3">
-                  <p className="text-xs font-medium text-slate-500">Brought Forward</p>
-                  <p className="mt-1 font-mono text-base font-bold text-slate-900">{signedMoney(broughtForward)}</p>
-                </div>
-              </div>
 
-              <div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+              <div className="flex flex-col gap-4 border-b border-slate-200 bg-white px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => setPartTimeAnchor((current) => shiftInterval(current, partTimeCycle, -1))}
-                    className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
-                    aria-label="Previous interval"
+                    className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 hover:text-slate-900"
                   >
-                    <ChevronLeft size={16} />
+                    <ChevronLeft size={17} />
                   </button>
-                  <div className="min-w-[220px] text-center">
+
+                  <div className="min-w-[220px] rounded-md border border-slate-200 bg-white px-4 py-2 text-center">
                     <p className="text-sm font-semibold text-slate-900">
                       {intervalLabel(bounds.start, bounds.end, partTimeCycle)}
                     </p>
-                    <p className="mt-0.5 text-xs text-slate-500">
+                    <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-wider text-slate-400">
                       {selectedEmployee.name} · {rateLabel}
                     </p>
                   </div>
+
                   <button
                     type="button"
                     onClick={() => setPartTimeAnchor((current) => shiftInterval(current, partTimeCycle, 1))}
-                    className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
-                    aria-label="Next interval"
+                    className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 hover:text-slate-900"
                   >
-                    <ChevronRight size={16} />
+                    <ChevronRight size={17} />
                   </button>
                 </div>
 
-                <div className="flex items-center gap-3 text-xs">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="inline-flex items-center rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-emerald-700">
+                    <CheckCircle2 size={12} className="mr-1.5" /> Save On Exit
+                  </span>
+                  <span className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                    $5 Transport Default
+                  </span>
                   {intervalLocked ? (
-                    <span className="inline-flex items-center gap-1.5 font-medium text-slate-500">
-                      <Lock size={13} /> Settled & Locked
+                    <span className="inline-flex items-center rounded-lg bg-slate-200 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-600">
+                      <Lock size={12} className="mr-1.5" /> Settled & Locked
                     </span>
                   ) : (
-                    <span className="font-medium text-slate-500">Editable interval</span>
+                    <span className="rounded-lg bg-blue-50 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-blue-700">
+                      Editable Interval
+                    </span>
                   )}
-                  <span className="text-slate-300">•</span>
-                  <span className="font-medium text-slate-500">Transport default $5</span>
                 </div>
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[1460px] border-collapse text-sm text-slate-900">
-                  <thead className="bg-slate-50">
-                    <tr className="border-b border-slate-200 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
-                      <th className="sticky left-0 z-20 min-w-[105px] bg-slate-50 px-4 py-3 text-left">Date</th>
-                      <th className="min-w-[260px] px-3 py-3 text-left">Work Shift</th>
+                <table className="w-full min-w-[1480px] border-collapse text-left">
+                  <thead className="bg-white">
+                    <tr className="border-b border-slate-200 text-[9px] font-semibold uppercase tracking-[0.08em] text-slate-400">
+                      <th className="sticky left-0 z-20 min-w-[105px] bg-white px-4 py-3 shadow-[1px_0_0_0_#e2e8f0]">Date</th>
+                      <th className="min-w-[260px] px-3 py-3">Work Shift</th>
                       <th className="min-w-[105px] px-3 py-3 text-right">Duration</th>
                       <th className="min-w-[155px] px-3 py-3 text-right">Rate / Hourly Pay</th>
                       <th className="min-w-[130px] px-3 py-3 text-right">Transport</th>
-                      <th className="min-w-[115px] px-3 py-3 text-right">Gross</th>
-                      <th className="min-w-[140px] px-3 py-3 text-right">Advance Salary</th>
-                      <th className="min-w-[165px] px-3 py-3 text-right">Salary Issued</th>
-                      <th className="min-w-[155px] px-3 py-3 text-right">Outstanding</th>
-                      <th className="min-w-[90px] px-3 py-3 text-right">Actions</th>
+                      <th className="min-w-[115px] bg-emerald-50/30 px-3 py-3 text-right">Gross</th>
+                      <th className="min-w-[130px] px-3 py-3 text-right">Advance</th>
+                      <th className="min-w-[180px] px-3 py-3 text-right">Salary Issued<br /><span className="normal-case font-semibold tracking-normal text-slate-300">actual payment record</span></th>
+                      <th className="min-w-[155px] px-3 py-3 text-right">Outstanding After Payment</th>
+                      <th className="min-w-[130px] px-3 py-3 text-right">Database</th>
                     </tr>
                   </thead>
 
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody>
                     {dates.map((date) => {
                       const attendanceRow = employeeAttendance.find((row) => row.work_date === date) || null;
                       const dateAdvances = employeeAdvances.filter((row) => row.advance_date === date);
@@ -3145,144 +3387,195 @@ export function EmployeeModule() {
                           saving={partTimeSavingKey === `${selectedEmployee.id}|${date}`}
                           onSave={(draft) => savePartTimeDay(selectedEmployee, draft)}
                           onDelete={(dateValue) => deletePartTimeDay(selectedEmployee, dateValue)}
-                          salaryPaymentsForDate={salaryPayments.filter(
-                            (payment) =>
-                              String(payment.employee_id) === String(selectedEmployee.id) &&
-                              payment.payment_date === date
-                          )}
-                          salarySaving={partTimeSavingKey === `${selectedEmployee.id}|salary|${bounds.start}|${bounds.end}|${date}`}
-                          onSalaryIssued={(amount, paymentDate) =>
-                            savePartTimeSalaryIssued(selectedEmployee, bounds, amount, paymentDate)
-                          }
                         />
                       );
                     })}
                   </tbody>
 
                   <tfoot className="border-t-2 border-slate-300 bg-slate-50">
-                    <tr className="text-sm font-semibold text-slate-900">
-                      <td className="sticky left-0 z-10 bg-slate-50 px-4 py-3 font-bold">Interval Total</td>
-                      <td className="px-3 py-3 text-slate-500">
-                        {usedRates.length <= 1 ? rateLabel : `${usedRates.length} rates used`}
+                    <tr className="text-xs font-semibold text-slate-800">
+                      <td className="sticky left-0 z-10 bg-white px-4 py-3 shadow-[1px_0_0_0_#cbd5e1]">INTERVAL TOTAL</td>
+                      <td className="px-3 py-4 text-slate-400">{usedRates.length <= 1 ? rateLabel : `${usedRates.length} rates used`}</td>
+                      <td className="px-3 py-4 text-right font-mono">{durationLabel(totalHours)}</td>
+                      <td className="px-3 py-4 text-right">
+                        <p className="font-mono text-slate-800">${formatMoney(hourlyPay)}</p>
+                        <p className="mt-0.5 text-[8px] font-semibold uppercase tracking-wider text-slate-400">Hourly pay</p>
                       </td>
-                      <td className="px-3 py-3 text-right font-mono">{durationLabel(totalHours)}</td>
-                      <td className="px-3 py-3 text-right font-mono">${formatMoney(hourlyPay)}</td>
-                      <td className="px-3 py-3 text-right font-mono">${formatMoney(transportTotal)}</td>
-                      <td className="px-3 py-3 text-right font-mono">${formatMoney(grossEarnings)}</td>
-                      <td className="px-3 py-3 text-right font-mono">${formatMoney(advancesThisInterval)}</td>
-                      <td className="px-3 py-3 text-right font-mono font-bold">
-                        ${formatMoney(salaryIssuedThisInterval)}
+                      <td className="px-3 py-4 text-right font-mono">${formatMoney(transportTotal)}</td>
+                      <td className="bg-emerald-50 px-3 py-4 text-right font-mono text-emerald-800">${formatMoney(grossEarnings)}</td>
+                      <td className="px-3 py-4 text-right font-mono text-slate-800">${formatMoney(advancesThisInterval)}</td>
+                      <td className="px-3 py-4 text-right">
+                        <PartTimeSalaryIssuedCell
+                          locked={intervalLocked}
+                          saving={partTimeSavingKey === `${selectedEmployee.id}|salary|${bounds.start}|${bounds.end}`}
+                          onSave={(amount, paymentDate) => savePartTimeSalaryIssued(selectedEmployee, bounds, amount, paymentDate)}
+                        />
                       </td>
-                      <td className="px-3 py-3 text-right font-mono font-bold">
-                        {signedMoney(intervalOutstanding)}
+                      <td className={`px-3 py-4 text-right font-mono ${intervalOutstanding < 0 ? 'text-red-700' : intervalOutstanding > 0 ? 'text-blue-700' : 'text-emerald-700'}`}>
+                        <p>{signedMoney(intervalOutstanding)}</p>
+                        <p className="mt-0.5 text-[8px] font-semibold uppercase tracking-wider text-slate-400">After salary issued</p>
                       </td>
-                      <td className="px-3 py-3" />
+                      <td className="px-3 py-4 text-right text-[9px] font-semibold uppercase tracking-wider text-slate-400">Each entry records an actual payment</td>
                     </tr>
                   </tfoot>
                 </table>
               </div>
+            </div>
 
-              <div className="border-t border-slate-200 bg-white px-4 py-4">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
-                    <div>
-                      <span className="text-slate-500">Hourly earnings</span>
-                      <span className="ml-2 font-mono font-semibold text-slate-900">${formatMoney(hourlyPay)}</span>
+            <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
+              <div className="rounded-lg border border-slate-200 bg-white p-5 xl:col-span-7">
+                <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-slate-400">
+                  Interval Calculation
+                </p>
+                <div className="mt-4 overflow-hidden rounded-md border border-slate-200">
+                  {[
+                    ['Hourly Earnings', hourlyPay],
+                    ['Transport Allowance', transportTotal],
+                    ['Gross Earnings', grossEarnings],
+                    ['Advance Taken', -advancesThisInterval],
+                    ['Salary Due Before Payment', currentBalance],
+                    ['Salary Issued', -salaryIssuedThisInterval],
+                    ['Outstanding / (Employee Owes)', intervalOutstanding],
+                    ['Brought Forward (separate)', broughtForward],
+                  ].map(([label, amount], index) => (
+                    <div
+                      key={label}
+                      className={`flex items-center justify-between px-4 py-3 text-sm ${index < 5 ? 'border-b border-slate-100' : ''}`}
+                    >
+                      <span className="text-slate-600">{label}</span>
+                      <span className={`font-mono font-semibold ${Number(amount) < 0 ? 'text-red-700' : 'text-slate-900'}`}>
+                        {signedMoney(amount)}
+                      </span>
                     </div>
-                    <span className="text-slate-300">+</span>
-                    <div>
-                      <span className="text-slate-500">Transport</span>
-                      <span className="ml-2 font-mono font-semibold text-slate-900">${formatMoney(transportTotal)}</span>
-                    </div>
-                    <span className="text-slate-300">−</span>
-                    <div>
-                      <span className="text-slate-500">Advance Salary</span>
-                      <span className="ml-2 font-mono font-semibold text-slate-900">${formatMoney(advancesThisInterval)}</span>
-                    </div>
-                    <span className="text-slate-300">=</span>
-                    <div>
-                      <span className="text-slate-500">Salary Due</span>
-                      <span className="ml-2 font-mono font-bold text-slate-900">${formatMoney(currentBalance)}</span>
-                    </div>
-                    <span className="text-slate-300">−</span>
-                    <div>
-                      <span className="text-slate-500">Salary Issued</span>
-                      <span className="ml-2 font-mono font-semibold text-slate-900">${formatMoney(salaryIssuedThisInterval)}</span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-4 border-t border-slate-200 pt-3 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
-                    <div>
-                      <p className="text-xs font-medium text-slate-500">Outstanding</p>
-                      <p className="font-mono text-xl font-bold text-slate-900">{signedMoney(intervalOutstanding)}</p>
-                    </div>
-                    <div className="h-8 w-px bg-slate-200" />
-                    <div className="text-right">
-                      <p className="text-xs font-medium text-slate-500">Brought forward</p>
-                      <p className="font-mono text-sm font-semibold text-slate-900">{signedMoney(broughtForward)}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-3 border-t border-slate-100 pt-2.5 text-xs text-slate-500">
-                  {intervalOutstanding > 0
-                    ? `Salary still payable to ${selectedEmployee.name}.`
-                    : intervalOutstanding < 0
-                      ? `${selectedEmployee.name} has received more than the current balance.`
-                      : 'This interval is fully settled.'}
+                  ))}
                 </div>
               </div>
 
-              <div className="border-t border-slate-200 px-4 py-3">
+              <div className={`border border-slate-200 bg-white p-4 xl:col-span-7 ${intervalOutstanding < 0 ? 'border-red-200 bg-red-50' : intervalOutstanding > 0 ? 'border-blue-200 bg-blue-50' : 'border-emerald-200 bg-emerald-50'}`}>
+                <p className={`text-[10px] font-medium uppercase tracking-[0.14em] ${intervalOutstanding < 0 ? 'text-red-600' : intervalOutstanding > 0 ? 'text-blue-600' : 'text-emerald-600'}`}>
+                  This Interval · Outstanding After Payment
+                </p>
+                <p className={`mt-2 text-2xl font-semibold tracking-tight ${intervalOutstanding < 0 ? 'text-red-900' : intervalOutstanding > 0 ? 'text-blue-900' : 'text-emerald-900'}`}>
+                  {signedMoney(intervalOutstanding)}
+                </p>
+                <p className={`mt-2 text-xs leading-5 ${intervalOutstanding < 0 ? 'text-red-700' : intervalOutstanding > 0 ? 'text-blue-700' : 'text-emerald-700'}`}>
+                  {intervalOutstanding < 0
+                    ? `Employee owes the company $${formatMoney(Math.abs(intervalOutstanding))} for this interval.`
+                    : intervalOutstanding > 0
+                      ? `You still owe ${selectedEmployee.name} $${formatMoney(intervalOutstanding)} for this interval.`
+                      : 'This interval is fully settled.'}
+                </p>
+
+                <div className="mt-5 grid grid-cols-2 gap-3">
+                  <div className="rounded-md border border-slate-200 bg-white px-4 py-3">
+                    <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Salary Due</p>
+                    <p className="mt-1 font-mono text-lg font-semibold text-slate-900">${formatMoney(currentBalance)}</p>
+                  </div>
+                  <div className="rounded-md border border-slate-200 bg-white px-4 py-3">
+                    <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Salary Issued</p>
+                    <p className="mt-1 font-mono text-lg font-semibold text-slate-900">${formatMoney(salaryIssuedThisInterval)}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-slate-200 bg-white p-5 xl:col-span-12">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-slate-900">Payment history</p>
-                    <p className="text-xs text-slate-500">Actual salary payments recorded for this interval.</p>
+                    <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-slate-400">Actual Payment History</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900">Salary payments recorded for this interval</p>
                   </div>
-                  <span className="text-xs font-medium text-slate-500">
+                  <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-[9px] font-semibold uppercase tracking-wider text-slate-500">
                     {currentSalaryPayments.length} payment{currentSalaryPayments.length === 1 ? '' : 's'}
                   </span>
                 </div>
-
-                {currentSalaryPayments.length > 0 && (
-                  <div className="mt-3 overflow-hidden rounded-md border border-slate-200">
-                    <table className="w-full text-sm">
-                      <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
+                {currentSalaryPayments.length ? (
+                  <div className="mt-4 overflow-hidden rounded-md border border-slate-200">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 text-[9px] font-semibold uppercase tracking-wider text-slate-400">
                         <tr>
-                          <th className="px-3 py-2 text-left">Payment Date</th>
-                          <th className="px-3 py-2 text-right">Amount Paid</th>
-                          <th className="px-3 py-2 text-left">Method</th>
+                          <th className="px-4 py-2.5">Payment Date</th>
+                          <th className="px-4 py-2.5 text-right">Amount Paid</th>
+                          <th className="px-4 py-2.5">Method</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {currentSalaryPayments.map((payment) => (
                           <tr key={payment.id}>
-                            <td className="px-3 py-2 font-mono text-slate-700">{payment.payment_date || '—'}</td>
-                            <td className="px-3 py-2 text-right font-mono font-semibold text-slate-900">${formatMoney(payment.amount || 0)}</td>
-                            <td className="px-3 py-2 text-slate-600">{payment.payment_method || '—'}</td>
+                            <td className="px-4 py-2.5 font-mono font-bold text-slate-600">{payment.payment_date || '—'}</td>
+                            <td className="px-4 py-2.5 text-right font-mono font-semibold text-emerald-700">${formatMoney(payment.amount || 0)}</td>
+                            <td className="px-4 py-2.5 text-slate-500">{payment.payment_method || '—'}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
-                )}
-
-                {!currentSalaryPayments.length && (
-                  <p className="mt-2 text-xs text-slate-400">
-                    No salary payment has been recorded yet. Salary Issued remains blank until you actually pay the employee.
-                  </p>
+                ) : (
+                  <div className="mt-4 rounded-md border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-center text-[10px] font-bold text-slate-400">
+                    No salary payment has been recorded for this interval yet. The Salary Issued field remains blank until you actually pay the employee.
+                  </div>
                 )}
               </div>
-            </>
-          )}
-        </section>
+
+              <div className={`rounded-lg border p-5 xl:col-span-5 ${rollingBalance < 0 ? 'border-red-200 bg-red-50' : 'border-emerald-200 bg-emerald-50'}`}>
+                <p className={`text-[10px] font-medium uppercase tracking-[0.14em] ${rollingBalance < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                  Rolling Balance Through {bounds.end}
+                </p>
+                <p className={`mt-2 text-2xl font-semibold tracking-tight ${rollingBalance < 0 ? 'text-red-900' : 'text-emerald-900'}`}>
+                  {signedMoney(rollingBalance)}
+                </p>
+                <p className={`mt-2 text-xs leading-5 ${rollingBalance < 0 ? 'text-red-700' : 'text-emerald-700'}`}>
+                  {rollingBalance < 0
+                    ? `Advances exceed earned pay by $${formatMoney(Math.abs(rollingBalance))}. This negative balance carries forward until recovered or settled.`
+                    : rollingBalance > 0
+                      ? `Amount payable to ${selectedEmployee.name}, including any brought-forward balance.`
+                      : 'The account is fully balanced through this interval.'}
+                </p>
+
+                <div className="mt-5 flex flex-wrap items-center gap-3">
+                  <div className="rounded-md border border-slate-200 bg-white px-4 py-3">
+                    <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Salary Issued This Interval</p>
+                    <p className="mt-1 font-mono text-lg font-semibold text-slate-900">${formatMoney(salaryIssuedThisInterval)}</p>
+                  </div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    {totalOutstandingIntervals} open interval{totalOutstandingIntervals === 1 ? '' : 's'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-[10px] leading-5 text-slate-500">
+              <strong>Salary issued & interval balance:</strong> Salary Issued is an actual payment record, not a calculated payroll field. It stays blank until you pay the employee. Enter the amount actually paid and the payment date; every payment is stored separately so you can track how much and when you paid. The interval outstanding balance is <strong>Salary Due Before Payment − Total Actual Payments</strong>. A positive balance means you still owe the employee; a negative balance means the employee owes the company. Historical paid intervals remain protected.
+            </div>
+          </>
+        )}
+        {showPartTimePayslip && selectedEmployee && (
+          <PartTimeIntervalPayslipPreview
+            employee={selectedEmployee}
+            bounds={bounds}
+            intervalLabelText={intervalLabel(bounds.start, bounds.end, partTimeCycle)}
+            attendanceRows={employeeAttendance}
+            advanceRows={employeeAdvances}
+            salaryPayments={currentSalaryPayments}
+            hourlyPay={hourlyPay}
+            transportTotal={transportTotal}
+            grossEarnings={grossEarnings}
+            advancesTotal={advancesThisInterval}
+            salaryDue={currentBalance}
+            salaryIssued={salaryIssuedThisInterval}
+            outstanding={intervalOutstanding}
+            broughtForward={broughtForward}
+            rollingBalance={rollingBalance}
+            totalHours={totalHours}
+            onClose={() => setShowPartTimePayslip(false)}
+          />
+        )}
       </div>
     );
   };
 
-  const Leave = () => <div className="space-y-5"><div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="flex items-center justify-between border-b border-slate-200 p-4"><div><p className="text-[10px] font-black uppercase text-slate-400">Leave Entitlement</p><h2 className="mt-1 text-lg font-black">Employee Leave Position</h2></div><button type="button" onClick={() => setRecordModal('leave')} className="inline-flex items-center rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-black text-white"><Plus size={16} className="mr-2" />Leave Record</button></div><div className="overflow-x-auto"><table className="w-full min-w-[850px] text-left"><thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400"><tr><th className="px-5 py-3">Employee</th><th className="px-4 py-3 text-right">Annual Entitlement</th><th className="px-4 py-3 text-right">Annual Taken</th><th className="px-4 py-3 text-right">Balance</th><th className="px-4 py-3 text-right">Sick Taken</th></tr></thead><tbody className="divide-y divide-slate-100 text-sm">{employees.filter((employee) => employee.status === 'Active' && employee.employmentType !== 'Part-Time').map((employee) => { const rows = leaveRecords.filter((row) => String(row.employee_id) === String(employee.id) && String(row.start_date || '').startsWith(String(new Date().getFullYear())) && String(row.status).toLowerCase() === 'approved'); const annual = rows.filter((row) => row.leave_type === 'Annual').reduce((sum, row) => sum + Number(row.days || 0), 0); const sick = rows.filter((row) => row.leave_type === 'Sick').reduce((sum, row) => sum + Number(row.days || 0), 0); return <tr key={employee.id}><td className="px-5 py-3"><p className="font-black">{employee.name}</p><p className="text-[10px] text-slate-400">{employee.role}</p></td><td className="px-4 py-3 text-right font-black">{employee.leaveEntitlement}</td><td className="px-4 py-3 text-right">{annual}</td><td className="px-4 py-3 text-right font-black text-emerald-700">{Math.max(0, employee.leaveEntitlement - annual)}</td><td className="px-4 py-3 text-right">{sick}</td></tr>; })}</tbody></table></div></div><div className="rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-200 p-4 text-[10px] font-black uppercase text-slate-400">Recent Leave Records</div><div className="divide-y divide-slate-100">{leaveRecords.slice(0, 12).map((row) => <div key={row.id} className="flex items-center justify-between gap-4 px-5 py-4"><div><p className="text-sm font-black">{employeeById.get(String(row.employee_id))?.name || 'Unknown'}</p><p className="mt-1 text-xs text-slate-500">{row.leave_type} · {row.start_date} to {row.end_date} · {row.days} day(s)</p></div><StatusBadge status={row.status} /></div>)}{!leaveRecords.length && <div className="p-10 text-center text-sm text-slate-400">No leave records yet.</div>}</div></div></div>;
+  const Leave = () => <div className="space-y-5"><div className="overflow-hidden rounded-lg border border-slate-200 bg-white"><div className="flex items-center justify-between border-b border-slate-200 p-4"><div><p className="text-[10px] font-semibold uppercase text-slate-400">Leave Entitlement</p><h2 className="mt-1 text-lg font-semibold">Employee Leave Position</h2></div><button type="button" onClick={() => setRecordModal('leave')} className="inline-flex items-center rounded-md bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white"><Plus size={16} className="mr-2" />Leave Record</button></div><div className="overflow-x-auto"><table className="w-full min-w-[850px] text-left"><thead className="bg-slate-50 text-[10px] font-semibold uppercase text-slate-400"><tr><th className="px-5 py-3">Employee</th><th className="px-4 py-3 text-right">Annual Entitlement</th><th className="px-4 py-3 text-right">Annual Taken</th><th className="px-4 py-3 text-right">Balance</th><th className="px-4 py-3 text-right">Sick Taken</th></tr></thead><tbody className="divide-y divide-slate-100 text-sm">{employees.filter((employee) => employee.status === 'Active' && employee.employmentType !== 'Part-Time').map((employee) => { const rows = leaveRecords.filter((row) => String(row.employee_id) === String(employee.id) && String(row.start_date || '').startsWith(String(new Date().getFullYear())) && String(row.status).toLowerCase() === 'approved'); const annual = rows.filter((row) => row.leave_type === 'Annual').reduce((sum, row) => sum + Number(row.days || 0), 0); const sick = rows.filter((row) => row.leave_type === 'Sick').reduce((sum, row) => sum + Number(row.days || 0), 0); return <tr key={employee.id}><td className="px-5 py-3"><p className="font-semibold">{employee.name}</p><p className="text-[10px] text-slate-400">{employee.role}</p></td><td className="px-4 py-3 text-right font-semibold">{employee.leaveEntitlement}</td><td className="px-4 py-3 text-right">{annual}</td><td className="px-4 py-3 text-right font-semibold text-emerald-700">{Math.max(0, employee.leaveEntitlement - annual)}</td><td className="px-4 py-3 text-right">{sick}</td></tr>; })}</tbody></table></div></div><div className="rounded-lg border border-slate-200 bg-white"><div className="border-b border-slate-200 p-4 text-[10px] font-semibold uppercase text-slate-400">Recent Leave Records</div><div className="divide-y divide-slate-100">{leaveRecords.slice(0, 12).map((row) => <div key={row.id} className="flex items-center justify-between gap-4 px-5 py-4"><div><p className="text-sm font-semibold">{employeeById.get(String(row.employee_id))?.name || 'Unknown'}</p><p className="mt-1 text-xs text-slate-500">{row.leave_type} · {row.start_date} to {row.end_date} · {row.days} day(s)</p></div><StatusBadge status={row.status} /></div>)}{!leaveRecords.length && <div className="p-10 text-center text-sm text-slate-400">No leave records yet.</div>}</div></div></div>;
 
-  const Payroll = () => <div className="space-y-5"><div className="grid grid-cols-1 gap-4 sm:grid-cols-3"><SummaryCard label="Unpaid Payroll" value={`$${formatMoney(overview.payrollDue)}`} detail={`${overview.unpaid.length} payroll period(s)`} icon={DollarSign} tone="emerald" /><SummaryCard label="Part-Time B/F" value={signedMoney(overview.partTimeOutstanding)} detail={`${overview.partTimeUnpaid.length} unsettled part-time interval(s)`} icon={Table2} tone="amber" onClick={() => setActiveTab('Part-Time Hours')} /><SummaryCard label="Paid This Month" value={`$${formatMoney(overview.paidThisMonth)}`} detail="Net payroll payments" icon={CheckCircle2} /></div><div className="grid grid-cols-1 gap-5 xl:grid-cols-12"><div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm xl:col-span-8"><div className="flex items-center justify-between border-b border-slate-200 p-4"><div><p className="text-[10px] font-black uppercase text-slate-400">Payroll History</p><h2 className="mt-1 text-lg font-black">Payroll Periods</h2></div><button type="button" onClick={() => setPayrollEditor(true)} className="inline-flex items-center rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-black text-white"><Plus size={16} className="mr-2" />Full-Time Payroll</button></div><div className="overflow-x-auto"><table className="w-full min-w-[930px] text-left"><thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400"><tr><th className="px-5 py-3">Employee</th><th className="px-4 py-3">Period</th><th className="px-4 py-3">Type</th><th className="px-4 py-3 text-right">Gross</th><th className="px-4 py-3 text-right">Net</th><th className="px-4 py-3 text-center">Status</th><th className="px-5 py-3 text-right">Action</th></tr></thead><tbody className="divide-y divide-slate-100 text-sm">{payroll.map((row) => { const employee = employeeById.get(String(row.employee_id)); const isPT = employee?.employmentType === 'Part-Time'; return <tr key={row.id}><td className="px-5 py-3"><p className="font-black">{employee?.name || 'Unknown'}</p><p className="text-[10px] text-slate-400">{employee?.employeeNo || ''}</p></td><td className="px-4 py-3 font-mono text-xs">{row.period_start} → {row.period_end}</td><td className="px-4 py-3"><span className={`rounded-md px-2 py-1 text-[9px] font-black ${isPT ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-600'}`}>{isPT ? 'PART-TIME' : 'FULL-TIME'}</span></td><td className="px-4 py-3 text-right font-mono">${formatMoney(row.gross_pay || 0)}</td><td className="px-4 py-3 text-right font-mono font-black">${formatMoney(row.net_pay || 0)}</td><td className="px-4 py-3 text-center"><StatusBadge status={row.status} /></td><td className="px-5 py-3 text-right"><div className="inline-flex gap-2"><button type="button" onClick={() => {
+  const Payroll = () => <div className="space-y-5"><div className="grid grid-cols-1 gap-4 sm:grid-cols-3"><SummaryCard label="Unpaid Payroll" value={`$${formatMoney(overview.payrollDue)}`} detail={`${overview.unpaid.length} payroll period(s)`} icon={DollarSign} tone="emerald" /><SummaryCard label="Part-Time B/F" value={signedMoney(overview.partTimeOutstanding)} detail={`${overview.partTimeUnpaid.length} unsettled part-time interval(s)`} icon={Table2} tone="amber" onClick={() => setActiveTab('Part-Time Hours')} /><SummaryCard label="Paid This Month" value={`$${formatMoney(overview.paidThisMonth)}`} detail="Net payroll payments" icon={CheckCircle2} /></div><div className="grid grid-cols-1 gap-5 xl:grid-cols-12"><div className="overflow-hidden rounded-lg border border-slate-200 bg-white xl:col-span-8"><div className="flex items-center justify-between border-b border-slate-200 p-4"><div><p className="text-[10px] font-semibold uppercase text-slate-400">Payroll History</p><h2 className="mt-1 text-lg font-semibold">Payroll Periods</h2></div><button type="button" onClick={() => setPayrollEditor(true)} className="inline-flex items-center rounded-md bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white"><Plus size={16} className="mr-2" />Full-Time Payroll</button></div><div className="overflow-x-auto"><table className="w-full min-w-[930px] text-left"><thead className="bg-slate-50 text-[10px] font-semibold uppercase text-slate-400"><tr><th className="px-5 py-3">Employee</th><th className="px-4 py-3">Period</th><th className="px-4 py-3">Type</th><th className="px-4 py-3 text-right">Gross</th><th className="px-4 py-3 text-right">Net</th><th className="px-4 py-3 text-center">Status</th><th className="px-5 py-3 text-right">Action</th></tr></thead><tbody className="divide-y divide-slate-100 text-sm">{payroll.map((row) => { const employee = employeeById.get(String(row.employee_id)); const isPT = employee?.employmentType === 'Part-Time'; return <tr key={row.id}><td className="px-5 py-3"><p className="font-semibold">{employee?.name || 'Unknown'}</p><p className="text-[10px] text-slate-400">{employee?.employeeNo || ''}</p></td><td className="px-4 py-3 font-mono text-xs">{row.period_start} → {row.period_end}</td><td className="px-4 py-3"><span className={`rounded-md px-2 py-1 text-[9px] font-semibold ${isPT ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-600'}`}>{isPT ? 'PART-TIME' : 'FULL-TIME'}</span></td><td className="px-4 py-3 text-right font-mono">${formatMoney(row.gross_pay || 0)}</td><td className="px-4 py-3 text-right font-mono font-semibold">${formatMoney(row.net_pay || 0)}</td><td className="px-4 py-3 text-center"><StatusBadge status={row.status} /></td><td className="px-5 py-3 text-right"><div className="inline-flex gap-2"><button type="button" onClick={() => {
                         const employeeForSlip = employeeById.get(String(row.employee_id));
                         const issued = employeeForSlip?.employmentType === 'Part-Time'
                           ? salaryPayments
@@ -3305,19 +3598,19 @@ export function EmployeeModule() {
                           part_time_brought_forward: broughtForward,
                           part_time_rolling_balance: broughtForward + Number(row.net_pay || 0) - issued,
                         });
-                      }} className="rounded-lg border border-slate-200 px-2.5 py-2 text-[10px] font-black">Payslip</button>{row.status !== 'paid' && (isPT ? <button type="button" onClick={() => { setPartTimeCycle(employee.paymentInterval || 'weekly'); setPartTimeAnchor(row.period_end); setActiveTab('Part-Time Hours'); }} className="rounded-lg bg-blue-600 px-2.5 py-2 text-[10px] font-black text-white">Manage Hours</button> : <button type="button" onClick={() => markPayrollPaid(row)} className="rounded-lg bg-emerald-600 px-2.5 py-2 text-[10px] font-black text-white">Mark Paid</button>)}</div></td></tr>; })}{!payroll.length && <tr><td colSpan="7" className="p-12 text-center text-sm text-slate-400">No payroll periods generated yet.</td></tr>}</tbody></table></div></div><div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm xl:col-span-4"><div className="flex items-center justify-between border-b border-slate-200 p-4"><div><p className="text-[10px] font-black uppercase text-slate-400">Salary Advances</p><h2 className="mt-1 text-lg font-black">Advance Ledger</h2></div><button type="button" onClick={() => setRecordModal('advance')} className="rounded-lg bg-amber-600 p-2 text-white"><Plus size={16} /></button></div><div className="max-h-[600px] divide-y divide-slate-100 overflow-y-auto">{advances.map((row) => <div key={row.id} className="px-4 py-4"><div className="flex justify-between gap-3"><div><p className="text-sm font-black">{employeeById.get(String(row.employee_id))?.name || 'Unknown'}</p><p className="mt-1 text-xs text-slate-500">{row.advance_date} · {row.reason || 'Salary advance'}</p></div><p className="font-mono font-black text-amber-700">${formatMoney(row.amount || 0)}</p></div><div className="mt-2"><StatusBadge status={row.status} /></div></div>)}{!advances.length && <div className="p-10 text-center text-sm text-slate-400">No salary advances recorded.</div>}</div></div></div></div>;
+                      }} className="rounded-lg border border-slate-200 px-2.5 py-2 text-[10px] font-semibold">Payslip</button>{row.status !== 'paid' && (isPT ? <button type="button" onClick={() => { setPartTimeCycle(employee.paymentInterval || 'weekly'); setPartTimeAnchor(row.period_end); setActiveTab('Part-Time Hours'); }} className="rounded-lg bg-blue-600 px-2.5 py-2 text-[10px] font-semibold text-white">Manage Hours</button> : <button type="button" onClick={() => markPayrollPaid(row)} className="rounded-lg bg-emerald-600 px-2.5 py-2 text-[10px] font-semibold text-white">Mark Paid</button>)}</div></td></tr>; })}{!payroll.length && <tr><td colSpan="7" className="p-12 text-center text-sm text-slate-400">No payroll periods generated yet.</td></tr>}</tbody></table></div></div><div className="overflow-hidden rounded-lg border border-slate-200 bg-white xl:col-span-4"><div className="flex items-center justify-between border-b border-slate-200 p-4"><div><p className="text-[10px] font-semibold uppercase text-slate-400">Salary Advances</p><h2 className="mt-1 text-lg font-semibold">Advance Ledger</h2></div><button type="button" onClick={() => setRecordModal('advance')} className="rounded-lg bg-amber-600 p-2 text-white"><Plus size={16} /></button></div><div className="max-h-[600px] divide-y divide-slate-100 overflow-y-auto">{advances.map((row) => <div key={row.id} className="px-4 py-4"><div className="flex justify-between gap-3"><div><p className="text-sm font-semibold">{employeeById.get(String(row.employee_id))?.name || 'Unknown'}</p><p className="mt-1 text-xs text-slate-500">{row.advance_date} · {row.reason || 'Salary advance'}</p></div><p className="font-mono font-semibold text-amber-700">${formatMoney(row.amount || 0)}</p></div><div className="mt-2"><StatusBadge status={row.status} /></div></div>)}{!advances.length && <div className="p-10 text-center text-sm text-slate-400">No salary advances recorded.</div>}</div></div></div></div>;
 
   if (loading) return <div className="flex h-full items-center justify-center bg-slate-50 p-8"><div className="text-center"><RefreshCw size={24} className="mx-auto animate-spin text-blue-600" /><p className="mt-3 text-sm font-bold text-slate-500">Loading employee records…</p></div></div>;
-  if (loadError) return <div className="h-full overflow-y-auto bg-slate-50 p-8"><div className="mx-auto max-w-2xl rounded-3xl border border-red-200 bg-white p-6 shadow-sm"><AlertCircle size={30} className="text-red-600" /><h2 className="mt-4 text-xl font-black">Employee database setup required</h2><p className="mt-2 text-sm leading-6 text-slate-500">Run the Employee Supabase setup SQL once, then retry.</p><pre className="mt-4 overflow-x-auto rounded-xl bg-red-50 p-4 text-xs text-red-700">{loadError}</pre><button type="button" onClick={() => void reload()} className="mt-5 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-black text-white">Retry</button></div></div>;
+  if (loadError) return <div className="h-full overflow-y-auto bg-slate-50 p-8"><div className="mx-auto max-w-2xl rounded-lg border border-red-200 bg-white p-6"><AlertCircle size={30} className="text-red-600" /><h2 className="mt-4 text-xl font-semibold">Employee database setup required</h2><p className="mt-2 text-sm leading-6 text-slate-500">Run the Employee Supabase setup SQL once, then retry.</p><pre className="mt-4 overflow-x-auto rounded-md bg-red-50 p-4 text-xs text-red-700">{loadError}</pre><button type="button" onClick={() => void reload()} className="mt-5 rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white">Retry</button></div></div>;
 
   const payslipEmployee = payslip ? employeeById.get(String(payslip.employee_id)) : null;
 
-  return <div className="h-full overflow-y-auto bg-slate-50 p-4 sm:p-6 lg:p-8"><div className="mx-auto w-full max-w-[1700px]">
-    {notification && <div className="fixed right-5 top-5 z-[9000] w-[min(420px,calc(100vw-40px))]"><div className={`rounded-2xl border px-4 py-3 shadow-2xl ${notification.type === 'error' ? 'border-red-200 bg-red-50 text-red-800' : notification.type === 'warning' ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`}><div className="flex items-start gap-3"><AlertCircle size={17} className="mt-0.5 shrink-0" /><div className="flex-1"><p className="text-sm font-black">{notification.title}</p>{notification.message && <p className="mt-1 text-xs">{notification.message}</p>}</div><button type="button" onClick={() => setNotification(null)}><X size={14} /></button></div></div></div>}
+  return <div className="h-full overflow-y-auto bg-[#f7f7f5] p-4 sm:p-5 lg:p-6"><div className="mx-auto w-full max-w-[1600px]">
+    {notification && <div className="fixed right-5 top-5 z-[9000] w-[min(420px,calc(100vw-40px))]"><div className={`rounded-lg border px-4 py-3 ${notification.type === 'error' ? 'border-red-200 bg-red-50 text-red-800' : notification.type === 'warning' ? 'border-amber-200 bg-amber-50 text-slate-800' : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`}><div className="flex items-start gap-3"><AlertCircle size={17} className="mt-0.5 shrink-0" /><div className="flex-1"><p className="text-sm font-semibold">{notification.title}</p>{notification.message && <p className="mt-1 text-xs">{notification.message}</p>}</div><button type="button" onClick={() => setNotification(null)}><X size={14} /></button></div></div></div>}
 
-    <div className="mb-7 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between"><div className="flex items-center"><div className="mr-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50"><Users className="text-blue-600" size={24} /></div><div><h1 className="text-2xl font-semibold text-slate-900">Employee Management</h1><p className="mt-1 text-sm text-slate-500">Workforce information, part-time timesheets, attendance, leave, salary advances, payroll and employment contracts.</p></div></div><div className="flex gap-2"><button type="button" onClick={() => void reload()} className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-black text-slate-600"><RefreshCw size={14} className="mr-2" />Refresh</button><button type="button" onClick={() => setEmployeeEditor({})} className="inline-flex items-center rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-black text-white"><Plus size={17} className="mr-2" />Add Employee</button></div></div>
+    <div className="mb-5 flex flex-col gap-3 border-b border-slate-200 pb-4 xl:flex-row xl:items-end xl:justify-between"><div className="flex items-center"><div className="mr-3 flex h-11 w-11 items-center justify-center rounded-lg bg-blue-50"><Users className="text-slate-600" size={19} /></div><div><h1 className="text-xl font-semibold text-slate-900">Employee Management</h1><p className="mt-1 text-sm text-slate-500">Workforce information, part-time timesheets, attendance, leave, salary advances, payroll and employment contracts.</p></div></div><div className="flex gap-2"><button type="button" onClick={() => void reload()} className="inline-flex items-center rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700"><RefreshCw size={14} className="mr-2" />Refresh</button><button type="button" onClick={() => setEmployeeEditor({})} className="inline-flex items-center rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white"><Plus size={17} className="mr-2" />Add Employee</button></div></div>
 
-    <div className="mb-6 flex gap-2 overflow-x-auto border-b border-slate-200 pb-2">{EMPLOYEE_TABS.map((tab) => <button key={tab.id} type="button" onClick={() => setActiveTab(tab.id)} className={`flex items-center whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-bold ${activeTab === tab.id ? 'border border-slate-200 bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:bg-slate-200/50'}`}><tab.icon size={15} className="mr-2" />{tab.id}</button>)}</div>
+    <div className="mb-5 flex overflow-x-auto border-b border-slate-200">{EMPLOYEE_TABS.map((tab) => <button key={tab.id} type="button" onClick={() => setActiveTab(tab.id)} className={`relative shrink-0 border-b-2 px-3 py-2.5 text-sm font-medium whitespace-nowrap transition-colors ${activeTab === tab.id ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800'}`}>{tab.id}</button>)}</div>
 
     {activeTab === 'Overview' && <Overview />}
     {activeTab === 'Directory' && <Directory />}
