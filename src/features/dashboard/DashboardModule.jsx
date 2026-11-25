@@ -789,6 +789,7 @@ export function DashboardModule({
   const [cashError, setCashError] = useState('');
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [period, setPeriod] = useState('30');
+  const [selectedDate, setSelectedDate] = useState(getTodayString());
   const [metric, setMetric] = useState('sales');
   const [customerFilter, setCustomerFilter] = useState('all');
   const [productFilter, setProductFilter] = useState('all');
@@ -799,7 +800,8 @@ export function DashboardModule({
   const inventory = Array.isArray(sys?.inventory) ? sys.inventory : [];
   const users = Array.isArray(sys?.users) ? sys.users : [];
 
-  const today = getTodayString();
+  const systemToday = getTodayString();
+  const today = selectedDate || systemToday;
   const todayDate = useMemo(() => new Date(`${today}T00:00:00`), [today]);
   const periodDays = Number(period) || 30;
   const periodStart = useMemo(() => {
@@ -1271,8 +1273,26 @@ export function DashboardModule({
             <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">Operations overview</h1>
             <p className="mt-1 text-sm text-slate-500">What happened today, what is changing, and what requires attention.</p>
           </div>
-          <div className="flex items-center gap-2 text-xs text-slate-500">
-            <span>{formatDisplayDate(today)}</span>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+            <label className="inline-flex h-8 items-center gap-2 rounded-md border border-slate-300 bg-white px-2.5 font-medium text-slate-700">
+              <CalendarDays size={13} className="text-slate-500" />
+              <span className="hidden sm:inline">Sales date</span>
+              <input
+                type="date"
+                value={selectedDate}
+                max={systemToday}
+                onChange={(e) => setSelectedDate(e.target.value || systemToday)}
+                className="h-6 border-0 bg-transparent p-0 text-xs font-medium text-slate-800 outline-none"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => setSelectedDate(systemToday)}
+              disabled={selectedDate === systemToday}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-default disabled:opacity-40"
+            >
+              Today
+            </button>
             <button type="button" onClick={() => setRefreshNonce((v) => v + 1)} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 font-medium text-slate-700 hover:bg-slate-50">
               <RefreshCw size={13} className={analyticsLoading ? 'animate-spin' : ''} /> Refresh
             </button>
@@ -1283,18 +1303,18 @@ export function DashboardModule({
       <section className="border border-slate-200 bg-white">
         <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Today</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{selectedDate === systemToday ? 'Today' : 'Selected day'}</p>
             <h2 className="mt-0.5 text-base font-semibold text-slate-950">Sales at a glance</h2>
           </div>
-          <span className="text-xs text-slate-500">Compared with the same weekday last week</span>
+          <span className="text-xs text-slate-500">Compared with the same weekday last week · {formatDisplayDate(selectedDate)}</span>
         </div>
         <div className="grid grid-cols-2 divide-x divide-y divide-slate-200 md:grid-cols-4 xl:grid-cols-8 xl:divide-y-0">
           {[
             ['Sales', `$${formatMoney(todayIntelligence.sales)}`, todayIntelligence.change === null ? 'No comparison' : `${todayIntelligence.change >= 0 ? '+' : ''}${todayIntelligence.change.toFixed(1)}% vs last week`],
             ['Orders', todayIntelligence.orders, `${todayIntelligence.units.toFixed(0)} units`],
-            ['Avg order', `$${formatMoney(todayIntelligence.averageOrder)}`, 'Today'],
+            ['Avg order', `$${formatMoney(todayIntelligence.averageOrder)}`, formatDisplayDate(selectedDate)],
             ['Gross profit', `$${formatMoney(todayIntelligence.profit)}`, `${todayIntelligence.margin.toFixed(1)}% margin`],
-            ['Paid', `$${formatMoney(todayIntelligence.paid)}`, 'Today'],
+            ['Paid', `$${formatMoney(todayIntelligence.paid)}`, formatDisplayDate(selectedDate)],
             ['Outstanding', `$${formatMoney(todayIntelligence.outstanding)}`, 'Unpaid today'],
             ['Cash sales', `$${formatMoney(todayIntelligence.cashSales)}`, 'Cash invoices'],
             ['Credit sales', `$${formatMoney(todayIntelligence.creditSales)}`, 'Normal invoices'],
@@ -1348,7 +1368,7 @@ export function DashboardModule({
         </div>
 
         <div className="border border-slate-200 bg-white p-4 xl:col-span-4">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Today's leaders</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{selectedDate === systemToday ? "Today's leaders" : "Selected day's leaders"}</p>
           <h2 className="mt-1 text-base font-semibold text-slate-950">Customers and products</h2>
           <div className="mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-1">
             <div>
