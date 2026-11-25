@@ -1364,7 +1364,9 @@ function PartTimeIntervalPayslipPreview({
     const date = new Date(`${String(value).slice(0, 10)}T00:00:00`);
     return Number.isNaN(date.getTime())
       ? String(value)
-      : date.toLocaleDateString('en-SG', { day: '2-digit', month: 'short', year: 'numeric' });
+      : date.toLocaleDateString('en-SG', {
+          day: '2-digit', month: 'short', year: 'numeric',
+        });
   };
 
   const workRows = [...attendanceRows]
@@ -1375,155 +1377,256 @@ function PartTimeIntervalPayslipPreview({
       const rate = Number(row.hourly_rate_snapshot || 0) > 0
         ? Number(row.hourly_rate_snapshot)
         : Number(employee.hourlyRate || 0);
-      return {
-        ...row,
-        hours,
-        rate,
-        earnings: hours * rate,
-        transport: hours > 0 ? Number(row.transport_allowance || 0) : 0,
-      };
+      const wages = hours * rate;
+      const transport = hours > 0 ? Number(row.transport_allowance || 0) : 0;
+      return { ...row, hours, rate, wages, transport };
     });
 
+  const money = (value) => `$${formatMoney(value || 0)}`;
   const printReport = (
-    <article className="pt-slip-page bg-white text-black">
-      <header className="border-b-2 border-black pb-4">
-        <div className="flex items-start justify-between gap-6">
-          <div>
-            <h1 className="text-[23px] font-semibold tracking-tight">THREE LEAVES</h1>
-            <p className="mt-1 text-[9px] font-medium uppercase tracking-[0.22em] text-neutral-600">
-              Employee Payroll Statement
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="text-[18px] font-semibold uppercase tracking-wide">Part-Time Payslip</p>
-            <p className="mt-1 text-[10px] text-neutral-600">{intervalLabelText}</p>
-          </div>
+    <article className="pt-slip-page">
+      <header className="pt-slip-header">
+        <div>
+          <div className="pt-slip-company">THREE LEAVES</div>
+          <div className="pt-slip-subtitle">Singapore · Payroll Statement</div>
+        </div>
+        <div className="pt-slip-title-block">
+          <div className="pt-slip-document-title">PART-TIME PAYSLIP</div>
+          <div className="pt-slip-period-label">{intervalLabelText}</div>
         </div>
       </header>
 
-      <section className="grid grid-cols-2 gap-x-8 gap-y-3 border-b border-neutral-300 py-4 text-[11px]">
-        <div><p className="text-[9px] uppercase tracking-wider text-neutral-500">Employee Name</p><p className="mt-1 font-semibold">{employee.name || '—'}</p></div>
-        <div><p className="text-[9px] uppercase tracking-wider text-neutral-500">Employee ID</p><p className="mt-1 font-semibold">{employee.employeeNo || '—'}</p></div>
-        <div><p className="text-[9px] uppercase tracking-wider text-neutral-500">Position</p><p className="mt-1 font-semibold">{employee.role || '—'}</p></div>
-        <div><p className="text-[9px] uppercase tracking-wider text-neutral-500">Pay Frequency</p><p className="mt-1 font-semibold">{employee.paymentInterval === 'monthly' ? 'Monthly' : 'Weekly'}</p></div>
-        <div><p className="text-[9px] uppercase tracking-wider text-neutral-500">Period Start</p><p className="mt-1 font-semibold">{dateText(bounds.start)}</p></div>
-        <div><p className="text-[9px] uppercase tracking-wider text-neutral-500">Period End</p><p className="mt-1 font-semibold">{dateText(bounds.end)}</p></div>
+      <section className="pt-slip-employee">
+        <div className="pt-slip-employee-main">
+          <span className="pt-slip-label">Employee</span>
+          <strong>{employee.name || '—'}</strong>
+          <span className="pt-slip-muted">{employee.role || '—'}</span>
+        </div>
+        <div>
+          <span className="pt-slip-label">Employee ID</span>
+          <strong>{employee.employeeNo || '—'}</strong>
+        </div>
+        <div>
+          <span className="pt-slip-label">Pay period</span>
+          <strong>{dateText(bounds.start)} – {dateText(bounds.end)}</strong>
+          <span className="pt-slip-muted">
+            {employee.paymentInterval === 'monthly' ? 'Monthly' : 'Weekly'} interval
+          </span>
+        </div>
       </section>
 
-      <section className="pt-5">
-        <div className="mb-2 flex items-end justify-between">
-          <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em]">Working Hours Detail</h2>
-          <p className="text-[10px] text-neutral-600">Total: <strong className="text-black">{durationLabel(totalHours)}</strong></p>
+      <section className="pt-slip-section">
+        <div className="pt-slip-section-heading">
+          <h2>Working hours</h2>
+          <div><span className="pt-slip-muted">Total hours</span> <strong>{durationLabel(totalHours)}</strong></div>
         </div>
-        <table className="w-full border-collapse text-[10px]">
+        <table className="pt-slip-table pt-slip-work-table">
           <thead>
-            <tr className="border-y border-black text-left uppercase tracking-wide">
-              <th className="py-2 pr-2 font-semibold">Date</th>
-              <th className="px-2 py-2 font-semibold">Clock In</th>
-              <th className="px-2 py-2 font-semibold">Clock Out</th>
-              <th className="px-2 py-2 text-right font-semibold">Break</th>
-              <th className="px-2 py-2 text-right font-semibold">Hours</th>
-              <th className="px-2 py-2 text-right font-semibold">Rate / Hr</th>
-              <th className="px-2 py-2 text-right font-semibold">Wages</th>
-              <th className="px-2 py-2 text-right font-semibold">Transport</th>
-              <th className="py-2 pl-2 text-right font-semibold">Daily Gross</th>
+            <tr>
+              <th>Date</th>
+              <th>Working time</th>
+              <th className="numeric">Break</th>
+              <th className="numeric">Hours</th>
+              <th className="numeric">Rate / hr</th>
+              <th className="numeric">Wages</th>
+              <th className="numeric">Transport</th>
             </tr>
           </thead>
           <tbody>
             {workRows.length ? workRows.map((row) => (
-              <tr key={row.id || row.work_date} className="border-b border-neutral-200">
-                <td className="py-2 pr-2">{dateText(row.work_date)}</td>
-                <td className="px-2 py-2">{row.clock_in ? String(row.clock_in).slice(0, 5) : '—'}</td>
-                <td className="px-2 py-2">{row.clock_out ? String(row.clock_out).slice(0, 5) : '—'}</td>
-                <td className="px-2 py-2 text-right">{Number(row.break_minutes || 0)} min</td>
-                <td className="px-2 py-2 text-right tabular-nums">{row.hours.toFixed(2)}</td>
-                <td className="px-2 py-2 text-right tabular-nums">${formatMoney(row.rate)}</td>
-                <td className="px-2 py-2 text-right tabular-nums">${formatMoney(row.earnings)}</td>
-                <td className="px-2 py-2 text-right tabular-nums">${formatMoney(row.transport)}</td>
-                <td className="py-2 pl-2 text-right tabular-nums">${formatMoney(row.earnings + row.transport)}</td>
+              <tr key={row.id || row.work_date}>
+                <td>{dateText(row.work_date)}</td>
+                <td className="nowrap">
+                  {row.clock_in ? String(row.clock_in).slice(0, 5) : '—'}
+                  <span className="pt-slip-time-separator">–</span>
+                  {row.clock_out ? String(row.clock_out).slice(0, 5) : '—'}
+                </td>
+                <td className="numeric">{Number(row.break_minutes || 0)} min</td>
+                <td className="numeric">{row.hours.toFixed(2)}</td>
+                <td className="numeric">{money(row.rate)}</td>
+                <td className="numeric">{money(row.wages)}</td>
+                <td className="numeric">{money(row.transport)}</td>
               </tr>
             )) : (
-              <tr><td colSpan="9" className="py-5 text-center text-neutral-500">No working hours recorded for this interval.</td></tr>
+              <tr><td colSpan="7" className="pt-slip-empty">No working hours recorded for this interval.</td></tr>
             )}
           </tbody>
           <tfoot>
-            <tr className="border-t border-black font-semibold">
-              <td colSpan="4" className="py-2">Interval Totals</td>
-              <td className="px-2 py-2 text-right tabular-nums">{totalHours.toFixed(2)}</td>
+            <tr>
+              <td colSpan="3">Interval total</td>
+              <td className="numeric">{Number(totalHours || 0).toFixed(2)}</td>
               <td />
-              <td className="px-2 py-2 text-right tabular-nums">${formatMoney(hourlyPay)}</td>
-              <td className="px-2 py-2 text-right tabular-nums">${formatMoney(transportTotal)}</td>
-              <td className="py-2 pl-2 text-right tabular-nums">${formatMoney(grossEarnings)}</td>
+              <td className="numeric">{money(hourlyPay)}</td>
+              <td className="numeric">{money(transportTotal)}</td>
             </tr>
           </tfoot>
         </table>
       </section>
 
-      <section className="mt-5 grid grid-cols-2 gap-8">
-        <div>
-          <h2 className="mb-2 border-b border-black pb-2 text-[11px] font-semibold uppercase tracking-[0.12em]">Salary Advances</h2>
-          {advanceRows.length ? (
-            <table className="w-full border-collapse text-[10px]">
-              <thead><tr className="border-b border-neutral-300 text-left text-neutral-600"><th className="py-1.5">Date</th><th className="py-1.5">Description</th><th className="py-1.5 text-right">Amount</th></tr></thead>
-              <tbody>{advanceRows.map((row) => <tr key={row.id} className="border-b border-neutral-200"><td className="py-1.5 pr-2">{dateText(row.advance_date)}</td><td className="py-1.5 pr-2">{row.reason || row.notes || 'Salary advance'}</td><td className="py-1.5 text-right tabular-nums">${formatMoney(row.amount)}</td></tr>)}</tbody>
-            </table>
-          ) : <p className="py-2 text-[10px] text-neutral-500">No advances recorded.</p>}
+      <section className="pt-slip-ledgers">
+        <div className="pt-slip-ledger">
+          <div className="pt-slip-section-heading"><h2>Salary advances</h2><span className="pt-slip-muted">{advanceRows.length} record(s)</span></div>
+          <table className="pt-slip-table pt-slip-small-table">
+            <thead><tr><th>Date</th><th>Description</th><th className="numeric">Amount</th></tr></thead>
+            <tbody>
+              {advanceRows.length ? advanceRows.map((row) => (
+                <tr key={row.id}>
+                  <td>{dateText(row.advance_date)}</td>
+                  <td>{row.reason || row.notes || 'Salary advance'}</td>
+                  <td className="numeric">{money(row.amount)}</td>
+                </tr>
+              )) : <tr><td colSpan="3" className="pt-slip-empty">No advances recorded.</td></tr>}
+            </tbody>
+          </table>
+          <div className="pt-slip-ledger-total"><span>Total advances</span><strong>{money(advancesTotal)}</strong></div>
         </div>
-        <div>
-          <h2 className="mb-2 border-b border-black pb-2 text-[11px] font-semibold uppercase tracking-[0.12em]">Payments Issued</h2>
-          {salaryPayments.length ? (
-            <table className="w-full border-collapse text-[10px]">
-              <thead><tr className="border-b border-neutral-300 text-left text-neutral-600"><th className="py-1.5">Date</th><th className="py-1.5">Method / Ref.</th><th className="py-1.5 text-right">Amount</th></tr></thead>
-              <tbody>{salaryPayments.map((row) => <tr key={row.id} className="border-b border-neutral-200"><td className="py-1.5 pr-2">{dateText(row.payment_date)}</td><td className="py-1.5 pr-2">{[row.payment_method, row.payment_reference].filter(Boolean).join(' · ') || '—'}</td><td className="py-1.5 text-right tabular-nums">${formatMoney(row.amount)}</td></tr>)}</tbody>
-            </table>
-          ) : <p className="py-2 text-[10px] text-neutral-500">No salary payments recorded.</p>}
+
+        <div className="pt-slip-ledger">
+          <div className="pt-slip-section-heading"><h2>Payments issued</h2><span className="pt-slip-muted">{salaryPayments.length} record(s)</span></div>
+          <table className="pt-slip-table pt-slip-small-table">
+            <thead><tr><th>Date</th><th>Method / reference</th><th className="numeric">Amount</th></tr></thead>
+            <tbody>
+              {salaryPayments.length ? salaryPayments.map((row) => (
+                <tr key={row.id}>
+                  <td>{dateText(row.payment_date)}</td>
+                  <td>{[row.payment_method, row.payment_reference].filter(Boolean).join(' · ') || '—'}</td>
+                  <td className="numeric">{money(row.amount)}</td>
+                </tr>
+              )) : <tr><td colSpan="3" className="pt-slip-empty">No salary payments recorded.</td></tr>}
+            </tbody>
+          </table>
+          <div className="pt-slip-ledger-total"><span>Total payments issued</span><strong>{money(salaryIssued)}</strong></div>
         </div>
       </section>
 
-      <section className="mt-6 ml-auto w-full max-w-[330px] text-[11px]">
-        <h2 className="mb-2 border-b-2 border-black pb-2 text-[11px] font-semibold uppercase tracking-[0.12em]">Pay Breakdown</h2>
-        {[
-          ['Hourly Earnings', hourlyPay],
-          ['Transport Allowance', transportTotal],
-          ['Gross Earnings', grossEarnings],
-          ['Less: Salary Advances', -advancesTotal],
-          ['Salary Due Before Payments', salaryDue],
-          ['Less: Payments Issued', -salaryIssued],
-        ].map(([label, amount], index) => (
-          <div key={label} className={`flex justify-between gap-4 py-1.5 ${index === 2 || index === 4 ? 'border-t border-neutral-400 font-semibold' : ''}`}>
-            <span>{label}</span><span className="tabular-nums">{signedMoney(amount)}</span>
+      <section className="pt-slip-settlement">
+        <div className="pt-slip-settlement-heading">
+          <h2>Pay calculation</h2>
+          <span>Currency: SGD</span>
+        </div>
+        <div className="pt-slip-calculation-grid">
+          <div className="pt-slip-calculation-column">
+            <div className="pt-slip-calc-row"><span>Hourly earnings</span><strong>{money(hourlyPay)}</strong></div>
+            <div className="pt-slip-calc-row"><span>Transport allowance</span><strong>{money(transportTotal)}</strong></div>
+            <div className="pt-slip-calc-row pt-slip-calc-subtotal"><span>Gross earnings</span><strong>{money(grossEarnings)}</strong></div>
           </div>
-        ))}
-        <div className="mt-2 flex justify-between border-y-2 border-black py-2.5 text-[13px] font-semibold">
-          <span>Interval Balance</span><span className="tabular-nums">{signedMoney(outstanding)}</span>
+          <div className="pt-slip-calculation-column">
+            <div className="pt-slip-calc-row"><span>Less: Salary advances</span><strong>−{money(advancesTotal)}</strong></div>
+            <div className="pt-slip-calc-row pt-slip-calc-subtotal"><span>Salary due before payments</span><strong>{money(salaryDue)}</strong></div>
+            <div className="pt-slip-calc-row"><span>Less: Payments issued</span><strong>−{money(salaryIssued)}</strong></div>
+          </div>
         </div>
-        <div className="mt-3 flex justify-between py-1.5"><span>Brought Forward</span><span className="tabular-nums">{signedMoney(broughtForward)}</span></div>
-        <div className="flex justify-between border-t border-neutral-300 pt-2 font-semibold"><span>Rolling Balance</span><span className="tabular-nums">{signedMoney(rollingBalance)}</span></div>
+        <div className="pt-slip-interval-balance">
+          <span>Outstanding for this interval</span>
+          <strong>{signedMoney(outstanding)}</strong>
+        </div>
+        <div className="pt-slip-roll-forward">
+          <div><span>Brought forward</span><strong>{signedMoney(broughtForward)}</strong></div>
+          <div className="pt-slip-rolling-total"><span>Rolling balance</span><strong>{signedMoney(rollingBalance)}</strong></div>
+        </div>
       </section>
 
-      <footer className="mt-8 border-t border-neutral-300 pt-3 text-[9px] text-neutral-500">
-        <div className="flex justify-between gap-4"><span>Generated from Three Leaves ERP · For payroll record purposes</span><span>Currency: SGD</span></div>
-        <div className="mt-7 grid grid-cols-2 gap-12 text-[9px] text-neutral-600">
-          <div className="border-t border-neutral-500 pt-1">Prepared by</div>
-          <div className="border-t border-neutral-500 pt-1">Employee acknowledgement</div>
+      <footer className="pt-slip-footer">
+        <div className="pt-slip-footer-note">Generated from Three Leaves ERP · For payroll record purposes</div>
+        <div className="pt-slip-signatures">
+          <div><span>Prepared by</span></div>
+          <div><span>Employee acknowledgement</span></div>
         </div>
       </footer>
     </article>
   );
 
+  const printStyles = `
+    .pt-slip-page {
+      box-sizing: border-box; width: 100%; min-height: 270mm; padding: 0;
+      color: #111; background: #fff; font-family: Arial, Helvetica, sans-serif;
+      font-size: 10px; line-height: 1.35;
+    }
+    .pt-slip-header { display:flex; justify-content:space-between; align-items:flex-end; gap:24px; padding-bottom:12px; border-bottom:2px solid #111; }
+    .pt-slip-company { font-size:21px; line-height:1; font-weight:700; letter-spacing:-.04em; }
+    .pt-slip-subtitle { margin-top:5px; color:#555; font-size:9px; letter-spacing:.04em; }
+    .pt-slip-title-block { text-align:right; }
+    .pt-slip-document-title { font-size:15px; line-height:1.1; font-weight:700; letter-spacing:.035em; }
+    .pt-slip-period-label { margin-top:4px; color:#555; font-size:9px; }
+    .pt-slip-employee { display:grid; grid-template-columns:1.35fr .8fr 1fr; gap:16px; padding:12px 0; border-bottom:1px solid #aaa; }
+    .pt-slip-employee > div { display:flex; flex-direction:column; gap:2px; min-width:0; }
+    .pt-slip-employee strong { font-size:10px; font-weight:700; }
+    .pt-slip-label { color:#666; font-size:8px; text-transform:uppercase; letter-spacing:.08em; }
+    .pt-slip-muted { color:#666; font-size:9px; }
+    .pt-slip-section { margin-top:15px; }
+    .pt-slip-section-heading { display:flex; justify-content:space-between; align-items:baseline; gap:12px; margin-bottom:6px; }
+    .pt-slip-section-heading h2, .pt-slip-settlement-heading h2 { margin:0; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; }
+    .pt-slip-section-heading > div { font-size:9px; }
+    .pt-slip-table { width:100%; border-collapse:collapse; table-layout:auto; font-size:8.5px; }
+    .pt-slip-table thead { display:table-header-group; }
+    .pt-slip-table th { padding:5px 5px; border-top:1px solid #111; border-bottom:1px solid #777; color:#444; font-size:7.5px; font-weight:700; text-align:left; text-transform:uppercase; letter-spacing:.035em; white-space:nowrap; }
+    .pt-slip-table td { padding:5px 5px; border-bottom:1px solid #ddd; vertical-align:top; }
+    .pt-slip-table .numeric { text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; }
+    .pt-slip-table .nowrap { white-space:nowrap; }
+    .pt-slip-time-separator { padding:0 3px; color:#888; }
+    .pt-slip-table tfoot td { padding-top:7px; border-top:1px solid #111; border-bottom:0; font-weight:700; }
+    .pt-slip-empty { padding:10px 5px !important; color:#666; text-align:center; }
+    .pt-slip-ledgers { display:grid; grid-template-columns:1fr 1fr; gap:22px; margin-top:16px; }
+    .pt-slip-ledger { min-width:0; }
+    .pt-slip-small-table { font-size:8px; }
+    .pt-slip-small-table th { padding-top:4px; padding-bottom:4px; }
+    .pt-slip-small-table td { padding-top:4px; padding-bottom:4px; }
+    .pt-slip-ledger-total { display:flex; justify-content:space-between; padding-top:5px; border-top:1px solid #888; font-size:8.5px; }
+    .pt-slip-ledger-total strong { font-variant-numeric:tabular-nums; }
+    .pt-slip-settlement { margin-top:17px; padding-top:9px; border-top:1.5px solid #111; }
+    .pt-slip-settlement-heading { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:7px; }
+    .pt-slip-settlement-heading > span { color:#666; font-size:8px; }
+    .pt-slip-calculation-grid { display:grid; grid-template-columns:1fr 1fr; gap:24px; }
+    .pt-slip-calc-row { display:flex; justify-content:space-between; gap:12px; padding:4px 0; border-bottom:1px solid #e2e2e2; font-size:9px; }
+    .pt-slip-calc-row strong { white-space:nowrap; font-variant-numeric:tabular-nums; }
+    .pt-slip-calc-subtotal { border-bottom:1px solid #888; font-weight:700; }
+    .pt-slip-interval-balance { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:9px; padding:8px 0; border-top:1px solid #111; border-bottom:1px solid #111; font-size:10px; font-weight:700; }
+    .pt-slip-interval-balance strong { font-size:14px; font-variant-numeric:tabular-nums; }
+    .pt-slip-roll-forward { display:flex; justify-content:space-between; gap:24px; padding-top:7px; font-size:9px; }
+    .pt-slip-roll-forward > div { display:flex; justify-content:space-between; gap:12px; flex:1; }
+    .pt-slip-roll-forward strong { font-variant-numeric:tabular-nums; }
+    .pt-slip-rolling-total { font-weight:700; }
+    .pt-slip-footer { margin-top:22px; padding-top:8px; border-top:1px solid #aaa; }
+    .pt-slip-footer-note { color:#666; font-size:8px; }
+    .pt-slip-signatures { display:grid; grid-template-columns:1fr 1fr; gap:42px; margin-top:27px; }
+    .pt-slip-signatures > div { padding-top:5px; border-top:1px solid #777; color:#555; font-size:8px; }
+    @media screen and (max-width: 640px) {
+      .pt-slip-page { font-size:9px; }
+      .pt-slip-employee { grid-template-columns:1fr 1fr; }
+      .pt-slip-ledgers { grid-template-columns:1fr; gap:14px; }
+      .pt-slip-work-table { min-width:650px; }
+      .pt-slip-section:has(.pt-slip-work-table) { overflow-x:auto; }
+      .pt-slip-calculation-grid { gap:12px; }
+    }
+    @media print {
+      @page { size:A4 portrait; margin:12mm; }
+      html, body { margin:0 !important; padding:0 !important; background:#fff !important; }
+      body * { visibility:hidden !important; }
+      #part-time-interval-payslip-print,
+      #part-time-interval-payslip-print * { visibility:visible !important; }
+      #part-time-interval-payslip-print { display:block !important; position:static !important; width:100% !important; margin:0 !important; padding:0 !important; }
+      #part-time-interval-payslip-print .pt-slip-page { min-height:0 !important; width:100% !important; margin:0 !important; padding:0 !important; }
+      .pt-slip-table tr { break-inside:avoid; page-break-inside:avoid; }
+      .pt-slip-ledgers, .pt-slip-settlement, .pt-slip-footer { break-inside:avoid; page-break-inside:avoid; }
+    }
+  `;
+
   return <>
     {createPortal(
-      <div className="fixed inset-0 z-[8300] flex items-center justify-center bg-black/70 p-3 print:hidden">
-        <div className="flex max-h-[96vh] w-full max-w-[900px] flex-col overflow-hidden border border-neutral-300 bg-white text-black shadow-xl">
-          <div className="flex items-center justify-between border-b border-neutral-300 px-4 py-3 print:hidden">
-            <div><p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-neutral-500">Payslip Preview</p><h2 className="mt-0.5 text-sm font-semibold">{employee.name} · {intervalLabelText}</h2></div>
-            <div className="flex items-center gap-2">
-              <button type="button" onClick={() => window.print()} className="inline-flex h-9 items-center gap-2 border border-black bg-black px-3 text-xs font-semibold text-white hover:bg-neutral-800"><Printer size={14} /> Print / Save PDF</button>
-              <button type="button" onClick={onClose} className="inline-flex h-9 items-center gap-2 border border-neutral-300 px-3 text-xs font-medium text-neutral-700 hover:bg-neutral-100"><X size={14} /> Close</button>
+      <div className="fixed inset-0 z-[8300] flex items-center justify-center bg-black/60 p-3 print:hidden">
+        <div className="flex max-h-[94vh] w-full max-w-[980px] flex-col overflow-hidden border border-neutral-300 bg-white text-black">
+          <div className="flex shrink-0 items-center justify-between border-b border-neutral-200 px-4 py-2.5">
+            <div className="min-w-0">
+              <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-neutral-500">Payslip preview</div>
+              <div className="mt-0.5 truncate text-sm font-semibold">{employee.name} <span className="font-normal text-neutral-500">· {intervalLabelText}</span></div>
+            </div>
+            <div className="ml-3 flex shrink-0 items-center gap-2">
+              <button type="button" onClick={() => window.print()} className="inline-flex h-8 items-center gap-1.5 bg-black px-3 text-xs font-semibold text-white hover:bg-neutral-800"><Printer size={13} /> Print / Save PDF</button>
+              <button type="button" onClick={onClose} className="inline-flex h-8 items-center gap-1.5 border border-neutral-300 px-3 text-xs font-medium text-neutral-700 hover:bg-neutral-50"><X size={13} /> Close</button>
             </div>
           </div>
-          <div className="overflow-y-auto bg-neutral-100 p-4 sm:p-6">
-            <div className="mx-auto min-h-[297mm] w-full max-w-[210mm] border border-neutral-300 bg-white p-8 text-black shadow-sm sm:p-[15mm]">
+          <div className="overflow-auto bg-neutral-100 p-3 sm:p-5">
+            <div className="mx-auto w-full max-w-[210mm] border border-neutral-300 bg-white px-5 py-6 text-black shadow-sm sm:px-[12mm] sm:py-[12mm]">
               {printReport}
             </div>
           </div>
@@ -1532,47 +1635,15 @@ function PartTimeIntervalPayslipPreview({
       document.body
     )}
     {createPortal(
-      <div id="part-time-interval-payslip-print" className="pt-slip-print-root">
-        <style>{`
-          .pt-slip-print-root { display: none; }
-          @media print {
-            @page { size: A4 portrait; margin: 12mm; }
-            html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; }
-            body * { visibility: hidden !important; }
-            #part-time-interval-payslip-print,
-            #part-time-interval-payslip-print * { visibility: visible !important; }
-            #part-time-interval-payslip-print {
-              display: block !important;
-              position: absolute !important;
-              inset: 0 auto auto 0 !important;
-              width: 100% !important;
-              background: #fff !important;
-              color: #000 !important;
-            }
-            #part-time-interval-payslip-print .pt-slip-page {
-              width: 100% !important;
-              max-width: none !important;
-              margin: 0 !important;
-              padding: 0 !important;
-              border: 0 !important;
-              box-shadow: none !important;
-              color: #000 !important;
-              background: #fff !important;
-              font-family: Arial, Helvetica, sans-serif !important;
-              -webkit-print-color-adjust: exact;
-              print-color-adjust: exact;
-            }
-            #part-time-interval-payslip-print table { page-break-inside: auto; }
-            #part-time-interval-payslip-print tr { page-break-inside: avoid; break-inside: avoid; }
-          }
-        `}</style>
+      <div id="part-time-interval-payslip-print" className="pt-slip-print-root" style={{ display: 'none' }}>
+        <style>{printStyles}</style>
         {printReport}
       </div>,
       document.body
     )}
+    <style>{printStyles}</style>
   </>;
 }
-
 function PartTimeDayRow({
   date,
   employee,
