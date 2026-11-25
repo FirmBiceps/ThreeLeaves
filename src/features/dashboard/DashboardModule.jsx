@@ -1153,217 +1153,299 @@ export function DashboardModule({
     return fromInventory.filter((p) => p.id && p.name).sort((a, b) => a.name.localeCompare(b.name));
   }, [inventory]);
 
-  const maxDaily = Math.max(1, ...intelligence.dailySeries.map((d) => d[metric === 'profit' ? 'profit' : 'sales']));
+  const todayIntelligence = useMemo(() => {
+    const all = [
+      ...invoices.filter((i) => getInvoiceDate(i) === today).map((invoice) => ({ invoice, type: 'Invoice' })),
+      ...cashInvoices.filter((i) => getInvoiceDate(i) === today).map((invoice) => ({ invoice, type: 'Cash' })),
+    ];
+
+    const lastWeekDateObj = new Date(`${today}T00:00:00`);
+    lastWeekDateObj.setDate(lastWeekDateObj.getDate() - 7);
+    const lastWeekDate = lastWeekDateObj.toISOString().slice(0, 10);
+    const lastWeek = [
+      ...invoices.filter((i) => getInvoiceDate(i) === lastWeekDate),
+      ...cashInvoices.filter((i) => getInvoiceDate(i) === lastWeekDate),
+    ];
+
+    const sales = all.reduce((sum, x) => sum + getSubtotalExGst(x.invoice), 0);
+    const lastWeekSales = lastWeek.reduce((sum, invoice) => sum + getSubtotalExGst(invoice), 0);
+    const profit = all.reduce((sum, x) => {
+      const status = getProfitStatus(x.invoice);
+      return sum + (status.profit ?? 0);
+    }, 0);
+    const orders = all.length;
+    const units = all.reduce((sum, x) => sum + getInvoiceItems(x.invoice).reduce((q, item) => q + getLineQty(item), 0), 0);
+    const paid = all.filter((x) => isPaid(x.invoice)).reduce((sum, x) => sum + getInvoiceTotal(x.invoice), 0);
+    const outstanding = all.reduce((sum, x) => sum + (isPaid(x.invoice) ? 0 : getInvoiceTotal(x.invoice)), 0);
+    const change = lastWeekSales === 0 ? null : ((sales - lastWeekSales) / Math.abs(lastWeekSales)) * 100;
+
+    const customerMap = new Map();
+    const productMap = new Map();
+    all.forEach(({ invoice }) => {
+      const customer = findCustomerForInvoice(invoice, customers);
+      const customerId = String(customer?.id ?? invoice?.customerId ?? invoice?.customer_id ?? getInvoiceCustomerName(invoice));
+      const customerName = getCustomerName(customer) || getInvoiceCustomerName(invoice);
+      const customerRow = customerMap.get(customerId) || { id: customerId, name: customerName, sales: 0, orders: 0 };
+      customerRow.sales += getSubtotalExGst(invoice);
+      customerRow.orders += 1;
+      customerMap.set(customerId, customerRow);
+
+      getInvoiceItems(invoice).forEach((item) => {
+        const id = String(item?.productId ?? item?.product_id ?? item?.id ?? item?.sku ?? item?.name ?? 'unknown');
+        const name = String(item?.name ?? item?.productName ?? item?.product_name ?? item?.description ?? id);
+        const row = productMap.get(id) || { id, name, units: 0, sales: 0 };
+        row.units += getLineQty(item);
+        row.sales += getLineQty(item) * getLinePrice(item);
+        productMap.set(id, row);
+      });
+    });
+
+    return {
+      transactions: all,
+      sales,
+      lastWeekSales,
+      change,
+      profit,
+      orders,
+      units,
+      averageOrder: orders ? sales / orders : 0,
+      margin: sales ? (profit / sales) * 100 : 0,
+      paid,
+      outstanding,
+      customers: Array.from(customerMap.values()).sort((a, b) => b.sales - a.sales).slice(0, 8),
+      products: Array.from(productMap.values()).sort((a, b) => b.sales - a.sales).slice(0, 8),
+      cashSales: all.filter((x) => x.type === 'Cash').reduce((sum, x) => sum + getSubtotalExGst(x.invoice), 0),
+      creditSales: all.filter((x) => x.type !== 'Cash').reduce((sum, x) => sum + getSubtotalExGst(x.invoice), 0),
+    };
+  }, [cashInvoices, customers, invoices, today]);
+
+  const portfolioIntelligence = useMemo(() => {
+    const signals = intelligence.customerSignals;
+    const active = signals.filter((c) => c.orders > 0).length;
+    const declining = signals.filter((c) => c.risk >= 40).length;
+    const atRisk = signals.filter((c) => c.risk >= 70).reduce((sum, c) => sum + c.sales, 0);
+    const top10Sales = signals.slice(0, 10).reduce((sum, c) => sum + c.sales, 0);
+    const totalSales = signals.reduce((sum, c) => sum + c.sales, 0);
+    return {
+      active,
+      declining,
+      inactive: Math.max(0, customers.length - active),
+      atRisk,
+      top10Share: totalSales ? (top10Sales / totalSales) * 100 : 0,
+    };
+  }, [customers.length, intelligence.customerSignals]);
+
+  const receivables = useMemo(() => {
+    const all = [...invoices, ...cashInvoices];
+    const outstanding = all.filter((invoice) => !isPaid(invoice));
+    const total = outstanding.reduce((sum, invoice) => sum + getInvoiceTotal(invoice), 0);
+    const dueDateOf = (invoice) => String(invoice?.due_date ?? invoice?.dueDate ?? invoice?.payment_due_date ?? '').slice(0, 10);
+    const overdue = outstanding.filter((invoice) => {
+      const due = dueDateOf(invoice);
+      return due && due < today;
+    });
+    const overdueValue = overdue.reduce((sum, invoice) => sum + getInvoiceTotal(invoice), 0);
+    const customerMap = new Map();
+    overdue.forEach((invoice) => {
+      const name = getInvoiceCustomerName(invoice);
+      customerMap.set(name, (customerMap.get(name) || 0) + getInvoiceTotal(invoice));
+    });
+    return {
+      total,
+      overdue: overdueValue,
+      overdueCount: overdue.length,
+      topCustomers: Array.from(customerMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 5),
+    };
+  }, [cashInvoices, invoices, today]);
+
   const maxRegion = Math.max(1, ...intelligence.regionPerformance.map((r) => r.sales));
   const maxProduct = Math.max(1, ...intelligence.productPerformance.slice(0, 8).map((p) => p.sales));
+  const maxDaily = Math.max(1, ...intelligence.dailySeries.map((d) => d[metric === 'profit' ? 'profit' : 'sales']));
 
   return (
     <div className="mx-auto w-full max-w-[1700px] space-y-5 pb-10">
-      <section className="rounded-2xl border border-slate-800 bg-slate-950 px-5 py-5 text-white shadow-sm sm:px-6">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+      <section className="border-b border-slate-200 pb-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-blue-300">
-              <Sparkles size={13} /> Situational Intelligence
-            </div>
-            <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">Operations Situation</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
-              A live management view of demand, customers, inventory, profitability and operational risk. Statistical signals are derived from the ERP data currently available; predictive models become stronger as historical data accumulates.
-            </p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Management dashboard</p>
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">Operations overview</h1>
+            <p className="mt-1 text-sm text-slate-500">What happened today, what is changing, and what requires attention.</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button type="button" onClick={() => setRefreshNonce((v) => v + 1)} className="inline-flex items-center rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-300 hover:bg-slate-800">
-              <RefreshCw size={13} className={`mr-1.5 ${analyticsLoading ? 'animate-spin' : ''}`} /> Refresh
+          <div className="flex items-center gap-2 text-xs text-slate-500">
+            <span>{formatDisplayDate(today)}</span>
+            <button type="button" onClick={() => setRefreshNonce((v) => v + 1)} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 font-medium text-slate-700 hover:bg-slate-50">
+              <RefreshCw size={13} className={analyticsLoading ? 'animate-spin' : ''} /> Refresh
             </button>
-            <span className="inline-flex items-center rounded-lg border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-emerald-300">
-              <ShieldCheck size={13} className="mr-1.5" /> {sys?.storageMode === 'supabase' ? 'Live Data' : 'Local Data'}
-            </span>
           </div>
         </div>
+      </section>
 
-        <div className="mt-5 grid grid-cols-2 gap-2 lg:grid-cols-5">
-          {[['7', '7 Days'], ['30', '30 Days'], ['90', '90 Days'], ['180', '6 Months'], ['365', '12 Months']].map(([value, label]) => (
-            <button key={value} type="button" onClick={() => setPeriod(value)} className={`rounded-lg border px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider transition ${period === value ? 'border-blue-400/40 bg-blue-400/10 text-blue-200' : 'border-slate-800 bg-slate-900/70 text-slate-500 hover:text-slate-300'}`}>
-              {label}
-            </button>
+      <section className="border border-slate-200 bg-white">
+        <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Today</p>
+            <h2 className="mt-0.5 text-base font-semibold text-slate-950">Sales at a glance</h2>
+          </div>
+          <span className="text-xs text-slate-500">Compared with the same weekday last week</span>
+        </div>
+        <div className="grid grid-cols-2 divide-x divide-y divide-slate-200 md:grid-cols-4 xl:grid-cols-8 xl:divide-y-0">
+          {[
+            ['Sales', `$${formatMoney(todayIntelligence.sales)}`, todayIntelligence.change === null ? 'No comparison' : `${todayIntelligence.change >= 0 ? '+' : ''}${todayIntelligence.change.toFixed(1)}% vs last week`],
+            ['Orders', todayIntelligence.orders, `${todayIntelligence.units.toFixed(0)} units`],
+            ['Avg order', `$${formatMoney(todayIntelligence.averageOrder)}`, 'Today'],
+            ['Gross profit', `$${formatMoney(todayIntelligence.profit)}`, `${todayIntelligence.margin.toFixed(1)}% margin`],
+            ['Paid', `$${formatMoney(todayIntelligence.paid)}`, 'Today'],
+            ['Outstanding', `$${formatMoney(todayIntelligence.outstanding)}`, 'Unpaid today'],
+            ['Cash sales', `$${formatMoney(todayIntelligence.cashSales)}`, 'Cash invoices'],
+            ['Credit sales', `$${formatMoney(todayIntelligence.creditSales)}`, 'Normal invoices'],
+          ].map(([label, value, sub]) => (
+            <div key={label} className="px-4 py-3">
+              <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-400">{label}</p>
+              <p className="mt-1 text-lg font-semibold tracking-tight text-slate-950">{value}</p>
+              <p className={`mt-0.5 text-[10px] ${String(sub).startsWith('+') ? 'font-semibold text-emerald-700' : String(sub).startsWith('-') ? 'font-semibold text-rose-700' : 'text-slate-500'}`}>{sub}</p>
+            </div>
           ))}
         </div>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
-          <SlidersHorizontal size={14} /> Analysis slices
-        </div>
-        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <label className="text-[11px] font-medium text-slate-500">
-            Customer
-            <select value={customerFilter} onChange={(e) => setCustomerFilter(e.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-800 outline-none focus:border-blue-400">
-              <option value="all">All customers</option>
-              {customerOptions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </label>
-          <label className="text-[11px] font-medium text-slate-500">
-            Product
-            <select value={productFilter} onChange={(e) => setProductFilter(e.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-800 outline-none focus:border-blue-400">
-              <option value="all">All products</option>
-              {productOptions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-          </label>
-          <label className="text-[11px] font-medium text-slate-500">
-            Chart metric
-            <select value={metric} onChange={(e) => setMetric(e.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-800 outline-none focus:border-blue-400">
-              <option value="sales">Sales</option>
-              <option value="profit">Gross profit</option>
-            </select>
-          </label>
-          <label className="text-[11px] font-medium text-slate-500">
-            Risk view
-            <select value={riskFilter} onChange={(e) => setRiskFilter(e.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-800 outline-none focus:border-blue-400">
-              <option value="all">All signals</option>
-              <option value="critical">Critical</option>
-              <option value="warning">Warning</option>
-            </select>
-          </label>
-        </div>
-      </section>
-
-      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-6">
-        {[
-          ['Revenue', `$${formatMoney(intelligence.summary.subtotal)}`, intelligence.salesChange, ShoppingCart],
-          ['Gross profit', `$${formatMoney(intelligence.summary.profit)}`, intelligence.profitChange, TrendingUp],
-          ['Gross margin', `${intelligence.grossMargin.toFixed(1)}%`, null, Gauge],
-          ['Orders', intelligence.summary.count, null, FileText],
-          ['Collection', `${intelligence.collectionRate.toFixed(1)}%`, null, CircleDollarSign],
-          ['Credit notes', `$${formatMoney(intelligence.creditNoteValue)}`, null, Receipt],
-        ].map(([label, value, change, Icon]) => (
-          <div key={label} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex items-center justify-between"><span className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">{label}</span><Icon size={15} className="text-slate-400" /></div>
-            <div className="mt-2 text-xl font-semibold tracking-tight text-slate-900">{value}</div>
-            {change !== null && <div className={`mt-1 text-[10px] font-semibold ${change >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{change >= 0 ? '↑' : '↓'} {Math.abs(change).toFixed(1)}% vs prior period</div>}
-          </div>
-        ))}
-      </section>
-
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-12">
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-8">
+        <div className="border border-slate-200 bg-white p-4 xl:col-span-8">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-            <div><div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-blue-600"><BarChart3 size={14} /> Demand signal</div><h2 className="mt-1 text-lg font-semibold text-slate-900">Actual performance + short-term trend</h2><p className="mt-1 text-xs text-slate-500">The dotted extension is a transparent linear trend projection, not a black-box promise.</p></div>
-            <div className="text-right"><div className="text-[10px] uppercase tracking-wider text-slate-400">7D momentum</div><div className={`mt-1 text-lg font-semibold ${intelligence.weeklyMomentum !== null && intelligence.weeklyMomentum >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{intelligence.weeklyMomentum === null ? '—' : `${intelligence.weeklyMomentum >= 0 ? '+' : ''}${intelligence.weeklyMomentum.toFixed(1)}%`}</div></div>
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Daily performance</p>
+              <h2 className="mt-1 text-base font-semibold text-slate-950">Sales trend</h2>
+            </div>
+            <select value={period} onChange={(e) => setPeriod(e.target.value)} className="h-8 rounded-md border border-slate-300 bg-white px-2.5 text-xs text-slate-700 outline-none">
+              <option value="7">7 days</option><option value="30">30 days</option><option value="90">90 days</option><option value="180">6 months</option><option value="365">12 months</option>
+            </select>
           </div>
-          <div className="mt-5 h-64 w-full">
-            <svg viewBox="0 0 900 260" className="h-full w-full" preserveAspectRatio="none" role="img" aria-label="Sales trend chart">
+          <div className="mt-4 h-64 w-full">
+            <svg viewBox="0 0 900 260" className="h-full w-full" preserveAspectRatio="none" role="img" aria-label="Sales trend">
               <line x1="0" y1="225" x2="900" y2="225" stroke="currentColor" className="text-slate-200" />
-              {[0,1,2,3].map((i) => <line key={i} x1="0" y1={55 + i*55} x2="900" y2={55 + i*55} stroke="currentColor" className="text-slate-100" />)}
+              {[0,1,2,3].map((i) => <line key={i} x1="0" y1={55 + i * 55} x2="900" y2={55 + i * 55} stroke="currentColor" className="text-slate-100" />)}
               {intelligence.dailySeries.length > 1 && (() => {
                 const pts = intelligence.dailySeries.map((d, i) => {
                   const x = (i / (intelligence.dailySeries.length - 1)) * 900;
-                  const y = 225 - ((d[metric === 'profit' ? 'profit' : 'sales'] || 0) / maxDaily) * 180;
+                  const value = d[metric === 'profit' ? 'profit' : 'sales'] || 0;
+                  const y = 225 - (value / maxDaily) * 180;
                   return `${x},${y}`;
                 }).join(' ');
-                const trendPts = intelligence.dailySeries.map((_, i) => {
-                  const x = (i / (intelligence.dailySeries.length - 1)) * 900;
-                  const yVal = Math.max(0, intelligence.mean + ((i - intelligence.dailySeries.length / 2) * (intelligence.dailySeries.length > 1 ? (intelligence.dailySeries[intelligence.dailySeries.length - 1].sales - intelligence.dailySeries[0].sales) / intelligence.dailySeries.length : 0)));
-                  const y = 225 - (yVal / maxDaily) * 180;
-                  return `${x},${y}`;
-                }).join(' ');
-                return <><polyline points={pts} fill="none" stroke="currentColor" strokeWidth="3" className="text-blue-600" /><polyline points={trendPts} fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="7 7" className="text-slate-400" /></>;
+                return <polyline points={pts} fill="none" stroke="currentColor" strokeWidth="3" className="text-slate-900" />;
               })()}
               {intelligence.dailySeries.map((d, i) => {
                 const value = d[metric === 'profit' ? 'profit' : 'sales'] || 0;
                 const x = intelligence.dailySeries.length === 1 ? 450 : (i / (intelligence.dailySeries.length - 1)) * 900;
                 const y = 225 - (value / maxDaily) * 180;
                 const anomaly = intelligence.anomalies.some((a) => a.date === d.date);
-                return <circle key={d.date} cx={x} cy={y} r={anomaly ? 5 : 2.5} fill="currentColor" className={anomaly ? 'text-rose-500' : 'text-blue-600'} />;
+                return <circle key={d.date} cx={x} cy={y} r={anomaly ? 5 : 2.5} fill="currentColor" className={anomaly ? 'text-rose-500' : 'text-slate-900'} />;
               })}
             </svg>
           </div>
-          <div className="mt-3 flex flex-wrap items-center gap-4 text-[10px] text-slate-500"><span><i className="mr-1 inline-block h-2 w-2 rounded-full bg-blue-600" /> Actual</span><span><i className="mr-1 inline-block h-2 w-2 rounded-full bg-rose-500" /> Anomaly</span><span><i className="mr-1 inline-block h-0.5 w-4 border-t-2 border-dashed border-slate-400" /> Trend</span></div>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-3 text-[10px] text-slate-500">
+            <span>{intelligence.weeklyMomentum === null ? 'Insufficient comparison history' : `${intelligence.weeklyMomentum >= 0 ? '+' : ''}${intelligence.weeklyMomentum.toFixed(1)}% 7-day momentum`}</span>
+            <label className="flex items-center gap-2">Metric <select value={metric} onChange={(e) => setMetric(e.target.value)} className="h-7 rounded-md border border-slate-300 bg-white px-2 text-[10px]"><option value="sales">Sales</option><option value="profit">Gross profit</option></select></label>
+          </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-4">
-          <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-violet-600"><BrainCircuit size={14} /> Intelligence layer</div>
-          <h2 className="mt-1 text-lg font-semibold text-slate-900">What the data is saying</h2>
-          <div className="mt-4 space-y-3">
-            <div className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Demand</p><p className="mt-1 text-sm font-semibold text-slate-800">{intelligence.weeklyMomentum === null ? 'Not enough comparable history' : intelligence.weeklyMomentum >= 0 ? 'Demand is accelerating' : 'Demand is slowing'}</p><p className="mt-1 text-xs leading-5 text-slate-500">{intelligence.anomalies.length} statistical anomaly{intelligence.anomalies.length === 1 ? '' : 'ies'} detected in the selected window.</p></div>
-            <div className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Inventory</p><p className="mt-1 text-sm font-semibold text-slate-800">{intelligence.inventoryRisk.filter((x) => x.risk >= 70).length} high-risk stock positions</p><p className="mt-1 text-xs leading-5 text-slate-500">Risk uses current stock versus observed daily demand; it becomes more accurate once the movement ledger has sufficient history.</p></div>
-            <div className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Customer behaviour</p><p className="mt-1 text-sm font-semibold text-slate-800">{intelligence.customerSignals.filter((x) => x.risk >= 70).length} customers need attention</p><p className="mt-1 text-xs leading-5 text-slate-500">Signals are based on purchase recency versus the customer's observed ordering cadence.</p></div>
+        <div className="border border-slate-200 bg-white p-4 xl:col-span-4">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Today's leaders</p>
+          <h2 className="mt-1 text-base font-semibold text-slate-950">Customers and products</h2>
+          <div className="mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-1">
+            <div>
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Top customers</p>
+              <div className="space-y-2">
+                {todayIntelligence.customers.slice(0, 5).map((c) => <div key={c.id} className="flex items-center gap-2"><span className="w-4 text-[10px] text-slate-400">{todayIntelligence.customers.indexOf(c) + 1}</span><span className="min-w-0 flex-1 truncate text-xs font-medium text-slate-800">{c.name}</span><span className="font-mono text-xs text-slate-600">${formatMoney(c.sales)}</span></div>)}
+                {todayIntelligence.customers.length === 0 && <p className="text-xs text-slate-400">No sales recorded today.</p>}
+              </div>
+            </div>
+            <div>
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Top products</p>
+              <div className="space-y-2">
+                {todayIntelligence.products.slice(0, 5).map((p, index) => <div key={p.id} className="flex items-center gap-2"><span className="w-4 text-[10px] text-slate-400">{index + 1}</span><span className="min-w-0 flex-1 truncate text-xs font-medium text-slate-800">{p.name}</span><span className="font-mono text-xs text-slate-600">${formatMoney(p.sales)}</span></div>)}
+                {todayIntelligence.products.length === 0 && <p className="text-xs text-slate-400">No product sales recorded today.</p>}
+              </div>
+            </div>
           </div>
-          <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-3"><p className="text-[10px] font-semibold uppercase tracking-wider text-blue-600">Forecast readiness</p><p className="mt-1 text-sm font-semibold text-slate-800">{intelligence.summary.count < 30 ? 'Building history' : 'Ready for stronger forecasting'}</p><p className="mt-1 text-xs leading-5 text-slate-600">The current dashboard uses transparent statistical methods. A server-side forecasting model should be added once enough historical daily data is available.</p></div>
+        </div>
+      </section>
+
+      <section className="border border-slate-200 bg-white">
+        <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Customer portfolio</p><h2 className="mt-1 text-base font-semibold text-slate-950">Portfolio health</h2></div>
+          <button type="button" onClick={() => setActiveTab('customers')} className="text-xs font-medium text-slate-600 hover:text-slate-950">Open customers →</button>
+        </div>
+        <div className="grid grid-cols-2 divide-x divide-y divide-slate-200 md:grid-cols-5 md:divide-y-0">
+          {[
+            ['Active customers', portfolioIntelligence.active, 'With orders in scope'],
+            ['Declining cadence', portfolioIntelligence.declining, 'Risk ≥ 40'],
+            ['Inactive', portfolioIntelligence.inactive, 'No orders in scope'],
+            ['Revenue at risk', `$${formatMoney(portfolioIntelligence.atRisk)}`, 'Risk ≥ 70'],
+            ['Top 10 concentration', `${portfolioIntelligence.top10Share.toFixed(1)}%`, 'Share of sales'],
+          ].map(([label, value, sub]) => <div key={label} className="px-4 py-3"><p className="text-[9px] font-semibold uppercase tracking-[0.13em] text-slate-400">{label}</p><p className="mt-1 text-lg font-semibold text-slate-950">{value}</p><p className="mt-0.5 text-[10px] text-slate-500">{sub}</p></div>)}
+        </div>
+        <div className="grid grid-cols-1 gap-6 border-t border-slate-200 p-4 lg:grid-cols-2">
+          <div>
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Customers requiring attention</p>
+            <div className="divide-y divide-slate-100">
+              {intelligence.customerSignals.filter((c) => c.risk >= 40).slice(0, 7).map((c) => <button type="button" key={c.id} onClick={() => setActiveTab('customers')} className="flex w-full items-center gap-3 py-2.5 text-left hover:bg-slate-50"><span className={`h-2 w-2 shrink-0 rounded-full ${c.risk >= 70 ? 'bg-rose-500' : 'bg-amber-400'}`} /><span className="min-w-0 flex-1"><span className="block truncate text-xs font-medium text-slate-800">{c.name}</span><span className="block text-[10px] text-slate-500">{c.daysSince}d since last order · usual cycle {Math.round(c.expectedGap)}d</span></span><span className="font-mono text-xs text-slate-600">${formatMoney(c.sales)}</span></button>)}
+              {intelligence.customerSignals.filter((c) => c.risk >= 40).length === 0 && <p className="py-5 text-xs text-slate-400">No material customer cadence changes detected.</p>}
+            </div>
+          </div>
+          <div>
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Revenue concentration</p>
+            <div className="space-y-2.5">
+              {intelligence.customerSignals.slice(0, 8).map((c, index) => <div key={c.id}><div className="flex items-center gap-2"><span className="w-5 text-[10px] text-slate-400">{index + 1}</span><span className="min-w-0 flex-1 truncate text-xs font-medium text-slate-800">{c.name}</span><span className="font-mono text-xs text-slate-600">${formatMoney(c.sales)}</span></div><div className="ml-5 mt-1 h-1 bg-slate-100"><div className="h-full bg-slate-800" style={{ width: `${Math.min(100, (c.sales / Math.max(1, intelligence.summary.subtotal)) * 100) * 4}%` }} /></div></div>)}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid grid-cols-1 gap-5 xl:grid-cols-12">
+        <div className="border border-slate-200 bg-white p-4 xl:col-span-7">
+          <div className="flex items-center justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Product economics</p><h2 className="mt-1 text-base font-semibold text-slate-950">What is driving revenue</h2></div><button type="button" onClick={() => setActiveTab('inventory')} className="text-xs font-medium text-slate-600 hover:text-slate-950">Open inventory →</button></div>
+          <div className="mt-4 space-y-3">
+            {intelligence.abcProducts.slice(0, 8).map((p, index) => <div key={p.id} className="flex items-center gap-3"><span className="w-4 text-[10px] text-slate-400">{index + 1}</span><span className={`flex h-5 w-5 items-center justify-center rounded-sm text-[9px] font-bold ${p.abc === 'A' ? 'bg-slate-900 text-white' : 'border border-slate-300 text-slate-600'}`}>{p.abc}</span><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-3"><span className="truncate text-xs font-medium text-slate-800">{p.name}</span><span className="font-mono text-xs text-slate-700">${formatMoney(p.sales)}</span></div><div className="mt-1 h-1 bg-slate-100"><div className="h-full bg-slate-700" style={{ width: `${Math.min(100, (p.sales / maxProduct) * 100)}%` }} /></div></div></div>)}
+          </div>
+        </div>
+        <div className="border border-slate-200 bg-white p-4 xl:col-span-5">
+          <div className="flex items-center justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Inventory coverage</p><h2 className="mt-1 text-base font-semibold text-slate-950">Stock decisions</h2></div><button type="button" onClick={() => setActiveTab('inventory')} className="text-xs font-medium text-slate-600 hover:text-slate-950">Open inventory →</button></div>
+          <div className="mt-4 divide-y divide-slate-100">
+            {intelligence.inventoryRisk.slice(0, 7).map((x) => <div key={String(x.item?.id ?? x.name)} className="py-2.5"><div className="flex items-center gap-3"><span className={`h-2 w-2 shrink-0 rounded-full ${x.risk >= 70 ? 'bg-rose-500' : x.risk >= 40 ? 'bg-amber-400' : 'bg-emerald-500'}`} /><span className="min-w-0 flex-1 truncate text-xs font-medium text-slate-800">{x.name}</span><span className="font-mono text-[10px] text-slate-500">{Number.isFinite(x.daysCover) ? `${Math.round(x.daysCover)}d cover` : 'no demand'}</span></div></div>)}
+          </div>
         </div>
       </section>
 
       <section className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between"><div><div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-emerald-600"><Users size={14} /> Customer signals</div><h2 className="mt-1 text-lg font-semibold text-slate-900">Customers changing behaviour</h2></div><button type="button" onClick={() => setActiveTab('customers')} className="text-xs font-semibold text-slate-500 hover:text-slate-900">Open Customers →</button></div>
-          <div className="mt-4 space-y-2">
-            {intelligence.customerSignals.slice(0, 6).map((c) => <button type="button" key={c.id} onClick={() => setActiveTab('customers')} className="flex w-full items-center justify-between rounded-lg border border-slate-100 px-3 py-3 text-left hover:bg-slate-50"><div className="min-w-0"><p className="truncate text-xs font-semibold text-slate-800">{c.name}</p><p className="mt-1 text-[10px] text-slate-500">{c.orders} orders · ${formatMoney(c.sales)} · last order {c.daysSince}d ago</p></div><div className={`ml-3 rounded-md px-2 py-1 text-[9px] font-bold uppercase ${c.risk >= 70 ? 'bg-rose-50 text-rose-700' : c.risk >= 40 ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>{c.risk >= 70 ? 'Watch' : c.risk >= 40 ? 'Monitor' : 'Stable'}</div></button>)}
-            {intelligence.customerSignals.length === 0 && <p className="py-8 text-center text-xs text-slate-400">Not enough customer transaction data in this scope.</p>}
-          </div>
+        <div className="border border-slate-200 bg-white p-4">
+          <div className="flex items-center justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Receivables</p><h2 className="mt-1 text-base font-semibold text-slate-950">Cash collection</h2></div><button type="button" onClick={() => setActiveTab('invoices')} className="text-xs font-medium text-slate-600 hover:text-slate-950">Open cash →</button></div>
+          <div className="mt-4 grid grid-cols-2 divide-x divide-slate-200 border-y border-slate-200"><div className="py-3 pr-4"><p className="text-[9px] uppercase tracking-wider text-slate-400">Outstanding</p><p className="mt-1 text-lg font-semibold text-slate-950">${formatMoney(receivables.total)}</p></div><div className="py-3 pl-4"><p className="text-[9px] uppercase tracking-wider text-slate-400">Overdue</p><p className="mt-1 text-lg font-semibold text-rose-700">${formatMoney(receivables.overdue)}</p><p className="text-[10px] text-slate-500">{receivables.overdueCount} invoices with due dates</p></div></div>
+          <div className="mt-4"><p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Largest overdue customers</p>{receivables.topCustomers.map((c) => <div key={c.name} className="flex items-center justify-between border-b border-slate-100 py-2 text-xs"><span className="truncate pr-3 text-slate-700">{c.name}</span><span className="font-mono text-slate-600">${formatMoney(c.value)}</span></div>)}{receivables.topCustomers.length === 0 && <p className="text-xs text-slate-400">No due-date data available for overdue ranking.</p>}</div>
         </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between"><div><div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-amber-600"><Boxes size={14} /> Inventory intelligence</div><h2 className="mt-1 text-lg font-semibold text-slate-900">Stock coverage & risk</h2></div><button type="button" onClick={() => setActiveTab('inventory')} className="text-xs font-semibold text-slate-500 hover:text-slate-900">Open Inventory →</button></div>
-          <div className="mt-4 space-y-3">
-            {intelligence.inventoryRisk.slice(0, 6).map((x) => <div key={String(x.item?.id ?? x.name)}><div className="flex items-center justify-between gap-3"><div className="min-w-0"><p className="truncate text-xs font-semibold text-slate-800">{x.name}</p><p className="text-[10px] text-slate-500">Stock {x.stock} · {Number.isFinite(x.daysCover) ? `${Math.round(x.daysCover)}d cover` : 'no observed demand'}</p></div><span className={`rounded-md px-2 py-1 text-[9px] font-bold ${x.risk >= 70 ? 'bg-rose-50 text-rose-700' : x.risk >= 40 ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>{x.risk}% risk</span></div><div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className={`h-full rounded-full ${x.risk >= 70 ? 'bg-rose-500' : x.risk >= 40 ? 'bg-amber-400' : 'bg-emerald-500'}`} style={{ width: `${Math.min(100, x.risk)}%` }} /></div></div>)}
-          </div>
+        <div className="border border-slate-200 bg-white p-4">
+          <div className="flex items-center justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Geography</p><h2 className="mt-1 text-base font-semibold text-slate-950">Revenue concentration by region</h2></div><button type="button" onClick={() => setActiveTab('logistics')} className="text-xs font-medium text-slate-600 hover:text-slate-950">Open logistics →</button></div>
+          <div className="mt-4 space-y-3">{intelligence.regionPerformance.slice(0, 8).map((r) => <div key={r.region}><div className="flex items-center justify-between text-xs"><span className="font-medium text-slate-700">{r.region}</span><span className="font-mono text-slate-500">${formatMoney(r.sales)} · {r.orders}</span></div><div className="mt-1 h-2 bg-slate-100"><div className="h-full bg-slate-800" style={{ width: `${(r.sales / maxRegion) * 100}%` }} /></div></div>)}</div>
         </div>
       </section>
 
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-12">
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-7">
-          <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-blue-600"><MapIcon size={14} /> Geographic intelligence</div>
-          <h2 className="mt-1 text-lg font-semibold text-slate-900">Revenue concentration by region</h2>
-          <div className="mt-5 space-y-3">
-            {intelligence.regionPerformance.length === 0 ? <p className="py-10 text-center text-xs text-slate-400">No regional data available in the selected period.</p> : intelligence.regionPerformance.slice(0, 8).map((r) => <div key={r.region}><div className="flex items-center justify-between text-xs"><span className="font-semibold text-slate-700">{r.region}</span><span className="font-mono text-slate-500">${formatMoney(r.sales)} · {r.orders} orders</span></div><div className="mt-1.5 h-3 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600" style={{ width: `${(r.sales / maxRegion) * 100}%` }} /></div></div>)}
-          </div>
-          <p className="mt-5 text-[10px] leading-5 text-slate-400">This is the management view of geography. Detailed stop planning remains in Logistics.</p>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-5">
-          <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-violet-600"><Target size={14} /> Product economics</div>
-          <h2 className="mt-1 text-lg font-semibold text-slate-900">Top products + ABC signal</h2>
-          <div className="mt-4 space-y-3">
-            {intelligence.abcProducts.slice(0, 8).map((p) => <div key={p.id}><div className="flex items-center gap-2"><span className={`flex h-6 w-6 items-center justify-center rounded-md text-[10px] font-bold ${p.abc === 'A' ? 'bg-blue-50 text-blue-700' : p.abc === 'B' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>{p.abc}</span><p className="min-w-0 flex-1 truncate text-xs font-semibold text-slate-800">{p.name}</p><span className="text-xs font-mono text-slate-700">${formatMoney(p.sales)}</span></div><div className="ml-8 mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-slate-700" style={{ width: `${(p.sales / maxProduct) * 100}%` }} /></div></div>)}
-            {intelligence.abcProducts.length === 0 && <p className="py-8 text-center text-xs text-slate-400">Product-line data is not available in the selected invoice records.</p>}
-          </div>
+      <section className="border border-slate-200 bg-white">
+        <div className="flex flex-col gap-2 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Early warning centre</p><h2 className="mt-1 text-base font-semibold text-slate-950">Decisions that may need action</h2></div><span className="text-xs text-slate-500">{filteredRisks.length} active signals</span></div>
+        <div className="divide-y divide-slate-100">
+          {filteredRisks.slice(0, 10).map((item) => <div key={item.key} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex min-w-0 items-start gap-3"><span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${item.severity === 'critical' ? 'bg-rose-500' : 'bg-amber-400'}`} /><div className="min-w-0"><p className="text-xs font-semibold text-slate-800">{item.title}</p><p className="mt-0.5 text-[11px] leading-5 text-slate-500">{item.detail}</p></div></div><button type="button" onClick={() => setActiveTab(item.tab)} className="shrink-0 text-xs font-medium text-slate-600 hover:text-slate-950">{item.action} →</button></div>)}
+          {filteredRisks.length === 0 && <div className="px-4 py-8 text-center"><CheckCircle2 size={20} className="mx-auto text-emerald-600" /><p className="mt-2 text-sm font-semibold text-slate-800">No elevated signals</p><p className="mt-1 text-xs text-slate-500">The dashboard will surface customer, inventory and sales changes as data accumulates.</p></div>}
         </div>
       </section>
 
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-12">
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-8">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div><div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-rose-600"><TriangleAlert size={14} /> Early warning centre</div><h2 className="mt-1 text-lg font-semibold text-slate-900">Issues that may affect operations</h2></div><span className="rounded-lg bg-slate-100 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">{filteredRisks.length} signals</span></div>
-          <div className="mt-4 space-y-1">
-            {filteredRisks.slice(0, 8).map((item) => <div key={item.key} className="flex flex-col gap-3 border-b border-slate-100 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"><div className="flex min-w-0 items-start gap-3"><div className={`mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full ${item.severity === 'critical' ? 'bg-rose-500' : 'bg-amber-400'}`} /><div className="min-w-0"><p className="text-xs font-semibold text-slate-800">{item.title}</p><p className="mt-1 text-[11px] leading-5 text-slate-500">{item.detail}</p></div></div><button type="button" onClick={() => setActiveTab(item.tab)} className="shrink-0 rounded-lg border border-slate-200 px-3 py-2 text-[10px] font-semibold text-slate-600 hover:bg-slate-50">{item.action} →</button></div>)}
-            {filteredRisks.length === 0 && <div className="rounded-xl bg-emerald-50 p-5 text-center"><CheckCircle2 size={20} className="mx-auto text-emerald-600" /><p className="mt-2 text-sm font-semibold text-emerald-800">No elevated signals in this view</p><p className="mt-1 text-xs text-emerald-700">The dashboard will surface statistical, inventory and customer signals as the dataset grows.</p></div>}
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-4">
-          <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500"><CalendarDays size={14} /> Management snapshot</div>
-          <h2 className="mt-1 text-lg font-semibold text-slate-900">What to look at next</h2>
-          <div className="mt-4 space-y-2 text-xs">
-            <button type="button" onClick={() => setActiveTab('inventory')} className="flex w-full items-center justify-between rounded-lg bg-slate-50 px-3 py-3 text-left hover:bg-slate-100"><span><b>Inventory</b><br /><span className="text-[10px] text-slate-500">{intelligence.lowStockItems.length} below threshold</span></span><ArrowRight size={14} /></button>
-            <button type="button" onClick={() => setActiveTab('customers')} className="flex w-full items-center justify-between rounded-lg bg-slate-50 px-3 py-3 text-left hover:bg-slate-100"><span><b>Customers</b><br /><span className="text-[10px] text-slate-500">{intelligence.customerSignals.filter((x) => x.risk >= 70).length} cadence changes</span></span><ArrowRight size={14} /></button>
-            <button type="button" onClick={() => setActiveTab('invoices')} className="flex w-full items-center justify-between rounded-lg bg-slate-50 px-3 py-3 text-left hover:bg-slate-100"><span><b>Sales</b><br /><span className="text-[10px] text-slate-500">{intelligence.anomalies.length} anomalies detected</span></span><ArrowRight size={14} /></button>
-            <button type="button" onClick={() => setActiveTab('logistics')} className="flex w-full items-center justify-between rounded-lg bg-slate-50 px-3 py-3 text-left hover:bg-slate-100"><span><b>Operations</b><br /><span className="text-[10px] text-slate-500">{intelligence.regionPerformance.length} active regions</span></span><ArrowRight size={14} /></button>
-          </div>
+      <section className="border border-slate-200 bg-white p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Optional drill-down</p><h2 className="mt-1 text-base font-semibold text-slate-950">Explore the data</h2></div><p className="text-xs text-slate-500">Start aggregated; filter only when you need a specific slice.</p></div>
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Customer<select value={customerFilter} onChange={(e) => setCustomerFilter(e.target.value)} className="mt-1.5 h-9 w-full rounded-md border border-slate-300 bg-white px-2.5 text-xs font-normal normal-case tracking-normal text-slate-800 outline-none"><option value="all">All customers</option>{customerOptions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+          <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Product<select value={productFilter} onChange={(e) => setProductFilter(e.target.value)} className="mt-1.5 h-9 w-full rounded-md border border-slate-300 bg-white px-2.5 text-xs font-normal normal-case tracking-normal text-slate-800 outline-none"><option value="all">All products</option>{productOptions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+          <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Risk<select value={riskFilter} onChange={(e) => setRiskFilter(e.target.value)} className="mt-1.5 h-9 w-full rounded-md border border-slate-300 bg-white px-2.5 text-xs font-normal normal-case tracking-normal text-slate-800 outline-none"><option value="all">All signals</option><option value="critical">Critical</option><option value="warning">Warning</option></select></label>
+          <button type="button" onClick={() => { setCustomerFilter('all'); setProductFilter('all'); setRiskFilter('all'); }} className="mt-auto h-9 rounded-md border border-slate-300 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50">Reset drill-down filters</button>
         </div>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500"><Activity size={14} /> Data foundation</div><h2 className="mt-1 text-lg font-semibold text-slate-900">Intelligence coverage</h2></div><div className="text-[10px] text-slate-400">This section intentionally shows data readiness instead of pretending missing history is accurate ML.</div></div>
-        <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6">
-          {[
-            ['Customers', customers.length, 'Customer behaviour'],
-            ['Products', inventory.length, 'Inventory signals'],
-            ['Transactions', intelligence.summary.count, 'Demand history'],
-            ['Movements', intelligence.movementUnits.toFixed(0), 'Ledger volume'],
-            ['Credit notes', creditNotes.length, 'Returns signal'],
-            ['Team', users.length, 'Operational users'],
-          ].map(([label, value, detail]) => <div key={label} className="rounded-xl border border-slate-100 bg-slate-50 p-3"><p className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">{label}</p><p className="mt-1 text-lg font-semibold text-slate-800">{value}</p><p className="mt-1 text-[10px] text-slate-500">{detail}</p></div>)}
-        </div>
-      </section>
-
-      {cashError && <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800"><b>Cash data warning:</b> {cashError}. Other dashboard intelligence remains available.</div>}
+      {cashError && <div className="border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800"><b>Cash data warning:</b> {cashError}. Other dashboard intelligence remains available.</div>}
     </div>
   );
 }
