@@ -1424,12 +1424,14 @@ export function CustomerModule({ sys }) {
     setIsSavingPrice(true);
     try {
       const ruleKey = `${pricingItem}|${pricingUnit}`;
-      const updatedCustomPrices = { ...(selectedCustomer.customer.custom_prices || {}), [ruleKey]: priceNumber };
-      const { error } = await supabase.from('customers').update({ custom_prices: updatedCustomPrices }).eq('id', selectedCustomer.customer.id);
-      if (error) throw error;
-
-      const updatedCustomer = { ...selectedCustomer.customer, custom_prices: updatedCustomPrices };
-      sys.setCustomers(safeCustomers.map((customer) => String(customer.id) === String(updatedCustomer.id) ? updatedCustomer : customer));
+      const updatedCustomPrices = await sys.updateCustomerCustomPrice(
+        selectedCustomer.customer.id,
+        ruleKey,
+        priceNumber
+      );
+      if (updatedCustomPrices === false) {
+        throw new Error('Unable to save the individual customer price.');
+      }
       notify('success', 'Individual price saved', 'This customer override remains higher priority than the Pricing Group price.');
       return true;
     } catch (error) {
@@ -1445,7 +1447,14 @@ export function CustomerModule({ sys }) {
     setIsSavingPrice(true);
 
     try {
-      const updatedCustomPrices = { ...(selectedCustomer.customer.custom_prices || {}) };
+      const { data: latestCustomer, error: latestError } = await supabase
+        .from('customers')
+        .select('custom_prices')
+        .eq('id', selectedCustomer.customer.id)
+        .single();
+      if (latestError) throw latestError;
+
+      const updatedCustomPrices = { ...(latestCustomer?.custom_prices || {}) };
       delete updatedCustomPrices[ruleKey];
       const { error } = await supabase.from('customers').update({ custom_prices: updatedCustomPrices }).eq('id', selectedCustomer.customer.id);
       if (error) throw error;
