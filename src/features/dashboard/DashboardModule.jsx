@@ -40,6 +40,28 @@ const LOW_STOCK_THRESHOLD = 20;
 const CASH_FETCH_PAGE_SIZE = 1000;
 const RECENT_TRANSACTION_LIMIT = 8;
 
+// Supabase commonly returns at most 1,000 rows per request. Dashboard figures
+// must never be calculated from a truncated invoice result, so invoice reads
+// are paged until the complete requested date window has been retrieved.
+async function fetchAllRows(queryFactory, pageSize = 1000) {
+  const rows = [];
+
+  for (let page = 0; ; page += 1) {
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+    const { data, error } = await queryFactory(from, to);
+
+    if (error) throw error;
+
+    const batch = Array.isArray(data) ? data : [];
+    rows.push(...batch);
+
+    if (batch.length < pageSize) break;
+  }
+
+  return rows;
+}
+
 function toNumber(value, fallback = 0) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
@@ -786,6 +808,8 @@ export function DashboardModule({
   const [inventoryMovements, setInventoryMovements] = useState([]);
   const [cashLoading, setCashLoading] = useState(true);
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
+  const [invoiceLoading, setInvoiceLoading] = useState(true);
+  const [invoiceError, setInvoiceError] = useState('');
   const [cashError, setCashError] = useState('');
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [period, setPeriod] = useState('30');
@@ -795,8 +819,10 @@ export function DashboardModule({
   const [productFilter, setProductFilter] = useState('all');
   const [riskFilter, setRiskFilter] = useState('all');
 
+  const [authoritativeInvoices, setAuthoritativeInvoices] = useState([]);
+
   const customers = Array.isArray(sys?.customers) ? sys.customers : [];
-  const invoices = Array.isArray(sys?.invoices) ? sys.invoices : [];
+  const systemInvoices = Array.isArray(sys?.invoices) ? sys.invoices : [];
   const inventory = Array.isArray(sys?.inventory) ? sys.inventory : [];
   const users = Array.isArray(sys?.users) ? sys.users : [];
 
@@ -809,6 +835,15 @@ export function DashboardModule({
     d.setDate(d.getDate() - periodDays + 1);
     return d.toISOString().slice(0, 10);
   }, [todayDate, periodDays]);
+
+  // Include the immediately preceding comparison window as well. This is
+  // required for the week-over-week / period-over-period calculations and
+  // prevents the comparison from silently omitting prior cash or normal sales.
+  const fetchStartDate = useMemo(() => {
+    const d = new Date(`${periodStart}T00:00:00`);
+    d.setDate(d.getDate() - periodDays);
+    return d.toISOString().slice(0, 10);
+  }, [periodStart, periodDays]);
 
   const monthKey = String(today || '').slice(0, 7);
   const monthStart = `${monthKey}-01`;
@@ -823,13 +858,35 @@ export function DashboardModule({
       setCashError('');
 
       try {
-        const cashPromise = supabase
-          .from('cash_invoices')
-          .select('*')
-          .gte('date', periodStart)
-          .lte('date', today)
-          .order('date', { ascending: false })
-          .limit(5000);
+        // Do not use sys.invoices for financial calculations. It is a shared
+        // application cache and can still be hydrating when this dashboard
+        // renders. The dashboard now reads the authoritative invoice ledger
+        // directly from Supabase and waits for the complete result before
+        // calculating any sales figures.
+        setInvoiceLoading(true);
+        setInvoiceError('');
+
+        const normalInvoicePromise = fetchAllRows((from, to) =>
+          supabase
+            .from('invoices')
+            .select('*')
+            .gte('date', fetchStartDate)
+            .lte('date', today)
+            .order('date', { ascending: true })
+            .order('id', { ascending: true })
+            .range(from, to)
+        );
+
+        const cashPromise = fetchAllRows((from, to) =>
+          supabase
+            .from('cash_invoices')
+            .select('*')
+            .gte('date', fetchStartDate)
+            .lte('date', today)
+            .order('date', { ascending: true })
+            .order('id', { ascending: true })
+            .range(from, to)
+        );
 
         const creditPromise = supabase
           .from('credit_notes')
@@ -847,18 +904,23 @@ export function DashboardModule({
           .order('movement_date', { ascending: false })
           .limit(10000);
 
-        const [cashResult, creditResult, movementResult] = await Promise.all([
+        const [normalInvoiceResult, cashResult, creditResult, movementResult] = await Promise.all([
+          normalInvoicePromise,
           cashPromise,
           creditPromise,
           movementPromise,
         ]);
 
         if (!cancelled) {
+          setAuthoritativeInvoices(Array.isArray(normalInvoiceResult) ? normalInvoiceResult : []);
+          setInvoiceError('');
+          setInvoiceLoading(false);
+
           if (cashResult.error) {
             setCashInvoices([]);
             setCashError(cashResult.error.message || 'Unable to load Cash data.');
           } else {
-            setCashInvoices(Array.isArray(cashResult.data) ? cashResult.data : []);
+            setCashInvoices(Array.isArray(cashResult) ? cashResult : []);
           }
 
           setCreditNotes(
@@ -875,6 +937,9 @@ export function DashboardModule({
       } catch (error) {
         console.error('Failed to load dashboard intelligence sources:', error);
         if (!cancelled) {
+          setAuthoritativeInvoices([]);
+          setInvoiceLoading(false);
+          setInvoiceError(error instanceof Error ? error.message : 'Unable to load invoice data.');
           setCashInvoices([]);
           setCreditNotes([]);
           setInventoryMovements([]);
@@ -890,10 +955,10 @@ export function DashboardModule({
 
     void loadDashboardSources();
     return () => { cancelled = true; };
-  }, [periodStart, today, refreshNonce]);
+  }, [fetchStartDate, today, refreshNonce]);
 
   const intelligence = useMemo(() => {
-    const normal = invoices.filter((i) => {
+    const normal = authoritativeInvoices.filter((i) => {
       const d = getInvoiceDate(i);
       return d >= periodStart && d <= today;
     });
@@ -926,7 +991,7 @@ export function DashboardModule({
     previousEndDate.setDate(previousEndDate.getDate() - 1);
     const previousEnd = previousEndDate.toISOString().slice(0, 10);
     const previousTransactions = [
-      ...invoices.filter((i) => getInvoiceDate(i) >= previousStart && getInvoiceDate(i) <= previousEnd),
+      ...authoritativeInvoices.filter((i) => getInvoiceDate(i) >= previousStart && getInvoiceDate(i) <= previousEnd),
       ...cashInvoices.filter((i) => getInvoiceDate(i) >= previousStart && getInvoiceDate(i) <= previousEnd),
     ];
     const previousSummary = buildLedgerSummary(previousTransactions);
@@ -1123,7 +1188,7 @@ export function DashboardModule({
     cashInvoices,
     creditNotes,
     customers,
-    invoices,
+    authoritativeInvoices,
     inventory,
     inventoryMovements,
     lowStockThreshold,
@@ -1157,7 +1222,7 @@ export function DashboardModule({
 
   const todayIntelligence = useMemo(() => {
     const all = [
-      ...invoices.filter((i) => getInvoiceDate(i) === today).map((invoice) => ({ invoice, type: 'Invoice' })),
+      ...authoritativeInvoices.filter((i) => getInvoiceDate(i) === today).map((invoice) => ({ invoice, type: 'Invoice' })),
       ...cashInvoices.filter((i) => getInvoiceDate(i) === today).map((invoice) => ({ invoice, type: 'Cash' })),
     ];
 
@@ -1165,7 +1230,7 @@ export function DashboardModule({
     lastWeekDateObj.setDate(lastWeekDateObj.getDate() - 7);
     const lastWeekDate = lastWeekDateObj.toISOString().slice(0, 10);
     const lastWeek = [
-      ...invoices.filter((i) => getInvoiceDate(i) === lastWeekDate),
+      ...authoritativeInvoices.filter((i) => getInvoiceDate(i) === lastWeekDate),
       ...cashInvoices.filter((i) => getInvoiceDate(i) === lastWeekDate),
     ];
 
@@ -1219,7 +1284,7 @@ export function DashboardModule({
       cashSales: all.filter((x) => x.type === 'Cash').reduce((sum, x) => sum + getSubtotalExGst(x.invoice), 0),
       creditSales: all.filter((x) => x.type !== 'Cash').reduce((sum, x) => sum + getSubtotalExGst(x.invoice), 0),
     };
-  }, [cashInvoices, customers, invoices, today]);
+  }, [cashInvoices, customers, authoritativeInvoices, today]);
 
   const portfolioIntelligence = useMemo(() => {
     const signals = intelligence.customerSignals;
@@ -1238,7 +1303,7 @@ export function DashboardModule({
   }, [customers.length, intelligence.customerSignals]);
 
   const receivables = useMemo(() => {
-    const all = [...invoices, ...cashInvoices];
+    const all = [...authoritativeInvoices, ...cashInvoices];
     const outstanding = all.filter((invoice) => !isPaid(invoice));
     const total = outstanding.reduce((sum, invoice) => sum + getInvoiceTotal(invoice), 0);
     const dueDateOf = (invoice) => String(invoice?.due_date ?? invoice?.dueDate ?? invoice?.payment_due_date ?? '').slice(0, 10);
@@ -1258,11 +1323,14 @@ export function DashboardModule({
       overdueCount: overdue.length,
       topCustomers: Array.from(customerMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 5),
     };
-  }, [cashInvoices, invoices, today]);
+  }, [cashInvoices, authoritativeInvoices, today]);
 
   const maxRegion = Math.max(1, ...intelligence.regionPerformance.map((r) => r.sales));
   const maxProduct = Math.max(1, ...intelligence.productPerformance.slice(0, 8).map((p) => p.sales));
   const maxDaily = Math.max(1, ...intelligence.dailySeries.map((d) => d[metric === 'profit' ? 'profit' : 'sales']));
+  const salesDataPending = invoiceLoading || cashLoading || Boolean(invoiceError);
+  const salesDisplay = (value) => salesDataPending ? (invoiceError ? '—' : 'Loading…') : `$${formatMoney(value)}`;
+  const countDisplay = (value) => salesDataPending ? (invoiceError ? '—' : '…') : value;
 
   return (
     <div className="mx-auto w-full max-w-[1700px] space-y-5 pb-10">
@@ -1300,6 +1368,17 @@ export function DashboardModule({
         </div>
       </section>
 
+      {invoiceLoading && (
+        <div className="border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+          <span className="font-semibold text-slate-800">Loading invoice ledger…</span> Sales figures will appear only after the complete invoice dataset for the selected date range has been loaded.
+        </div>
+      )}
+      {invoiceError && (
+        <div className="border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-800">
+          <b>Invoice data error:</b> {invoiceError}. The dashboard will not substitute the partially loaded ERP cache for the sales calculation.
+        </div>
+      )}
+
       <section className="border border-slate-200 bg-white">
         <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -1310,14 +1389,14 @@ export function DashboardModule({
         </div>
         <div className="grid grid-cols-2 divide-x divide-y divide-slate-200 md:grid-cols-4 xl:grid-cols-8 xl:divide-y-0">
           {[
-            ['Sales', `$${formatMoney(todayIntelligence.sales)}`, todayIntelligence.change === null ? 'No comparison' : `${todayIntelligence.change >= 0 ? '+' : ''}${todayIntelligence.change.toFixed(1)}% vs last week`],
-            ['Orders', todayIntelligence.orders, `${todayIntelligence.units.toFixed(0)} units`],
-            ['Avg order', `$${formatMoney(todayIntelligence.averageOrder)}`, formatDisplayDate(selectedDate)],
-            ['Gross profit', `$${formatMoney(todayIntelligence.profit)}`, `${todayIntelligence.margin.toFixed(1)}% margin`],
-            ['Paid', `$${formatMoney(todayIntelligence.paid)}`, formatDisplayDate(selectedDate)],
-            ['Outstanding', `$${formatMoney(todayIntelligence.outstanding)}`, 'Unpaid today'],
-            ['Cash sales', `$${formatMoney(todayIntelligence.cashSales)}`, 'Cash invoices'],
-            ['Credit sales', `$${formatMoney(todayIntelligence.creditSales)}`, 'Normal invoices'],
+            ['Sales', salesDisplay(todayIntelligence.sales), todayIntelligence.change === null ? 'No comparison' : `${todayIntelligence.change >= 0 ? '+' : ''}${todayIntelligence.change.toFixed(1)}% vs last week`],
+            ['Orders', countDisplay(todayIntelligence.orders), `${todayIntelligence.units.toFixed(0)} units`],
+            ['Avg order', salesDisplay(todayIntelligence.averageOrder), formatDisplayDate(selectedDate)],
+            ['Gross profit', salesDisplay(todayIntelligence.profit), `${todayIntelligence.margin.toFixed(1)}% margin`],
+            ['Paid', salesDisplay(todayIntelligence.paid), formatDisplayDate(selectedDate)],
+            ['Outstanding', salesDisplay(todayIntelligence.outstanding), 'Unpaid today'],
+            ['Cash sales', salesDisplay(todayIntelligence.cashSales), 'Cash invoices'],
+            ['Credit sales', salesDisplay(todayIntelligence.creditSales), 'Normal invoices'],
           ].map(([label, value, sub]) => (
             <div key={label} className="px-4 py-3">
               <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-400">{label}</p>
