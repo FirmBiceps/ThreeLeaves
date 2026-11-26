@@ -198,13 +198,115 @@ export function useEnterpriseSystem() {
   // 5. CUSTOMERS
   // =========================================================
 
-  const handleSetCustomers = (value) => {
+  const handleSetCustomers = async (value) => {
+    // IMPORTANT: customer.custom_prices is a database-owned source of truth.
+    // Do not bulk-upsert stale in-memory customer objects back to Supabase,
+    // because another module may have changed custom_prices after this array
+    // was loaded. A normal customer edit must never silently erase pricing.
+    if (!Array.isArray(value)) {
+      console.error('Refusing to update customers: expected an array.');
+      return false;
+    }
+
     setCustomers(value);
 
-    return syncToSupabase(
-      TABLES.customers,
-      value
-    );
+    try {
+      if (value.length === 0) return true;
+
+      const ids = value
+        .map((customer) => customer?.id)
+        .filter((id) => id !== undefined && id !== null && String(id).trim() !== '');
+
+      if (!ids.length) return true;
+
+      // Determine which rows already exist. Existing rows are updated WITHOUT
+      // custom_prices so their authoritative database value is preserved.
+      const { data: existingRows, error: lookupError } = await supabase
+        .from(TABLES.customers)
+        .select('id')
+        .in('id', ids);
+
+      if (lookupError) throw lookupError;
+
+      const existingIds = new Set(
+        (existingRows || []).map((row) => String(row.id))
+      );
+
+      const existingCustomers = value
+        .filter((customer) => existingIds.has(String(customer.id)))
+        .map(({ custom_prices: _customPrices, ...customer }) => customer);
+
+      const newCustomers = value.filter(
+        (customer) => !existingIds.has(String(customer.id))
+      );
+
+      if (existingCustomers.length) {
+        const { error } = await supabase
+          .from(TABLES.customers)
+          .upsert(existingCustomers, { onConflict: 'id' });
+        if (error) throw error;
+      }
+
+      if (newCustomers.length) {
+        const { error } = await supabase
+          .from(TABLES.customers)
+          .upsert(newCustomers, { onConflict: 'id' });
+        if (error) throw error;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Protected customer sync failed:', error);
+      return false;
+    }
+  };
+
+  // Read the latest custom_prices value before changing one rule. This avoids
+  // merging a stale React snapshot and accidentally removing another override.
+  const updateCustomerCustomPrice = async (customerId, ruleKey, price) => {
+    if (!customerId || !ruleKey) return false;
+
+    try {
+      const { data: row, error: readError } = await supabase
+        .from(TABLES.customers)
+        .select('id, custom_prices')
+        .eq('id', customerId)
+        .single();
+
+      if (readError) throw readError;
+
+      const currentPrices =
+        row?.custom_prices && typeof row.custom_prices === 'object'
+          ? row.custom_prices
+          : {};
+
+      const updatedCustomPrices = {
+        ...currentPrices,
+        [ruleKey]: Number(price) || 0,
+      };
+
+      const { data: updatedRow, error: updateError } = await supabase
+        .from(TABLES.customers)
+        .update({ custom_prices: updatedCustomPrices })
+        .eq('id', customerId)
+        .select('id, custom_prices')
+        .single();
+
+      if (updateError) throw updateError;
+
+      setCustomers((current) =>
+        current.map((customer) =>
+          String(customer.id) === String(customerId)
+            ? { ...customer, custom_prices: updatedRow.custom_prices || {} }
+            : customer
+        )
+      );
+
+      return updatedRow.custom_prices || {};
+    } catch (error) {
+      console.error('Customer custom-price update failed:', error);
+      return false;
+    }
   };
 
   // =========================================================
@@ -337,6 +439,7 @@ export function useEnterpriseSystem() {
 
     hasPerm,
     getApplicablePrice,
+    updateCustomerCustomPrice,
 
     deleteRecord,
   };
