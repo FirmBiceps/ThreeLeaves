@@ -1815,23 +1815,14 @@ export function CashGenerator({
 
     try {
       if (type === 'CUSTOMER') {
-        const updatedCustomPrices = {
-          ...(customer?.custom_prices || {}),
-          [ruleKey]: newPrice,
-        };
-        const { error } = await supabase
-          .from('customers')
-          .update({ custom_prices: updatedCustomPrices })
-          .eq('id', customer.id);
-        if (error) throw error;
-
-        sys.setCustomers(
-          safeCustomers.map((entry) =>
-            entry?.id === customer.id
-              ? { ...entry, custom_prices: updatedCustomPrices }
-              : entry
-          )
+        const updatedCustomPrices = await sys.updateCustomerCustomPrice(
+          customer.id,
+          ruleKey,
+          newPrice
         );
+        if (updatedCustomPrices === false) {
+          throw new Error('Unable to save the customer-specific price.');
+        }
       } else if (type === 'GROUP' && assignedGroup) {
         const updatedGroupPrices = {
           ...(assignedGroup.prices || {}),
@@ -1878,7 +1869,14 @@ export function CashGenerator({
           )
         );
       } else if (type === 'REMOVE_CUSTOMER') {
-        const updatedCustomPrices = { ...(customer?.custom_prices || {}) };
+        const { data: latestCustomer, error: latestError } = await supabase
+          .from('customers')
+          .select('custom_prices')
+          .eq('id', customer.id)
+          .single();
+        if (latestError) throw latestError;
+
+        const updatedCustomPrices = { ...(latestCustomer?.custom_prices || {}) };
         delete updatedCustomPrices[ruleKey];
 
         const { error } = await supabase
@@ -1887,11 +1885,7 @@ export function CashGenerator({
           .eq('id', customer.id);
         if (error) throw error;
 
-        const updatedCustomer = {
-          ...customer,
-          custom_prices: updatedCustomPrices,
-        };
-
+        const updatedCustomer = { ...customer, custom_prices: updatedCustomPrices };
         sys.setCustomers(
           safeCustomers.map((entry) =>
             entry?.id === customer.id ? updatedCustomer : entry
