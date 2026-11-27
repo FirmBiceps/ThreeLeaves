@@ -828,6 +828,15 @@ export function DashboardModule({
 
   const systemToday = getTodayString();
   const today = selectedDate || systemToday;
+
+  const shiftSelectedDate = (days) => {
+    const base = new Date(`${today}T00:00:00`);
+    if (Number.isNaN(base.getTime())) return;
+    base.setDate(base.getDate() + days);
+    const next = base.toISOString().slice(0, 10);
+    if (next > systemToday) return;
+    setSelectedDate(next);
+  };
   const todayDate = useMemo(() => new Date(`${today}T00:00:00`), [today]);
   const periodDays = Number(period) || 30;
   const periodStart = useMemo(() => {
@@ -1342,17 +1351,38 @@ export function DashboardModule({
             <p className="mt-1 text-sm text-slate-500">What happened today, what is changing, and what requires attention.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-            <label className="inline-flex h-8 items-center gap-2 rounded-md border border-slate-300 bg-white px-2.5 font-medium text-slate-700">
-              <CalendarDays size={13} className="text-slate-500" />
-              <span className="hidden sm:inline">Sales date</span>
-              <input
-                type="date"
-                value={selectedDate}
-                max={systemToday}
-                onChange={(e) => setSelectedDate(e.target.value || systemToday)}
-                className="h-6 border-0 bg-transparent p-0 text-xs font-medium text-slate-800 outline-none"
-              />
-            </label>
+            <div className="inline-flex h-8 items-center overflow-hidden rounded-md border border-slate-300 bg-white">
+              <button
+                type="button"
+                onClick={() => shiftSelectedDate(-1)}
+                aria-label="Previous day"
+                title="Previous day"
+                className="inline-flex h-8 w-8 items-center justify-center border-r border-slate-200 text-slate-700 hover:bg-slate-50 active:bg-slate-100"
+              >
+                ‹
+              </button>
+              <label className="inline-flex h-8 items-center gap-2 px-2.5 font-medium text-slate-700">
+                <CalendarDays size={13} className="text-slate-500" />
+                <span className="hidden sm:inline">Sales date</span>
+                <input
+                  type="date"
+                  value={selectedDate}
+                  max={systemToday}
+                  onChange={(e) => setSelectedDate(e.target.value || systemToday)}
+                  className="h-6 border-0 bg-transparent p-0 text-xs font-medium text-slate-800 outline-none"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => shiftSelectedDate(1)}
+                disabled={selectedDate >= systemToday}
+                aria-label="Next day"
+                title="Next day"
+                className="inline-flex h-8 w-8 items-center justify-center border-l border-slate-200 text-slate-700 hover:bg-slate-50 active:bg-slate-100 disabled:cursor-default disabled:text-slate-300 disabled:hover:bg-white"
+              >
+                ›
+              </button>
+            </div>
             <button
               type="button"
               onClick={() => setSelectedDate(systemToday)}
